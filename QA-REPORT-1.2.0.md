@@ -37,7 +37,7 @@ The 181 baseline findings are mapped exactly once to implemented control groups 
 | PHP files | **10** |
 | JavaScript files | **1** |
 | CSS files | **1** |
-| ZIP size | **51,335 bytes** |
+| ZIP size | **51,337 bytes** |
 | ZIP CRC failures | **0** |
 | Unsafe/path-traversal entries | **0** |
 | Symlink entries | **0** |
