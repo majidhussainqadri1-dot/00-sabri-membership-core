@@ -1,0 +1,16 @@
+{
+  "baseline": "File-00-Sabri-Membership-Core-1.0.1-Defect-Register",
+  "findings": 181,
+  "groups": [
+    {"from": 1, "to": 12, "control": "release_identity_and_reproducible_package", "evidence": ["tools/build.py", "qa/run-tests.mjs", "CHECKSUMS.sha256"]},
+    {"from": 13, "to": 29, "control": "canonical_ownership_and_policy_contracts", "evidence": ["ARCHITECTURE.md", "includes/class-smc-contracts.php", "includes/functions.php"]},
+    {"from": 30, "to": 56, "control": "age_guardian_registration_and_input_integrity", "evidence": ["includes/class-smc-workflow.php", "includes/class-smc-installer.php"]},
+    {"from": 57, "to": 80, "control": "authentication_session_and_two_factor_boundary", "evidence": ["includes/class-smc-contracts.php", "includes/class-smc-security.php", "includes/class-smc-workflow.php"]},
+    {"from": 81, "to": 102, "control": "authenticated_private_document_lifecycle", "evidence": ["includes/class-smc-security.php", "includes/class-smc-lifecycle.php"]},
+    {"from": 103, "to": 127, "control": "locked_schema_migrations_and_consistent_state", "evidence": ["includes/class-smc-installer.php", "includes/class-smc-lifecycle.php"]},
+    {"from": 128, "to": 142, "control": "reviewer_governance_and_optimistic_transitions", "evidence": ["includes/class-smc-admin.php"]},
+    {"from": 143, "to": 151, "control": "truthful_export_erasure_and_retention", "evidence": ["includes/class-smc-privacy.php", "includes/class-smc-lifecycle.php"]},
+    {"from": 152, "to": 171, "control": "profile_privacy_and_domain_delegation", "evidence": ["ARCHITECTURE.md", "includes/class-smc-contracts.php"]},
+    {"from": 172, "to": 181, "control": "localization_accessibility_and_maintainability", "evidence": ["assets/membership.css", "assets/membership.js", "sabri-membership-core.php"]}
+  ]
+}

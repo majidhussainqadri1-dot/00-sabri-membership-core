@@ -1,0 +1,14 @@
+{
+  "name": "file-00-sabri-membership-core-qa",
+  "private": true,
+  "version": "1.2.0",
+  "type": "module",
+  "scripts": {
+    "test": "node qa/run-tests.mjs",
+    "build": "python3 tools/build.py",
+    "verify": "npm run build && npm test && python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.0.zip"
+  },
+  "devDependencies": {
+    "php-parser": "3.2.5"
+  }
+}
