@@ -61,12 +61,13 @@ final class SMC_Contracts {
 
 	public static function assertions( $user_id ) {
 		$user_id = absint( $user_id );
-		$row     = smc_application( $user_id );
-		$status  = $row ? $row['status'] : 'draft';
-		$type    = $row ? $row['membership_type'] : '';
+		$state   = smc_membership_state( $user_id );
+		$row     = $state['application_exists'] ? smc_application( $user_id ) : false;
+		$status  = $state['status'];
+		$type    = $state['membership_type'];
 		$two_factor_ready = SMC_Security::two_factor_ready( $user_id );
 		$session_verified = SMC_Security::session_is_verified( $user_id );
-		$approved = 'approved' === $status;
+		$approved = (bool) $state['approved'];
 		$professional_verified = ! smc_is_professional_type( $type ) || self::professional_verified( $user_id, $type );
 		$phone_verified = self::contact_verified( $user_id, 'mobile' );
 		$email_verified = self::contact_verified( $user_id, 'email' );
@@ -76,6 +77,9 @@ final class SMC_Contracts {
 		return array(
 			'contract_version'       => SMC_CONTRACT_VERSION,
 			'user_id'                => $user_id,
+			'application_exists'     => (bool) $state['application_exists'],
+			'institutional_account'  => (bool) $state['institutional_account'],
+			'account_class'          => $state['account_class'],
 			'membership_type'        => $type,
 			'status'                 => $status,
 			'approved'               => $approved,
