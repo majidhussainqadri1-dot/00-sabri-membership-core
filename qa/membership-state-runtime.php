@@ -65,6 +65,11 @@ foreach ( array( 'rejected', 'suspended', 'appeal_review', 'erasure_pending' ) a
 	$assert( $hard_block === $state['status'] && false === $state['approved'], 'Institutional hard block must remain controlling: ' . $hard_block );
 }
 
+$set_row( 1, 'foreign_status' );
+$state = smc_membership_state( 1 );
+$assert( 'invalid_application' === $state['status'] && true === $state['application_exists'] && false === $state['approved'], 'Administrator with corrupt application status must fail closed.' );
+$assert( 'foreign_status' === $state['application_status'], 'Corrupt status evidence must remain observable without being trusted.' );
+
 $set_user( 3, false );
 $set_row( 3, 'draft' );
 $state = smc_membership_state( 3 );
@@ -73,6 +78,10 @@ $assert( 'draft' === $state['status'] && false === $state['approved'] && false =
 $set_row( 3, 'approved' );
 $state = smc_membership_state( 3 );
 $assert( 'approved' === $state['status'] && true === $state['approved'], 'Ordinary approved application must remain approved.' );
+
+$set_row( 3, 'unknown_state' );
+$state = smc_membership_state( 3 );
+$assert( 'invalid_application' === $state['status'] && true === $state['application_exists'] && false === $state['approved'], 'Ordinary corrupt application must not collapse into not_enrolled.' );
 
 $set_user( 4, false );
 $set_row( 4, null );
