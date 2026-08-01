@@ -53,7 +53,8 @@ final class SMC_Lifecycle {
 			if ( ! self::is_institutional_user( (int) $app['user_id'] ) ) {
 				continue;
 			}
-			if ( self::AUTOMATED_AGE_REASON !== self::latest_restriction_reason( (int) $app['user_id'] ) ) {
+			$context = self::latest_hard_block_context( (int) $app['user_id'] );
+			if ( 'membership_restricted' !== $context['action'] || self::AUTOMATED_AGE_REASON !== $context['reason'] ) {
 				continue;
 			}
 			if ( self::repair_institutional_account( $app ) ) {
@@ -119,20 +120,30 @@ final class SMC_Lifecycle {
 		);
 	}
 
-	private static function latest_restriction_reason( $user_id ) {
+	private static function latest_hard_block_context( $user_id ) {
 		global $wpdb;
+		$empty = array( 'action' => '', 'reason' => '' );
 		$subject_hash = SMC_Security::subject_hash( $user_id );
 		if ( '' === $subject_hash ) {
-			return '';
+			return $empty;
 		}
-		$details = $wpdb->get_var(
+		$row = $wpdb->get_row(
 			$wpdb->prepare(
-				"SELECT details FROM {$wpdb->prefix}smc_audit_log WHERE subject_hash=%s AND action='membership_restricted' ORDER BY id DESC LIMIT 1",
+				"SELECT action,details FROM {$wpdb->prefix}smc_audit_log
+				WHERE subject_hash=%s AND action IN ('membership_restricted','membership_suspended','membership_rejected','membership_appeal_review','membership_erasure_pending','membership_erasure_requested')
+				ORDER BY id DESC LIMIT 1",
 				$subject_hash
-			)
+			),
+			ARRAY_A
 		);
-		$decoded = is_string( $details ) ? json_decode( $details, true ) : null;
-		return is_array( $decoded ) && isset( $decoded['reason'] ) ? sanitize_key( $decoded['reason'] ) : '';
+		if ( ! is_array( $row ) ) {
+			return $empty;
+		}
+		$decoded = isset( $row['details'] ) && is_string( $row['details'] ) ? json_decode( $row['details'], true ) : null;
+		return array(
+			'action' => isset( $row['action'] ) ? sanitize_key( $row['action'] ) : '',
+			'reason' => is_array( $decoded ) && isset( $decoded['reason'] ) ? sanitize_key( $decoded['reason'] ) : '',
+		);
 	}
 
 	private static function repair_institutional_account( $app ) {
