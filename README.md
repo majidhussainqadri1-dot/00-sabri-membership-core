@@ -4,16 +4,21 @@ Canonical membership eligibility, identity assurance, guardian consent, security
 
 ## Current corrective release
 
-- Version: `1.2.1`
-- Contract version: `1.1.0`
+- Version: `1.2.2`
+- Contract version: `1.1.1`
 - Database schema version: `1.2.0` — unchanged; no database migration is required
 - Editable source: `source/sabri-membership-core/`
-- Deterministic package target: `dist/00-sabri-membership-core-1.2.1.zip`
-- Focused state-contract regression: `qa/membership-state-contract.mjs`
+- Deterministic package target: `dist/00-sabri-membership-core-1.2.2.zip`
+- Static state-contract regression: `qa/membership-state-contract.mjs`
+- Runtime authority matrix: `qa/membership-state-runtime.php`
 - Staging approval: **Pending**
 - Production approval: **No**
 
-Version 1.2.1 corrects the Membership Core state contract that previously returned `draft` both for a real draft application and for an account with no application row. The public `smc_membership_state()` API now reports `application_exists`, a distinct `not_enrolled` state, and an explicit institutional account classification. Canonical Founder and WordPress Administrator accounts that predate File 00 are reported as verified institutional accounts while every real application state remains authoritative.
+Version 1.2.2 corrects institutional/application precedence. A canonical Founder or WordPress Administrator may carry a historic File 00 application row from an earlier membership workflow. Draft, submission, review, more-information, approval-pending, approved, or expired-evidence rows no longer cancel that institutional authority. The underlying application remains explicitly observable through `application_exists` and `application_status`.
+
+Explicit disciplinary and erasure states remain controlling and fail closed: `rejected`, `suspended`, `appeal_review`, and `erasure_pending`. Ordinary accounts remain governed by their exact membership application state.
+
+Version 1.2.1 introduced the explicit `smc_membership_state()` API and separated a truly absent application from a real draft application. Version 1.2.2 completes that contract for institutional accounts that already have legacy application records.
 
 The verified original `1.0.1` archive remains under `source-archive/` with its canonical checksum. The previously corrupt GitHub checkout copy was restored from the verified 59,278-byte artifact.
 
