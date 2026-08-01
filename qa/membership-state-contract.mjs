@@ -7,6 +7,7 @@ const plugin = process.env.SMC_PLUGIN_DIR
   : path.join(root, 'source', 'sabri-membership-core');
 
 const functions = fs.readFileSync(path.join(plugin, 'includes', 'functions.php'), 'utf8');
+const contracts = fs.readFileSync(path.join(plugin, 'includes', 'class-smc-contracts.php'), 'utf8');
 const main = fs.readFileSync(path.join(plugin, 'sabri-membership-core.php'), 'utf8');
 const failures = [];
 let passed = 0;
@@ -30,6 +31,12 @@ assert(functions.includes("$is_admin   = $user && user_can( $user, 'manage_optio
 assert(functions.includes("'account_class'         => $is_founder ? 'founder' : 'administrator'"), 'Institutional account class is explicit');
 assert(functions.includes("return $state['status'];"), 'Legacy status API delegates to explicit state');
 assert(!functions.includes("return $row && isset( smc_statuses()[ $row['status'] ] ) ? $row['status'] : 'draft';"), 'Absent applications no longer collapse into draft');
+assert(contracts.includes('$state   = smc_membership_state( $user_id );'), 'Assertions consume the explicit state contract');
+assert(contracts.includes("'application_exists'     => (bool) $state['application_exists']"), 'Assertions expose application existence');
+assert(contracts.includes("'institutional_account'  => (bool) $state['institutional_account']"), 'Assertions expose institutional account state');
+assert(contracts.includes("'account_class'          => $state['account_class']"), 'Assertions expose account class');
+assert(contracts.includes("$approved = (bool) $state['approved'];"), 'Assertions use the canonical approval decision');
+assert(!contracts.includes("$status  = $row ? $row['status'] : 'draft';"), 'Assertions no longer fabricate draft status');
 
 console.log(`Membership-state contract assertions passed: ${passed}`);
 if (failures.length) {
