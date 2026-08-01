@@ -67,6 +67,8 @@ final class SMC_Test_DB {
 	public array $apps = array();
 	public array $request_status = array();
 	public array $hard_block_context = array();
+	public array $manual_block_id = array();
+	public array $cleared_block_id = array();
 
 	public function prepare( $query, ...$args ) { return array( 'query' => $query, 'args' => $args ); }
 	public function get_results( $query, $format = null ) {
@@ -89,6 +91,13 @@ final class SMC_Test_DB {
 	public function get_var( $query ) {
 		if ( is_array( $query ) && str_contains( $query['query'], 'smc_verification_requests' ) ) {
 			return $this->request_status[ (int) $query['args'][0] ] ?? '';
+		}
+		if ( is_array( $query ) && str_contains( $query['query'], 'smc_audit_log' ) ) {
+			$subject = $query['args'][0];
+			if ( str_contains( $query['query'], "verification_approved" ) ) {
+				return $this->cleared_block_id[ $subject ] ?? 0;
+			}
+			return $this->manual_block_id[ $subject ] ?? 0;
 		}
 		return null;
 	}
@@ -134,30 +143,48 @@ $GLOBALS['smc_test_users'][1] = (object) array( 'caps' => array( 'manage_options
 $GLOBALS['smc_test_users'][2] = (object) array( 'caps' => array() );
 $GLOBALS['smc_test_users'][3] = (object) array( 'caps' => array() );
 $GLOBALS['smc_test_users'][4] = (object) array( 'caps' => array( 'manage_options' => true ) );
+$GLOBALS['smc_test_users'][5] = (object) array( 'caps' => array( 'manage_options' => true ) );
+$GLOBALS['smc_test_users'][6] = (object) array( 'caps' => array( 'manage_options' => true ) );
 
 $wpdb->apps = array(
 	array( 'id' => 10, 'user_id' => 1, 'status' => 'suspended', 'row_version' => 3, 'membership_type' => 'member' ),
 	array( 'id' => 11, 'user_id' => 2, 'status' => 'suspended', 'row_version' => 2, 'membership_type' => 'doctor' ),
 	array( 'id' => 12, 'user_id' => 3, 'status' => 'suspended', 'row_version' => 1, 'membership_type' => 'member' ),
 	array( 'id' => 13, 'user_id' => 4, 'status' => 'suspended', 'row_version' => 4, 'membership_type' => 'member' ),
+	array( 'id' => 14, 'user_id' => 5, 'status' => 'suspended', 'row_version' => 5, 'membership_type' => 'member' ),
+	array( 'id' => 15, 'user_id' => 6, 'status' => 'suspended', 'row_version' => 6, 'membership_type' => 'member' ),
 );
 $wpdb->hard_block_context = array(
 	'subject-1' => array( 'action' => 'membership_restricted', 'details' => json_encode( array( 'reason' => 'age_eligibility_failed' ) ) ),
 	'subject-2' => array( 'action' => 'membership_restricted', 'details' => json_encode( array( 'reason' => 'age_eligibility_failed' ) ) ),
 	'subject-3' => array( 'action' => 'membership_restricted', 'details' => json_encode( array( 'reason' => 'age_eligibility_failed' ) ) ),
 	'subject-4' => array( 'action' => 'membership_suspended', 'details' => json_encode( array( 'reason' => 'manual_policy_suspension' ) ) ),
+	'subject-5' => array( 'action' => 'membership_restricted', 'details' => json_encode( array( 'reason' => 'age_eligibility_failed' ) ) ),
+	'subject-6' => array( 'action' => 'membership_restricted', 'details' => json_encode( array( 'reason' => 'age_eligibility_failed' ) ) ),
 );
-$wpdb->request_status = array( 1 => 'approved', 2 => 'under_review', 3 => 'approved', 4 => 'approved' );
+$wpdb->manual_block_id = array(
+	'subject-4' => 40,
+	'subject-5' => 50,
+	'subject-6' => 60,
+);
+$wpdb->cleared_block_id = array(
+	'subject-4' => 0,
+	'subject-5' => 45,
+	'subject-6' => 65,
+);
+$wpdb->request_status = array( 1 => 'approved', 2 => 'under_review', 3 => 'approved', 4 => 'approved', 5 => 'approved', 6 => 'approved' );
 
 $count = SMC_Lifecycle::repair_institutional_accounts();
-$assert( 2 === $count, 'Exactly two evidence-bound institutional suspensions should be repaired.' );
+$assert( 3 === $count, 'Exactly three evidence-bound institutional suspensions should be repaired.' );
 $assert( 'approved' === $wpdb->apps[0]['status'], 'Administrator should recover the approved verification state.' );
 $assert( 'under_review' === $wpdb->apps[1]['status'], 'Founder should recover the non-disciplinary request state.' );
 $assert( 'suspended' === $wpdb->apps[2]['status'], 'Ordinary member suspension must remain untouched.' );
-$assert( 'suspended' === $wpdb->apps[3]['status'], 'A later manual institutional suspension must remain untouched.' );
+$assert( 'suspended' === $wpdb->apps[3]['status'], 'A latest manual institutional suspension must remain untouched.' );
+$assert( 'suspended' === $wpdb->apps[4]['status'], 'An unresolved older manual suspension must survive a later automated age event.' );
+$assert( 'approved' === $wpdb->apps[5]['status'], 'A manual block explicitly cleared before the automated age event may be repaired.' );
 $repairs = array_values( array_filter( $GLOBALS['smc_test_audits'], static fn( $audit ) => 'institutional_lifecycle_suspension_repaired' === $audit[0] ) );
-$assert( 2 === count( $repairs ), 'Each repair must produce an audit event.' );
-$assert( in_array( 1, $GLOBALS['smc_test_cleaned'], true ) && in_array( 2, $GLOBALS['smc_test_cleaned'], true ), 'Repaired users must have caches cleared.' );
+$assert( 3 === count( $repairs ), 'Each repair must produce an audit event.' );
+$assert( in_array( 1, $GLOBALS['smc_test_cleaned'], true ) && in_array( 2, $GLOBALS['smc_test_cleaned'], true ) && in_array( 6, $GLOBALS['smc_test_cleaned'], true ), 'Repaired users must have caches cleared.' );
 
 if ( $failures ) {
 	fwrite( STDERR, "institutional lifecycle runtime: {$passed} PASS, " . count( $failures ) . " FAIL\n- " . implode( "\n- ", $failures ) . "\n" );
