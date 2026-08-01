@@ -11,9 +11,9 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "source" / "sabri-membership-core"
 DIST = ROOT / "dist"
-VERSION = "1.2.0"
+VERSION = "1.2.1"
 ARCHIVE = DIST / f"00-sabri-membership-core-{VERSION}.zip"
-FIXED_TIME = (2026, 7, 31, 0, 0, 0)
+FIXED_TIME = (2026, 8, 1, 0, 0, 0)
 
 
 def digest(path: Path) -> str:

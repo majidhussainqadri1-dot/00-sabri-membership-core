@@ -136,9 +136,67 @@ function smc_application( $user_id ) {
 	return $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE user_id=%d LIMIT 1", absint( $user_id ) ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 }
 
+/**
+ * Return the explicit membership state without conflating an absent application
+ * with a real draft application.
+ *
+ * Founder and WordPress Administrator accounts that predate File 00 are treated
+ * as verified institutional accounts. This preserves canonical administrative
+ * access while every explicit membership application remains authoritative.
+ *
+ * @param int $user_id WordPress user ID.
+ * @return array<string,mixed>
+ */
+function smc_membership_state( $user_id ) {
+	$user_id = absint( $user_id );
+	$row     = $user_id ? smc_application( $user_id ) : false;
+	$status  = $row && isset( smc_statuses()[ $row['status'] ] ) ? $row['status'] : '';
+
+	if ( $row && $status ) {
+		return array(
+			'contract_version'      => SMC_CONTRACT_VERSION,
+			'user_id'               => $user_id,
+			'application_exists'    => true,
+			'status'                => $status,
+			'membership_type'       => isset( $row['membership_type'] ) ? sanitize_key( $row['membership_type'] ) : '',
+			'institutional_account' => false,
+			'account_class'         => 'member',
+			'approved'              => 'approved' === $status,
+		);
+	}
+
+	$user       = $user_id ? get_userdata( $user_id ) : false;
+	$is_founder = $user_id > 0 && smc_is_founder( $user_id );
+	$is_admin   = $user && user_can( $user, 'manage_options' );
+
+	if ( $is_founder || $is_admin ) {
+		return array(
+			'contract_version'      => SMC_CONTRACT_VERSION,
+			'user_id'               => $user_id,
+			'application_exists'    => false,
+			'status'                => 'verified',
+			'membership_type'       => '',
+			'institutional_account' => true,
+			'account_class'         => $is_founder ? 'founder' : 'administrator',
+			'approved'              => true,
+		);
+	}
+
+	return array(
+		'contract_version'      => SMC_CONTRACT_VERSION,
+		'user_id'               => $user_id,
+		'application_exists'    => false,
+		'status'                => 'not_enrolled',
+		'membership_type'       => '',
+		'institutional_account' => false,
+		'account_class'         => 'member',
+		'approved'              => false,
+	);
+}
+
 function smc_user_status( $user_id ) {
-	$row = smc_application( $user_id );
-	return $row && isset( smc_statuses()[ $row['status'] ] ) ? $row['status'] : 'draft';
+	$state = smc_membership_state( $user_id );
+	return $state['status'];
 }
 
 function smc_founder_user_id() {
