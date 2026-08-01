@@ -1,4 +1,4 @@
-name: File 00 Version 1.2.2 QA
+name: File 00 Version 1.2.3 QA
 
 on:
   pull_request:
@@ -13,7 +13,7 @@ jobs:
   verify:
     name: Build, test, and verify package
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - name: Check out proposed source
         uses: actions/checkout@v4
@@ -41,22 +41,24 @@ jobs:
       - name: Build and verify deterministic package
         run: npm run verify
 
-      - name: Verify declared versions and institutional precedence
+      - name: Verify declared versions and institutional lifecycle correction
         run: |
-          grep -Fq 'Version: 1.2.2' source/sabri-membership-core/sabri-membership-core.php
-          grep -Fq "define( 'SMC_VERSION', '1.2.2' )" source/sabri-membership-core/sabri-membership-core.php
-          grep -Fq "define( 'SMC_CONTRACT_VERSION', '1.1.1' )" source/sabri-membership-core/sabri-membership-core.php
-          grep -Fq 'if ( $institutional )' source/sabri-membership-core/includes/functions.php
-          grep -Fq "'application_status'    => \$status" source/sabri-membership-core/includes/functions.php
-          test -f dist/00-sabri-membership-core-1.2.2.zip
+          grep -Fq 'Version: 1.2.3' source/sabri-membership-core/sabri-membership-core.php
+          grep -Fq "define( 'SMC_VERSION', '1.2.3' )" source/sabri-membership-core/sabri-membership-core.php
+          grep -Fq "define( 'SMC_DB_VERSION', '1.2.0' )" source/sabri-membership-core/sabri-membership-core.php
+          grep -Fq "define( 'SMC_CONTRACT_VERSION', '1.1.2' )" source/sabri-membership-core/sabri-membership-core.php
+          grep -Fq 'repair_institutional_accounts' source/sabri-membership-core/includes/class-smc-lifecycle.php
+          grep -Fq 'institutional_lifecycle_suspension_repaired' source/sabri-membership-core/includes/class-smc-lifecycle.php
+          grep -Fq 'institutional_age_evidence_attention_required' source/sabri-membership-core/includes/class-smc-lifecycle.php
+          test -f dist/00-sabri-membership-core-1.2.3.zip
           test -f dist/CHECKSUMS.sha256
 
       - name: Upload verified WordPress package
         uses: actions/upload-artifact@v4
         with:
-          name: 00-sabri-membership-core-1.2.2-${{ github.sha }}
+          name: 00-sabri-membership-core-1.2.3-${{ github.sha }}
           path: |
-            dist/00-sabri-membership-core-1.2.2.zip
+            dist/00-sabri-membership-core-1.2.3.zip
             dist/CHECKSUMS.sha256
           if-no-files-found: error
           retention-days: 30
