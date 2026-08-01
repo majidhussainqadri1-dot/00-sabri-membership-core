@@ -22,9 +22,13 @@ assert(main.includes("SMC_Lifecycle::repair_institutional_accounts()"), 'Release
 assert(main.includes("smc_institutional_repair_version"), 'Repair is version-bounded');
 assert(lifecycle.includes('public static function repair_institutional_accounts()'), 'Institutional repair entry point exists');
 assert(lifecycle.includes("latest_hard_block_context"), 'Repair reads the latest hard-block context');
+assert(lifecycle.includes("has_unresolved_manual_hard_block"), 'Repair separately guards unresolved manual discipline');
 assert(lifecycle.includes("'membership_restricted' !== $context['action'] || self::AUTOMATED_AGE_REASON !== $context['reason']"), 'Repair requires the latest hard block to be the automated age restriction');
-assert(lifecycle.includes("membership_suspended"), 'Later manual suspension is included in the hard-block census');
-assert(lifecycle.includes("membership_rejected"), 'Later manual rejection is included in the hard-block census');
+assert(lifecycle.includes("membership_suspended"), 'Manual suspension is included in the hard-block census');
+assert(lifecycle.includes("membership_rejected"), 'Manual rejection is included in the hard-block census');
+assert(lifecycle.includes("verification_approved"), 'Legacy explicit approval can clear an older manual block');
+assert(lifecycle.includes("membership_approved"), 'Current explicit approval can clear an older manual block');
+assert(lifecycle.includes("return $manual_id > $cleared_id"), 'An unresolved manual block defeats automatic repair');
 assert(lifecycle.includes("institutional_lifecycle_suspension_repaired"), 'Repair produces explicit audit evidence');
 assert(lifecycle.includes("institutional_age_evidence_attention_required"), 'Missing institutional evidence produces an attention event');
 assert(lifecycle.includes("if ( self::is_institutional_user( $user_id ) )"), 'Institutional guard precedes ordinary restriction');
