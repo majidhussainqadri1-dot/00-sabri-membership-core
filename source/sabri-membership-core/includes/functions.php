@@ -143,22 +143,38 @@ function smc_application( $user_id ) {
  * Founder and WordPress Administrator identities are institutional authorities,
  * not ordinary membership applications. A historic draft, pending, review, or
  * expired-evidence row therefore cannot cancel that institutional authority.
- * Explicit disciplinary or erasure states remain controlling and fail closed.
+ * Explicit disciplinary, erasure, or corrupt application states remain
+ * controlling and fail closed.
  *
  * @param int $user_id WordPress user ID.
  * @return array<string,mixed>
  */
 function smc_membership_state( $user_id ) {
-	$user_id = absint( $user_id );
-	$row     = $user_id ? smc_application( $user_id ) : false;
-	$status  = $row && isset( smc_statuses()[ $row['status'] ] ) ? $row['status'] : '';
-	$type    = $row && isset( $row['membership_type'] ) ? sanitize_key( $row['membership_type'] ) : '';
-	$user    = $user_id ? get_userdata( $user_id ) : false;
+	$user_id   = absint( $user_id );
+	$row       = $user_id ? smc_application( $user_id ) : false;
+	$raw_status = $row && isset( $row['status'] ) ? sanitize_key( $row['status'] ) : '';
+	$status    = $row && isset( smc_statuses()[ $raw_status ] ) ? $raw_status : '';
+	$type      = $row && isset( $row['membership_type'] ) ? sanitize_key( $row['membership_type'] ) : '';
+	$user      = $user_id ? get_userdata( $user_id ) : false;
 
-	$is_founder   = $user_id > 0 && smc_is_founder( $user_id );
-	$is_admin     = $user && user_can( $user, 'manage_options' );
+	$is_founder    = $user_id > 0 && smc_is_founder( $user_id );
+	$is_admin      = $user && user_can( $user, 'manage_options' );
 	$institutional = $is_founder || $is_admin;
-	$hard_blocks  = array( 'rejected', 'suspended', 'appeal_review', 'erasure_pending' );
+	$hard_blocks   = array( 'rejected', 'suspended', 'appeal_review', 'erasure_pending' );
+
+	if ( $row && '' === $status ) {
+		return array(
+			'contract_version'      => SMC_CONTRACT_VERSION,
+			'user_id'               => $user_id,
+			'application_exists'    => true,
+			'application_status'    => $raw_status,
+			'status'                => 'invalid_application',
+			'membership_type'       => $type,
+			'institutional_account' => (bool) $institutional,
+			'account_class'         => $is_founder ? 'founder' : ( $is_admin ? 'administrator' : 'member' ),
+			'approved'              => false,
+		);
+	}
 
 	if ( $institutional ) {
 		if ( $status && in_array( $status, $hard_blocks, true ) ) {
