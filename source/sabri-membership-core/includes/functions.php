@@ -140,9 +140,10 @@ function smc_application( $user_id ) {
  * Return the explicit membership state without conflating an absent application
  * with a real draft application.
  *
- * Founder and WordPress Administrator accounts that predate File 00 are treated
- * as verified institutional accounts. This preserves canonical administrative
- * access while every explicit membership application remains authoritative.
+ * Founder and WordPress Administrator identities are institutional authorities,
+ * not ordinary membership applications. A historic draft, pending, review, or
+ * expired-evidence row therefore cannot cancel that institutional authority.
+ * Explicit disciplinary or erasure states remain controlling and fail closed.
  *
  * @param int $user_id WordPress user ID.
  * @return array<string,mixed>
@@ -151,34 +152,53 @@ function smc_membership_state( $user_id ) {
 	$user_id = absint( $user_id );
 	$row     = $user_id ? smc_application( $user_id ) : false;
 	$status  = $row && isset( smc_statuses()[ $row['status'] ] ) ? $row['status'] : '';
+	$type    = $row && isset( $row['membership_type'] ) ? sanitize_key( $row['membership_type'] ) : '';
+	$user    = $user_id ? get_userdata( $user_id ) : false;
+
+	$is_founder   = $user_id > 0 && smc_is_founder( $user_id );
+	$is_admin     = $user && user_can( $user, 'manage_options' );
+	$institutional = $is_founder || $is_admin;
+	$hard_blocks  = array( 'rejected', 'suspended', 'appeal_review', 'erasure_pending' );
+
+	if ( $institutional ) {
+		if ( $status && in_array( $status, $hard_blocks, true ) ) {
+			return array(
+				'contract_version'      => SMC_CONTRACT_VERSION,
+				'user_id'               => $user_id,
+				'application_exists'    => (bool) $row,
+				'application_status'    => $status,
+				'status'                => $status,
+				'membership_type'       => $type,
+				'institutional_account' => true,
+				'account_class'         => $is_founder ? 'founder' : 'administrator',
+				'approved'              => false,
+			);
+		}
+
+		return array(
+			'contract_version'      => SMC_CONTRACT_VERSION,
+			'user_id'               => $user_id,
+			'application_exists'    => (bool) $row,
+			'application_status'    => $status,
+			'status'                => 'verified',
+			'membership_type'       => $type,
+			'institutional_account' => true,
+			'account_class'         => $is_founder ? 'founder' : 'administrator',
+			'approved'              => true,
+		);
+	}
 
 	if ( $row && $status ) {
 		return array(
 			'contract_version'      => SMC_CONTRACT_VERSION,
 			'user_id'               => $user_id,
 			'application_exists'    => true,
+			'application_status'    => $status,
 			'status'                => $status,
-			'membership_type'       => isset( $row['membership_type'] ) ? sanitize_key( $row['membership_type'] ) : '',
+			'membership_type'       => $type,
 			'institutional_account' => false,
 			'account_class'         => 'member',
 			'approved'              => 'approved' === $status,
-		);
-	}
-
-	$user       = $user_id ? get_userdata( $user_id ) : false;
-	$is_founder = $user_id > 0 && smc_is_founder( $user_id );
-	$is_admin   = $user && user_can( $user, 'manage_options' );
-
-	if ( $is_founder || $is_admin ) {
-		return array(
-			'contract_version'      => SMC_CONTRACT_VERSION,
-			'user_id'               => $user_id,
-			'application_exists'    => false,
-			'status'                => 'verified',
-			'membership_type'       => '',
-			'institutional_account' => true,
-			'account_class'         => $is_founder ? 'founder' : 'administrator',
-			'approved'              => true,
 		);
 	}
 
@@ -186,6 +206,7 @@ function smc_membership_state( $user_id ) {
 		'contract_version'      => SMC_CONTRACT_VERSION,
 		'user_id'               => $user_id,
 		'application_exists'    => false,
+		'application_status'    => '',
 		'status'                => 'not_enrolled',
 		'membership_type'       => '',
 		'institutional_account' => false,
