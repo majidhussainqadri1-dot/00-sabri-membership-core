@@ -1,4 +1,4 @@
-name: File 00 Version 1.2.1 QA
+name: File 00 Version 1.2.2 QA
 
 on:
   pull_request:
@@ -29,26 +29,34 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+
       - name: Install locked QA dependencies
         run: npm ci --ignore-scripts
 
       - name: Build and verify deterministic package
         run: npm run verify
 
-      - name: Verify declared versions
+      - name: Verify declared versions and institutional precedence
         run: |
-          grep -Fq 'Version: 1.2.1' source/sabri-membership-core/sabri-membership-core.php
-          grep -Fq "define( 'SMC_VERSION', '1.2.1' )" source/sabri-membership-core/sabri-membership-core.php
-          grep -Fq "define( 'SMC_CONTRACT_VERSION', '1.1.0' )" source/sabri-membership-core/sabri-membership-core.php
-          test -f dist/00-sabri-membership-core-1.2.1.zip
+          grep -Fq 'Version: 1.2.2' source/sabri-membership-core/sabri-membership-core.php
+          grep -Fq "define( 'SMC_VERSION', '1.2.2' )" source/sabri-membership-core/sabri-membership-core.php
+          grep -Fq "define( 'SMC_CONTRACT_VERSION', '1.1.1' )" source/sabri-membership-core/sabri-membership-core.php
+          grep -Fq 'if ( $institutional )' source/sabri-membership-core/includes/functions.php
+          grep -Fq "'application_status'    => \$status" source/sabri-membership-core/includes/functions.php
+          test -f dist/00-sabri-membership-core-1.2.2.zip
           test -f dist/CHECKSUMS.sha256
 
       - name: Upload verified WordPress package
         uses: actions/upload-artifact@v4
         with:
-          name: 00-sabri-membership-core-1.2.1
+          name: 00-sabri-membership-core-1.2.2-${{ github.sha }}
           path: |
-            dist/00-sabri-membership-core-1.2.1.zip
+            dist/00-sabri-membership-core-1.2.2.zip
             dist/CHECKSUMS.sha256
           if-no-files-found: error
           retention-days: 30
