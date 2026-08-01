@@ -37,8 +37,8 @@ final class SMC_Lifecycle {
 	 * A canonical Founder or WordPress Administrator is not an ordinary
 	 * membership applicant. A former lifecycle age-evidence failure may not be
 	 * reinterpreted as a disciplinary suspension. Manual rejection, suspension,
-	 * appeal and erasure states remain untouched unless the latest matching audit
-	 * event proves that the suspension was created by the age lifecycle itself.
+	 * appeal and erasure states remain untouched unless a later explicit approval
+	 * resolved them and the latest hard-block event is the automated age check.
 	 *
 	 * @return int Number of repaired institutional accounts.
 	 */
@@ -50,10 +50,11 @@ final class SMC_Lifecycle {
 		);
 		$repaired = 0;
 		foreach ( $rows as $app ) {
-			if ( ! self::is_institutional_user( (int) $app['user_id'] ) ) {
+			$user_id = (int) $app['user_id'];
+			if ( ! self::is_institutional_user( $user_id ) || self::has_unresolved_manual_hard_block( $user_id ) ) {
 				continue;
 			}
-			$context = self::latest_hard_block_context( (int) $app['user_id'] );
+			$context = self::latest_hard_block_context( $user_id );
 			if ( 'membership_restricted' !== $context['action'] || self::AUTOMATED_AGE_REASON !== $context['reason'] ) {
 				continue;
 			}
@@ -144,6 +145,34 @@ final class SMC_Lifecycle {
 			'action' => isset( $row['action'] ) ? sanitize_key( $row['action'] ) : '',
 			'reason' => is_array( $decoded ) && isset( $decoded['reason'] ) ? sanitize_key( $decoded['reason'] ) : '',
 		);
+	}
+
+	private static function has_unresolved_manual_hard_block( $user_id ) {
+		global $wpdb;
+		$subject_hash = SMC_Security::subject_hash( $user_id );
+		if ( '' === $subject_hash ) {
+			return true;
+		}
+		$manual_id = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT id FROM {$wpdb->prefix}smc_audit_log
+				WHERE subject_hash=%s AND action IN ('membership_suspended','membership_rejected','membership_appeal_review','membership_erasure_pending','membership_erasure_requested')
+				ORDER BY id DESC LIMIT 1",
+				$subject_hash
+			)
+		);
+		if ( $manual_id <= 0 ) {
+			return false;
+		}
+		$cleared_id = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT id FROM {$wpdb->prefix}smc_audit_log
+				WHERE subject_hash=%s AND action IN ('verification_approved','membership_approved','institutional_membership_restored')
+				ORDER BY id DESC LIMIT 1",
+				$subject_hash
+			)
+		);
+		return $manual_id > $cleared_id;
 	}
 
 	private static function repair_institutional_account( $app ) {
