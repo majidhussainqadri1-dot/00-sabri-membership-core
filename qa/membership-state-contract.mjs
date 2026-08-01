@@ -9,6 +9,7 @@ const plugin = process.env.SMC_PLUGIN_DIR
 const functions = fs.readFileSync(path.join(plugin, 'includes', 'functions.php'), 'utf8');
 const contracts = fs.readFileSync(path.join(plugin, 'includes', 'class-smc-contracts.php'), 'utf8');
 const main = fs.readFileSync(path.join(plugin, 'sabri-membership-core.php'), 'utf8');
+const statusFunction = functions.match(/function smc_statuses\(\) \{[\s\S]*?\n\}/)?.[0] ?? '';
 const failures = [];
 let passed = 0;
 
@@ -31,6 +32,8 @@ assert(functions.includes("$is_admin   = $user && user_can( $user, 'manage_optio
 assert(functions.includes("'account_class'         => $is_founder ? 'founder' : 'administrator'"), 'Institutional account class is explicit');
 assert(functions.includes("return $state['status'];"), 'Legacy status API delegates to explicit state');
 assert(!functions.includes("return $row && isset( smc_statuses()[ $row['status'] ] ) ? $row['status'] : 'draft';"), 'Absent applications no longer collapse into draft');
+assert(!statusFunction.includes("'verified'"), 'Synthetic verified state is not a persistent workflow status');
+assert(!statusFunction.includes("'not_enrolled'"), 'Synthetic not-enrolled state is not a persistent workflow status');
 assert(contracts.includes('$state   = smc_membership_state( $user_id );'), 'Assertions consume the explicit state contract');
 assert(contracts.includes("'application_exists'     => (bool) $state['application_exists']"), 'Assertions expose application existence');
 assert(contracts.includes("'institutional_account'  => (bool) $state['institutional_account']"), 'Assertions expose institutional account state');
