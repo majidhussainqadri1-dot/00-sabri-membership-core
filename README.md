@@ -4,14 +4,16 @@ Canonical membership eligibility, identity assurance, guardian consent, security
 
 ## Current corrective release
 
-- Version: `1.2.0`
+- Version: `1.2.1`
+- Contract version: `1.1.0`
+- Database schema version: `1.2.0` — unchanged; no database migration is required
 - Editable source: `source/sabri-membership-core/`
-- Deterministic package: `dist/00-sabri-membership-core-1.2.0.zip`
-- Package SHA-256: `f6a5f531be977b8f824852499c5d9fa0738791aab7b9b3354a934be7cfb88436`
-- Local automated assertions: `561/561`
-- Baseline findings mapped to implemented controls: `181/181`
+- Deterministic package target: `dist/00-sabri-membership-core-1.2.1.zip`
+- Focused state-contract regression: `qa/membership-state-contract.mjs`
 - Staging approval: **Pending**
 - Production approval: **No**
+
+Version 1.2.1 corrects the Membership Core state contract that previously returned `draft` both for a real draft application and for an account with no application row. The public `smc_membership_state()` API now reports `application_exists`, a distinct `not_enrolled` state, and an explicit institutional account classification. Canonical Founder and WordPress Administrator accounts that predate File 00 are reported as verified institutional accounts while every real application state remains authoritative.
 
 The verified original `1.0.1` archive remains under `source-archive/` with its canonical checksum. The previously corrupt GitHub checkout copy was restored from the verified 59,278-byte artifact.
 
