@@ -2,6 +2,9 @@
 defined( 'ABSPATH' ) || exit;
 
 final class SMC_Lifecycle {
+	private const AUTOMATED_AGE_REASON = 'age_eligibility_failed';
+	private const INSTITUTIONAL_AGE_META = '_smc_institutional_age_evidence_attention';
+
 	public static function init() {
 		add_filter( 'cron_schedules', array( __CLASS__, 'schedules' ) );
 		add_action( 'smc_continue_migration', array( 'SMC_Installer', 'continue_migration' ) );
@@ -20,11 +23,46 @@ final class SMC_Lifecycle {
 	}
 
 	public static function daily() {
+		self::repair_institutional_accounts();
 		self::recheck_ages();
 		self::expire_documents();
 		self::cleanup_database();
 		self::cleanup_filesystem();
 		SMC_Security::process_file_jobs();
+	}
+
+	/**
+	 * Repair only a demonstrably automated institutional suspension.
+	 *
+	 * A canonical Founder or WordPress Administrator is not an ordinary
+	 * membership applicant. A former lifecycle age-evidence failure may not be
+	 * reinterpreted as a disciplinary suspension. Manual rejection, suspension,
+	 * appeal and erasure states remain untouched unless a later explicit approval
+	 * resolved them and the latest hard-block event is the automated age check.
+	 *
+	 * @return int Number of repaired institutional accounts.
+	 */
+	public static function repair_institutional_accounts() {
+		global $wpdb;
+		$rows = $wpdb->get_results(
+			"SELECT * FROM {$wpdb->prefix}smc_applications WHERE status='suspended' ORDER BY id ASC LIMIT 500",
+			ARRAY_A
+		);
+		$repaired = 0;
+		foreach ( $rows as $app ) {
+			$user_id = (int) $app['user_id'];
+			if ( ! self::is_institutional_user( $user_id ) || self::has_unresolved_manual_hard_block( $user_id ) ) {
+				continue;
+			}
+			$context = self::latest_hard_block_context( $user_id );
+			if ( 'membership_restricted' !== $context['action'] || self::AUTOMATED_AGE_REASON !== $context['reason'] ) {
+				continue;
+			}
+			if ( self::repair_institutional_account( $app ) ) {
+				++$repaired;
+			}
+		}
+		return $repaired;
 	}
 
 	private static function recheck_ages() {
@@ -39,18 +77,145 @@ final class SMC_Lifecycle {
 		);
 		foreach ( $rows as $app ) {
 			$cursor = (int) $app['id'];
-			$dob = SMC_Security::decrypt( $app['date_of_birth_enc'], 'date-of-birth', array( 'user_id' => (int) $app['user_id'] ) );
+			$user_id = (int) $app['user_id'];
+			$dob = SMC_Security::decrypt( $app['date_of_birth_enc'], 'date-of-birth', array( 'user_id' => $user_id ) );
 			$age = is_wp_error( $dob ) ? false : smc_age_from_dob( $dob );
-			if ( false === $age || $age < smc_minimum_age_for_gender( $app['gender'] ) || ( $age < 18 && smc_is_professional_type( $app['membership_type'] ) ) ) {
-				self::restrict( $app, 'age_eligibility_failed' );
+			$invalid = false === $age || $age < smc_minimum_age_for_gender( $app['gender'] ) || ( $age < 18 && smc_is_professional_type( $app['membership_type'] ) );
+
+			if ( $invalid ) {
+				if ( self::is_institutional_user( $user_id ) ) {
+					self::record_institutional_age_attention( $user_id, is_wp_error( $dob ) || empty( $app['date_of_birth_enc'] ) ? 'date_of_birth_unreadable' : self::AUTOMATED_AGE_REASON );
+					continue;
+				}
+				self::restrict( $app, self::AUTOMATED_AGE_REASON );
 				continue;
+			}
+
+			if ( get_user_meta( $user_id, self::INSTITUTIONAL_AGE_META, true ) ) {
+				delete_user_meta( $user_id, self::INSTITUTIONAL_AGE_META );
+				SMC_Security::audit( 'institutional_age_evidence_resolved', $user_id );
 			}
 			if ( $age >= 18 && $app['guardian_required'] ) {
 				$wpdb->update( $wpdb->prefix . 'smc_applications', array( 'guardian_required' => 0, 'row_version' => (int) $app['row_version'] + 1, 'updated_at' => current_time( 'mysql', true ) ), array( 'id' => (int) $app['id'], 'row_version' => (int) $app['row_version'] ) );
-				SMC_Security::audit( 'guardian_requirement_ended_at_adulthood', (int) $app['user_id'] );
+				SMC_Security::audit( 'guardian_requirement_ended_at_adulthood', $user_id );
 			}
 		}
 		update_option( 'smc_age_recheck_cursor', count( $rows ) < 500 ? 0 : $cursor, false );
+	}
+
+	private static function is_institutional_user( $user_id ) {
+		$user = get_userdata( absint( $user_id ) );
+		return smc_is_founder( $user_id ) || ( $user && user_can( $user, 'manage_options' ) );
+	}
+
+	private static function record_institutional_age_attention( $user_id, $reason ) {
+		$reason = sanitize_key( $reason );
+		if ( $reason === get_user_meta( $user_id, self::INSTITUTIONAL_AGE_META, true ) ) {
+			return;
+		}
+		update_user_meta( $user_id, self::INSTITUTIONAL_AGE_META, $reason );
+		SMC_Security::audit(
+			'institutional_age_evidence_attention_required',
+			$user_id,
+			array( 'reason' => $reason )
+		);
+	}
+
+	private static function latest_hard_block_context( $user_id ) {
+		global $wpdb;
+		$empty = array( 'action' => '', 'reason' => '' );
+		$subject_hash = SMC_Security::subject_hash( $user_id );
+		if ( '' === $subject_hash ) {
+			return $empty;
+		}
+		$row = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT action,details FROM {$wpdb->prefix}smc_audit_log
+				WHERE subject_hash=%s AND action IN ('membership_restricted','membership_suspended','membership_rejected','membership_appeal_review','membership_erasure_pending','membership_erasure_requested')
+				ORDER BY id DESC LIMIT 1",
+				$subject_hash
+			),
+			ARRAY_A
+		);
+		if ( ! is_array( $row ) ) {
+			return $empty;
+		}
+		$decoded = isset( $row['details'] ) && is_string( $row['details'] ) ? json_decode( $row['details'], true ) : null;
+		return array(
+			'action' => isset( $row['action'] ) ? sanitize_key( $row['action'] ) : '',
+			'reason' => is_array( $decoded ) && isset( $decoded['reason'] ) ? sanitize_key( $decoded['reason'] ) : '',
+		);
+	}
+
+	private static function has_unresolved_manual_hard_block( $user_id ) {
+		global $wpdb;
+		$subject_hash = SMC_Security::subject_hash( $user_id );
+		if ( '' === $subject_hash ) {
+			return true;
+		}
+		$manual_id = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT id FROM {$wpdb->prefix}smc_audit_log
+				WHERE subject_hash=%s AND action IN ('membership_suspended','membership_rejected','membership_appeal_review','membership_erasure_pending','membership_erasure_requested')
+				ORDER BY id DESC LIMIT 1",
+				$subject_hash
+			)
+		);
+		if ( $manual_id <= 0 ) {
+			return false;
+		}
+		$cleared_id = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT id FROM {$wpdb->prefix}smc_audit_log
+				WHERE subject_hash=%s AND action IN ('verification_approved','membership_approved','institutional_membership_restored')
+				ORDER BY id DESC LIMIT 1",
+				$subject_hash
+			)
+		);
+		return $manual_id > $cleared_id;
+	}
+
+	private static function repair_institutional_account( $app ) {
+		global $wpdb;
+		$user_id = (int) $app['user_id'];
+		$request_status = sanitize_key(
+			(string) $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT status FROM {$wpdb->prefix}smc_verification_requests WHERE user_id=%d LIMIT 1",
+					$user_id
+				)
+			)
+		);
+		$restorable = array( 'draft', 'guardian_pending', 'submitted', 'under_review', 'more_information', 'resubmitted', 'approval_pending', 'approved', 'expired' );
+		$restored_status = in_array( $request_status, $restorable, true ) ? $request_status : 'draft';
+		$now = current_time( 'mysql', true );
+
+		$wpdb->query( 'START TRANSACTION' );
+		$updated = $wpdb->query(
+			$wpdb->prepare(
+				"UPDATE {$wpdb->prefix}smc_applications SET status=%s,row_version=row_version+1,updated_at=%s WHERE id=%d AND row_version=%d AND status='suspended'",
+				$restored_status,
+				$now,
+				(int) $app['id'],
+				(int) $app['row_version']
+			)
+		);
+		$audit_ok = 1 === $updated && SMC_Security::audit(
+			'institutional_lifecycle_suspension_repaired',
+			$user_id,
+			array(
+				'previous_status' => 'suspended',
+				'restored_status' => $restored_status,
+				'source_reason'   => self::AUTOMATED_AGE_REASON,
+			)
+		);
+		if ( 1 !== $updated || ! $audit_ok ) {
+			$wpdb->query( 'ROLLBACK' );
+			return false;
+		}
+		$wpdb->query( 'COMMIT' );
+		clean_user_cache( $user_id );
+		return true;
 	}
 
 	private static function expire_documents() {
