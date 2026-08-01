@@ -80,7 +80,6 @@ function smc_is_professional_type( $type ) {
 
 function smc_statuses() {
 	return array(
-		'not_enrolled'     => __( 'Not Enrolled', 'sabri-membership-core' ),
 		'draft'            => __( 'Draft', 'sabri-membership-core' ),
 		'guardian_pending' => __( 'Guardian Consent Pending', 'sabri-membership-core' ),
 		'submitted'        => __( 'Submitted', 'sabri-membership-core' ),
@@ -89,7 +88,6 @@ function smc_statuses() {
 		'resubmitted'      => __( 'Resubmitted', 'sabri-membership-core' ),
 		'approval_pending' => __( 'Second Approval Pending', 'sabri-membership-core' ),
 		'approved'         => __( 'Approved', 'sabri-membership-core' ),
-		'verified'         => __( 'Verified Institutional Account', 'sabri-membership-core' ),
 		'rejected'         => __( 'Rejected', 'sabri-membership-core' ),
 		'suspended'        => __( 'Suspended', 'sabri-membership-core' ),
 		'expired'          => __( 'Expired Evidence', 'sabri-membership-core' ),
@@ -163,7 +161,7 @@ function smc_membership_state( $user_id ) {
 			'membership_type'       => isset( $row['membership_type'] ) ? sanitize_key( $row['membership_type'] ) : '',
 			'institutional_account' => false,
 			'account_class'         => 'member',
-			'approved'              => in_array( $status, array( 'approved', 'verified' ), true ),
+			'approved'              => 'approved' === $status,
 		);
 	}
 
