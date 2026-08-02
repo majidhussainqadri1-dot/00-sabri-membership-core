@@ -1,12 +1,12 @@
 {
   "name": "file-00-sabri-membership-core-qa",
   "private": true,
-  "version": "1.2.3",
+  "version": "1.2.4",
   "type": "module",
   "scripts": {
-    "test": "node qa/run-tests.mjs && node qa/membership-state-contract.mjs && php qa/membership-state-runtime.php && node qa/institutional-lifecycle-contract.mjs && php qa/institutional-lifecycle-runtime.php",
+    "test": "node qa/run-tests.mjs && node qa/membership-state-contract.mjs && php qa/membership-state-runtime.php && node qa/institutional-lifecycle-contract.mjs && php qa/institutional-lifecycle-runtime.php && node qa/authorization-boundary-contract.mjs && php qa/authorization-boundary-runtime.php && node qa/master-plan-traceability-contract.mjs",
     "build": "python3 tools/build.py",
-    "verify": "npm run build && npm test && python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.3.zip"
+    "verify": "npm run build && npm test && python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.4.zip"
   },
   "devDependencies": {
     "php-parser": "3.2.5"
