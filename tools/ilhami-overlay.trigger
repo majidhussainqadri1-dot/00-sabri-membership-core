@@ -1,1 +1,1 @@
-apply-reviewed-overlay-1.2.6
+diagnose-and-apply-reviewed-overlay-1.2.6
