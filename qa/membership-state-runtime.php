@@ -55,7 +55,7 @@ $assert( 'verified' === $state['status'], 'Administrator with a legacy draft row
 $assert( true === $state['application_exists'] && 'draft' === $state['application_status'], 'Legacy application evidence must remain visible.' );
 $assert( true === $state['approved'] && 'administrator' === $state['account_class'], 'Administrator authority must be explicit.' );
 
-$GLOBALS['smc_test_meta'][1]['_smc_privacy_erasure_lock'] = 'locked';
+$GLOBALS['smc_test_meta'][1]['_smc_privacy_erasure_lock'] = array( 'locked_at' => '2026-08-02 00:00:00', 'receipt' => 'test' );
 $state = smc_membership_state( 1 );
 $assert( 'erasure_pending' === $state['status'] && false === $state['approved'], 'Persistent privacy erasure lock must outrank Administrator authority.' );
 unset( $GLOBALS['smc_test_meta'][1]['_smc_privacy_erasure_lock'] );
