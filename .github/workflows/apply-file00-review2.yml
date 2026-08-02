@@ -1,0 +1,35 @@
+name: Apply File 00 second adversarial review
+
+on:
+  push:
+    branches:
+      - codex/file00-completion-hardening-1.2.5-final
+    paths:
+      - 'tools/apply-file00-review2.py'
+      - '.github/workflows/apply-file00-review2.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out completion branch
+        uses: actions/checkout@v4
+        with:
+          ref: codex/file00-completion-hardening-1.2.5-final
+          fetch-depth: 0
+
+      - name: Apply reviewed corrections and commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/apply-file00-review2.py
+          rm -f tools/apply-file00-review2.py .github/workflows/apply-file00-review2.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'File 00 1.2.5: fix resubmission generation and erasure retries'
+          git push origin HEAD:codex/file00-completion-hardening-1.2.5-final
