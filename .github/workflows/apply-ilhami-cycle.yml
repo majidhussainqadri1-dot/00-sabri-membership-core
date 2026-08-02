@@ -1,9 +1,9 @@
 name: Apply File 00 Ilhami cycle 1.2.6
 
 on:
-  push:
+  pull_request:
     branches:
-      - codex/file00-ilhami-cycle-1.2.6
+      - main
     paths:
       - 'tools/ilhami-cycle.patch.part*'
       - 'tools/ilhami-cycle.trigger'
@@ -14,6 +14,7 @@ permissions:
 
 jobs:
   apply:
+    if: github.head_ref == 'codex/file00-ilhami-cycle-1.2.6'
     runs-on: ubuntu-latest
     steps:
       - name: Check out Ilhami-cycle branch
