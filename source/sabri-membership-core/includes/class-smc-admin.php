@@ -98,8 +98,8 @@ final class SMC_Admin {
 			__( 'Gender rule', 'sabri-membership-core' ) => smc_allowed_genders()[ $app['gender'] ] ?? __( 'Invalid', 'sabri-membership-core' ),
 			__( 'Identity document', 'sabri-membership-core' ) => is_wp_error( $number ) ? __( 'Decryption failed', 'sabri-membership-core' ) : $number,
 			__( 'Guardian consent', 'sabri-membership-core' ) => $app['guardian_required'] ? ( $guardian['status'] ?? __( 'Missing', 'sabri-membership-core' ) ) : __( 'Not required', 'sabri-membership-core' ),
-			__( 'Email ownership', 'sabri-membership-core' ) => get_user_meta( $user_id, '_smc_email_verified', true ) ? __( 'Verified', 'sabri-membership-core' ) : __( 'Pending', 'sabri-membership-core' ),
-			__( 'Mobile ownership', 'sabri-membership-core' ) => get_user_meta( $user_id, '_smc_mobile_verified', true ) ? __( 'Verified', 'sabri-membership-core' ) : __( 'Pending', 'sabri-membership-core' ),
+			__( 'Email ownership', 'sabri-membership-core' ) => $a['email_verified'] ? __( 'Verified', 'sabri-membership-core' ) : __( 'Pending', 'sabri-membership-core' ),
+			__( 'Mobile ownership', 'sabri-membership-core' ) => $a['phone_verified'] ? __( 'Verified', 'sabri-membership-core' ) : __( 'Pending', 'sabri-membership-core' ),
 			__( 'Two-factor setup', 'sabri-membership-core' ) => $a['two_factor_ready'] ? __( 'Enabled', 'sabri-membership-core' ) : __( 'Incomplete', 'sabri-membership-core' ),
 			__( 'Professional owner status', 'sabri-membership-core' ) => $a['professional_verified'] ? __( 'Verified or not required', 'sabri-membership-core' ) : __( 'Pending in canonical professional module', 'sabri-membership-core' ),
 		);
@@ -191,6 +191,18 @@ final class SMC_Admin {
 		self::redirect_review( $user_id );
 	}
 
+	private static function approval_gate( $votes, $required_votes, $can_finalize ) {
+		$votes = max( 0, (int) $votes );
+		$required_votes = max( 1, (int) $required_votes );
+		if ( $votes < $required_votes ) {
+			return 'pending_votes';
+		}
+		if ( $required_votes > 1 && ! $can_finalize ) {
+			return 'pending_senior';
+		}
+		return 'finalize';
+	}
+
 	private static function approve( $user_id, $request, $version, $reason ) {
 		global $wpdb;
 		$app = smc_application( $user_id );
@@ -201,7 +213,14 @@ final class SMC_Admin {
 			$age = is_wp_error( $dob ) ? false : smc_age_from_dob( $dob );
 		}
 		$required = array_keys( smc_required_identity_documents() );
-		$approved_docs = $wpdb->get_col( $wpdb->prepare( "SELECT document_key FROM {$wpdb->prefix}smc_identity_documents WHERE user_id=%d AND status='approved' AND (expiry_date IS NULL OR expiry_date>=UTC_DATE())", $user_id ) );
+		$approved_document_rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT document_key,version,plain_sha256,expiry_date FROM {$wpdb->prefix}smc_identity_documents WHERE user_id=%d AND status='approved' AND (expiry_date IS NULL OR expiry_date>=UTC_DATE()) ORDER BY document_key ASC",
+				$user_id
+			),
+			ARRAY_A
+		);
+		$approved_docs = array_column( $approved_document_rows, 'document_key' );
 		$identity = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}smc_identity_records WHERE user_id=%d", $user_id ), ARRAY_A );
 		if (
 			! $app || false === $age || $age < smc_minimum_age_for_gender( $app['gender'] ) ||
@@ -213,13 +232,49 @@ final class SMC_Admin {
 		) {
 			wp_die( esc_html__( 'Approval predicates failed: age, guardian, contacts, two-factor setup, professional-owner verification, exact approved documents, or explicit identity-name comparison is incomplete.', 'sabri-membership-core' ), '', array( 'response' => 409 ) );
 		}
-		$snapshot = wp_json_encode( array( 'application_version' => (int) $app['row_version'], 'document_keys' => $approved_docs, 'identity_hash' => $identity['document_number_hash'], 'guardian' => $a['guardian_verified'], 'professional' => $a['professional_verified'] ) );
+
+		// Votes are bound to the exact submitted evidence generation. State-only
+		// row-version increments during review must not invalidate a valid vote,
+		// while resubmission, document replacement, identity, guardian or policy
+		// changes must never inherit an earlier approval.
+		$document_snapshot = array();
+		foreach ( $approved_document_rows as $document ) {
+			$document_snapshot[] = array(
+				'key'     => (string) $document['document_key'],
+				'version' => (int) $document['version'],
+				'sha256'  => (string) $document['plain_sha256'],
+				'expiry'  => (string) ( $document['expiry_date'] ?? '' ),
+			);
+		}
+		$guardian = $wpdb->get_row( $wpdb->prepare( "SELECT status,consent_hash,policy_version,verified_at,withdrawn_at FROM {$wpdb->prefix}smc_guardian_consents WHERE user_id=%d LIMIT 1", $user_id ), ARRAY_A );
+		$snapshot = wp_json_encode(
+			array(
+				'applicant_version' => (int) $request['applicant_version'],
+				'policy_version'    => (string) $app['policy_version'],
+				'documents'         => $document_snapshot,
+				'identity_hash'     => (string) $identity['document_number_hash'],
+				'identity_updated'  => (string) $identity['updated_at'],
+				'guardian'          => $guardian ? array(
+					'status'         => (string) $guardian['status'],
+					'consent_hash'   => (string) $guardian['consent_hash'],
+					'policy_version' => (string) $guardian['policy_version'],
+					'verified_at'    => (string) $guardian['verified_at'],
+					'withdrawn_at'   => (string) $guardian['withdrawn_at'],
+				) : array( 'required' => false ),
+				'professional'      => (bool) $a['professional_verified'],
+			),
+			JSON_UNESCAPED_SLASHES
+		);
+		if ( ! is_string( $snapshot ) ) {
+			wp_die( esc_html__( 'The approval evidence snapshot could not be created.', 'sabri-membership-core' ), '', array( 'response' => 500 ) );
+		}
+
 		$wpdb->query( 'START TRANSACTION' );
 		$vote = $wpdb->query(
 			$wpdb->prepare(
 				"INSERT INTO {$wpdb->prefix}smc_approval_votes (request_id,reviewer_id,decision,reason,evidence_snapshot,created_at)
 				VALUES (%d,%d,'approve',%s,%s,%s)
-				ON DUPLICATE KEY UPDATE reason=VALUES(reason),evidence_snapshot=VALUES(evidence_snapshot),created_at=VALUES(created_at)",
+				ON DUPLICATE KEY UPDATE decision='approve',reason=VALUES(reason),evidence_snapshot=VALUES(evidence_snapshot),created_at=VALUES(created_at)",
 				(int) $request['id'], get_current_user_id(), $reason, $snapshot, current_time( 'mysql', true )
 			)
 		);
@@ -228,25 +283,34 @@ final class SMC_Admin {
 			wp_die( esc_html__( 'Approval vote could not be recorded.', 'sabri-membership-core' ), '', array( 'response' => 500 ) );
 		}
 		$required_votes = smc_is_professional_type( $app['membership_type'] ) ? 2 : 1;
-		$votes = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(DISTINCT reviewer_id) FROM {$wpdb->prefix}smc_approval_votes WHERE request_id=%d AND decision='approve'", (int) $request['id'] ) );
-		if ( $votes < $required_votes ) {
+		$votes = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COUNT(DISTINCT reviewer_id) FROM {$wpdb->prefix}smc_approval_votes WHERE request_id=%d AND decision='approve' AND BINARY evidence_snapshot=%s",
+				(int) $request['id'],
+				$snapshot
+			)
+		);
+		$senior_required = $required_votes > 1;
+		$can_finalize = ! $senior_required || current_user_can( 'smc_finalize_verification' );
+		$approval_gate = self::approval_gate( $votes, $required_votes, $can_finalize );
+		if ( 'finalize' !== $approval_gate ) {
 			$now = current_time( 'mysql', true );
-			$ok1 = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_verification_requests SET status='approval_pending',assigned_reviewer=%d,reviewer_note=%s,row_version=row_version+1,updated_at=%s WHERE id=%d AND row_version=%d", get_current_user_id(), $reason, $now, (int) $request['id'], $version ) );
+			$pending_reason = 'pending_votes' === $approval_gate
+				? sprintf( __( '%1$d of %2$d independent approval votes recorded.', 'sabri-membership-core' ), $votes, $required_votes )
+				: __( 'The required independent votes are complete; senior finalization remains required.', 'sabri-membership-core' );
+			$ok1 = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_verification_requests SET status='approval_pending',assigned_reviewer=%d,reviewer_note=%s,row_version=row_version+1,updated_at=%s WHERE id=%d AND row_version=%d", get_current_user_id(), $pending_reason . ' ' . $reason, $now, (int) $request['id'], $version ) );
 			$ok2 = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_applications SET status='approval_pending',row_version=row_version+1,updated_at=%s WHERE user_id=%d AND status=%s", $now, $user_id, $request['status'] ) );
-			$event_ok = self::append_event( $request, 'approval_pending', $reason, $user_id );
-			$audit_ok = SMC_Security::audit( 'membership_approval_pending', $user_id, array( 'request_id' => (int) $request['id'], 'votes' => $votes ) );
+			$event_ok = self::append_event( $request, 'approval_pending', $pending_reason . ' ' . $reason, $user_id );
+			$audit_ok = SMC_Security::audit( 'membership_approval_pending', $user_id, array( 'request_id' => (int) $request['id'], 'votes' => $votes, 'required_votes' => $required_votes, 'senior_finalization_required' => $senior_required && ! $can_finalize ) );
 			if ( 1 !== $ok1 || 1 !== $ok2 || ! $event_ok || ! $audit_ok ) {
 				$wpdb->query( 'ROLLBACK' );
 				wp_die( esc_html__( 'The approval vote could not be committed atomically.', 'sabri-membership-core' ), '', array( 'response' => 409 ) );
 			}
 			$wpdb->query( 'COMMIT' );
-			self::notify_decision( $user_id, 'approval_pending', __( 'The first independent approval vote passed; a second reviewer is required.', 'sabri-membership-core' ) );
+			self::notify_decision( $user_id, 'approval_pending', $pending_reason );
 			self::redirect_review( $user_id );
 		}
-		if ( $required_votes > 1 && ! current_user_can( 'smc_finalize_verification' ) ) {
-			$wpdb->query( 'ROLLBACK' );
-			wp_die( esc_html__( 'A senior reviewer must finalize a professional membership after two independent votes.', 'sabri-membership-core' ), '', array( 'response' => 403 ) );
-		}
+
 		$now = current_time( 'mysql', true );
 		$ok1 = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_verification_requests SET status='approved',assigned_reviewer=%d,reviewer_note=%s,row_version=row_version+1,decided_at=%s,updated_at=%s WHERE id=%d AND row_version=%d", get_current_user_id(), $reason, $now, $now, (int) $request['id'], $version ) );
 		$ok2 = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_applications SET status='approved',row_version=row_version+1,decided_at=%s,updated_at=%s WHERE user_id=%d AND status=%s", $now, $now, $user_id, $request['status'] ) );
@@ -254,7 +318,7 @@ final class SMC_Admin {
 		$role_ok = SMC_Contracts::set_exact_role( $user_id, smc_role_for_type( $app['membership_type'], true ) );
 		$sessions_ok = SMC_Security::revoke_all_sessions( $user_id, 'membership_approved_requires_fresh_login' );
 		$event_ok = self::append_event( $request, 'approved', $reason, $user_id );
-		$audit_ok = SMC_Security::audit( 'membership_approved', $user_id, array( 'request_id' => (int) $request['id'], 'votes' => $votes ) );
+		$audit_ok = SMC_Security::audit( 'membership_approved', $user_id, array( 'request_id' => (int) $request['id'], 'votes' => $votes, 'evidence_snapshot_sha256' => hash( 'sha256', $snapshot ) ) );
 		if ( 1 !== $ok1 || 1 !== $ok2 || false === $ok3 || ! $role_ok || ! $sessions_ok || ! $event_ok || ! $audit_ok ) {
 			$wpdb->query( 'ROLLBACK' );
 			clean_user_cache( $user_id );

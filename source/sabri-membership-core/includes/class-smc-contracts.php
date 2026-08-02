@@ -31,7 +31,7 @@ final class SMC_Contracts {
 
 	public static function register_account( $user_id ) {
 		global $wpdb;
-		if ( smc_application( $user_id ) ) {
+		if ( smc_privacy_erasure_lock( $user_id ) || smc_application( $user_id ) ) {
 			return;
 		}
 		$type = sanitize_key( get_user_meta( $user_id, '_sa_account_type', true ) );
@@ -176,7 +176,7 @@ final class SMC_Contracts {
 
 	public static function set_exact_role( $user_id, $role ) {
 		$user = new WP_User( absint( $user_id ) );
-		if ( ! $user->exists() || user_can( $user, 'manage_options' ) ) {
+		if ( smc_privacy_erasure_lock( $user_id ) || ! $user->exists() || user_can( $user, 'manage_options' ) ) {
 			return false;
 		}
 		foreach ( smc_managed_roles() as $managed ) {

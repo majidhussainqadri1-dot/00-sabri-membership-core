@@ -553,9 +553,17 @@ final class SMC_Workflow {
 		delete_user_meta( $user_id, '_smc_totp_pending_expires' );
 		$codes = SMC_Security::recovery_codes( $user_id );
 		if ( is_wp_error( $codes ) || ! self::store_recovery_receipt( $user_id, $codes ) ) {
+			global $wpdb;
+			delete_user_meta( $user_id, '_smc_2fa_enabled' );
+			delete_user_meta( $user_id, '_smc_totp_secret_enc' );
+			$wpdb->delete( $wpdb->prefix . 'smc_recovery_codes', array( 'user_id' => $user_id ), array( '%d' ) );
+			SMC_Security::revoke_all_sessions( $user_id, 'two_factor_setup_rollback' );
 			self::redirect( 'security', 'invalid' );
 		}
-		SMC_Security::verify_two_factor_challenge( $user_id, $code );
+		$challenge = SMC_Security::verify_two_factor_challenge( $user_id, $code );
+		if ( is_wp_error( $challenge ) || false === $challenge ) {
+			self::redirect( 'security', 'invalid' );
+		}
 		self::redirect( 'security', 'two_factor' );
 	}
 
@@ -637,14 +645,24 @@ final class SMC_Workflow {
 	private static function recovery_receipt( $user_id ) {
 		$expires = (int) get_user_meta( $user_id, '_smc_recovery_receipt_expires', true );
 		$enc = get_user_meta( $user_id, '_smc_recovery_receipt', true );
-		delete_user_meta( $user_id, '_smc_recovery_receipt' );
-		delete_user_meta( $user_id, '_smc_recovery_receipt_expires' );
 		if ( ! $enc || $expires < time() ) {
+			delete_user_meta( $user_id, '_smc_recovery_receipt' );
+			delete_user_meta( $user_id, '_smc_recovery_receipt_expires' );
 			return array();
 		}
 		$json = SMC_Security::decrypt( $enc, 'recovery-receipt', array( 'user_id' => $user_id, 'expires' => $expires ) );
-		$codes = is_wp_error( $json ) ? array() : json_decode( $json, true );
-		return is_array( $codes ) ? $codes : array();
+		if ( is_wp_error( $json ) ) {
+			// Preserve the one-time receipt until expiry so a transient key/storage
+			// problem cannot destroy the user's only copy of the recovery codes.
+			return array();
+		}
+		$codes = json_decode( $json, true );
+		if ( ! is_array( $codes ) ) {
+			return array();
+		}
+		delete_user_meta( $user_id, '_smc_recovery_receipt' );
+		delete_user_meta( $user_id, '_smc_recovery_receipt_expires' );
+		return $codes;
 	}
 
 	public static function guardian_shortcode() {
