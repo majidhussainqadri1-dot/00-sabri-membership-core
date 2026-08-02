@@ -3,7 +3,7 @@ name: Apply File 00 1.2.5 completion overlay
 on:
   push:
     branches:
-      - codex/file00-completion-hardening-1.2.5
+      - codex/file00-completion-hardening-1.2.5-final
     paths:
       - 'tools/file00-overlay.part*'
       - '.github/workflows/apply-file00-overlay.yml'
@@ -18,7 +18,7 @@ jobs:
       - name: Check out completion branch
         uses: actions/checkout@v4
         with:
-          ref: codex/file00-completion-hardening-1.2.5
+          ref: codex/file00-completion-hardening-1.2.5-final
           fetch-depth: 0
 
       - name: Reconstruct and apply reviewed overlay
@@ -35,4 +35,4 @@ jobs:
           git add -A
           git diff --cached --check
           git commit -m 'File 00 1.2.5: apply completion hardening overlay'
-          git push origin HEAD:codex/file00-completion-hardening-1.2.5
+          git push origin HEAD:codex/file00-completion-hardening-1.2.5-final
