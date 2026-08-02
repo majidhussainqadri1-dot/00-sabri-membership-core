@@ -6,10 +6,11 @@
 declare(strict_types=1);
 
 define( 'ABSPATH', __DIR__ . '/' );
-define( 'SMC_CONTRACT_VERSION', '1.1.1' );
+define( 'SMC_CONTRACT_VERSION', '1.1.2' );
 
 $GLOBALS['smc_test_rows'] = array();
 $GLOBALS['smc_test_users'] = array();
+$GLOBALS['smc_test_meta'] = array();
 $GLOBALS['smc_test_options'] = array( 'smc_founder_user_id' => 2 );
 
 function __( $text, $domain = '' ) { unset( $domain ); return $text; }
@@ -17,6 +18,7 @@ function sanitize_key( $value ) { return strtolower( preg_replace( '/[^a-z0-9_\-
 function absint( $value ) { return abs( (int) $value ); }
 function get_option( $key, $default = false ) { return $GLOBALS['smc_test_options'][ $key ] ?? $default; }
 function get_userdata( $user_id ) { return $GLOBALS['smc_test_users'][ (int) $user_id ] ?? false; }
+function get_user_meta( $user_id, $key, $single = true ) { unset( $single ); return $GLOBALS['smc_test_meta'][ (int) $user_id ][ $key ] ?? ''; }
 function user_can( $user, $capability ) {
 	return is_object( $user ) && ! empty( $user->caps[ $capability ] );
 }
@@ -52,6 +54,11 @@ $state = smc_membership_state( 1 );
 $assert( 'verified' === $state['status'], 'Administrator with a legacy draft row must remain institutionally verified.' );
 $assert( true === $state['application_exists'] && 'draft' === $state['application_status'], 'Legacy application evidence must remain visible.' );
 $assert( true === $state['approved'] && 'administrator' === $state['account_class'], 'Administrator authority must be explicit.' );
+
+$GLOBALS['smc_test_meta'][1]['_smc_privacy_erasure_lock'] = 'locked';
+$state = smc_membership_state( 1 );
+$assert( 'erasure_pending' === $state['status'] && false === $state['approved'], 'Persistent privacy erasure lock must outrank Administrator authority.' );
+unset( $GLOBALS['smc_test_meta'][1]['_smc_privacy_erasure_lock'] );
 
 $set_user( 2, false );
 $set_row( 2, 'under_review', 'doctor' );
