@@ -34,6 +34,7 @@ jobs:
           base64 --decode /tmp/file00-overlay.b64 > /tmp/file00-overlay.tar.gz
           tar -tzf /tmp/file00-overlay.tar.gz >/dev/null
           tar -xzf /tmp/file00-overlay.tar.gz -C .
+          sed -i 's/[[:space:]]\+$//' docs/COMPLETION-HARDENING-AUDIT-1.2.5.md docs/FILE-00-IMPLEMENTATION-TRACEABILITY-1.2.5.md
           rm -f tools/file00-overlay.part* .github/workflows/apply-file00-overlay.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
