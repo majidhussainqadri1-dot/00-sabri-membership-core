@@ -7,12 +7,17 @@ on:
     paths:
       - 'tools/file00-overlay.part*'
       - '.github/workflows/apply-file00-overlay.yml'
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: write
 
 jobs:
   apply:
+    if: github.event_name == 'push' || github.head_ref == 'codex/file00-completion-hardening-1.2.5-final'
     runs-on: ubuntu-latest
     steps:
       - name: Check out completion branch
