@@ -43,6 +43,12 @@ check(privacy.includes("$wpdb->query( 'COMMIT' )"), 'record deletion commit exis
 check(!privacy.includes("$wpdb->delete( $wpdb->prefix . 'smc_audit_log'"), 'audit chain rows are not deleted');
 check(privacy.includes('unchanged tamper-evident security audit evidence'), 'retained audit evidence disclosed');
 
+check(workflow.includes('SELECT row_version FROM {$wpdb->prefix}smc_applications WHERE user_id=%d AND status=%s LIMIT 1 FOR UPDATE'), 'resubmission locks the current application generation');
+check(workflow.includes('applicant_version=%d,row_version=row_version+1'), 'resubmission advances verification applicant generation');
+check(workflow.includes("'applicant_version' => $next_applicant_version"), 'resubmission audit records the new applicant generation');
+check(privacy.includes("'pending'        => true"), 'private-storage failure keeps erasure retryable');
+check(privacy.includes('the eraser will retry until completion evidence is recorded'), 'audit-evidence failure keeps erasure incomplete');
+
 const decryptPosition = workflow.indexOf("SMC_Security::decrypt( $enc, 'recovery-receipt'");
 const deletePosition = workflow.indexOf("delete_user_meta( $user_id, '_smc_recovery_receipt'", decryptPosition);
 check(decryptPosition >= 0 && deletePosition > decryptPosition, 'recovery receipt decrypts before deletion');

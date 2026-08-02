@@ -214,7 +214,13 @@ final class SMC_Privacy {
 		global $wpdb;
 		$dir = SMC_Security::private_dir();
 		if ( is_wp_error( $dir ) ) {
-			return array( 'items_removed' => false, 'items_retained' => true, 'messages' => array( $dir->get_error_message() ), 'done' => true );
+			return array(
+				'items_removed'  => false,
+				'items_retained' => true,
+				'messages'       => array( $dir->get_error_message() ),
+				'done'           => false,
+				'pending'        => true,
+			);
 		}
 		$docs = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}smc_identity_documents WHERE user_id=%d ORDER BY id LIMIT 50", $user_id ), ARRAY_A );
 		$removed = false;
@@ -316,7 +322,13 @@ final class SMC_Privacy {
 			__( 'Active membership, identity, guardian, consent, session and verification records were erased. A minimal erasure lock and unchanged tamper-evident security audit evidence are retained under the published security/legal retention schedule.', 'sabri-membership-core' ),
 		);
 		if ( ! $audit_ok ) {
-			$messages[] = __( 'Completion evidence could not be appended and requires operator review; the account remains fail-closed.', 'sabri-membership-core' );
+			$messages[] = __( 'Completion evidence could not be appended; the account remains fail-closed and the eraser will retry until completion evidence is recorded.', 'sabri-membership-core' );
+			return array(
+				'items_removed'  => true,
+				'items_retained' => true,
+				'messages'       => $messages,
+				'done'           => false,
+			);
 		}
 		return array(
 			'items_removed'  => true,

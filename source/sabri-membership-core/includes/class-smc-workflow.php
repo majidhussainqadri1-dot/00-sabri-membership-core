@@ -744,14 +744,55 @@ final class SMC_Workflow {
 		global $wpdb;
 		$now = current_time( 'mysql', true );
 		$wpdb->query( 'START TRANSACTION' );
-		$ok1 = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_applications SET status=%s,row_version=row_version+1,updated_at=%s WHERE user_id=%d AND status=%s", $new, $now, $user_id, $old ) );
-		$ok2 = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_verification_requests SET status=%s,reviewer_note=%s,assigned_reviewer=0,row_version=row_version+1,updated_at=%s WHERE user_id=%d AND status=%s", $new, $note, $now, $user_id, $old ) );
+		$app = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT row_version FROM {$wpdb->prefix}smc_applications WHERE user_id=%d AND status=%s LIMIT 1 FOR UPDATE",
+				$user_id,
+				$old
+			),
+			ARRAY_A
+		);
+		if ( ! $app ) {
+			$wpdb->query( 'ROLLBACK' );
+			return false;
+		}
+		$current_version = (int) $app['row_version'];
+		$next_applicant_version = $current_version + 1;
+		$ok1 = $wpdb->query(
+			$wpdb->prepare(
+				"UPDATE {$wpdb->prefix}smc_applications SET status=%s,row_version=%d,updated_at=%s WHERE user_id=%d AND status=%s AND row_version=%d",
+				$new,
+				$next_applicant_version,
+				$now,
+				$user_id,
+				$old,
+				$current_version
+			)
+		);
+		$ok2 = $wpdb->query(
+			$wpdb->prepare(
+				"UPDATE {$wpdb->prefix}smc_verification_requests SET status=%s,reviewer_note=%s,assigned_reviewer=0,applicant_version=%d,row_version=row_version+1,updated_at=%s WHERE user_id=%d AND status=%s",
+				$new,
+				$note,
+				$next_applicant_version,
+				$now,
+				$user_id,
+				$old
+			)
+		);
 		if ( 1 !== $ok1 || 1 !== $ok2 ) {
 			$wpdb->query( 'ROLLBACK' );
 			return false;
 		}
 		$wpdb->query( 'COMMIT' );
-		SMC_Security::audit( 'membership_' . $new, $user_id, array( 'note' => $note ) );
+		SMC_Security::audit(
+			'membership_' . $new,
+			$user_id,
+			array(
+				'note'              => $note,
+				'applicant_version' => $next_applicant_version,
+			)
+		);
 		return true;
 	}
 
