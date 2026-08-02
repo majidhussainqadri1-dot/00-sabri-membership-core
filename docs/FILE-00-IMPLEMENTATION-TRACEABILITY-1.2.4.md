@@ -1,11 +1,20 @@
 # File 00 Implementation Traceability — 1.2.4
 
 Normative project artifact: `00-Sabri-Membership-Core-Complete-Master-Plan-2026-Four-Round-Reviewed-Final.docx`  
-SHA-256: `3b1f81aa8aed39c76be9e6e2da3eef4e6671a581c13c359f52d163c9bbc6bc9d`
+Master-plan SHA-256: `3b1f81aa8aed39c76be9e6e2da3eef4e6671a581c13c359f52d163c9bbc6bc9d`
 
-Plugin `1.2.4`; contract `1.1.2`; database `1.2.0`. Staging accepted: **No**. Production approved: **No**.
+Plugin `1.2.4`; contract `1.1.2`; database `1.2.0`. Staging installation candidate: **Yes**. Staging accepted: **No**. Production approved: **No**.
 
-Codes: `C` corrected in 1.2.4, exact-head CI pending; `I` implemented, staging pending; `G` specified/governed; `P` partial evidence, external or staging gate pending.
+## Verified corrective evidence
+
+- Corrective PR head: `5efab3d837700fd15d27b518a6e98942bd802af2`
+- Verified PR merge ref: `1ce11cfdfca953d57cab3abd96a8c02faf8c6db8`
+- GitHub Actions workflow run: `30732165567`
+- GitHub Actions job: `91454369095`
+- Merged `main` commit: `1ef2a3898eafbe5b5c023ab24e42fcca1b89a472`
+- Deterministic plugin package SHA-256: `c22e05c4bd60fb2540715f507a11f905d1d01d9d44fd8b53bf9946e48bc7934a`
+
+Codes: `C` corrected in 1.2.4 and verified by the corrective GitHub Actions run; `I` implemented with staging evidence pending; `G` specified/governed; `P` partial evidence with an external or staging gate pending.
 
 ## Group evidence
 
