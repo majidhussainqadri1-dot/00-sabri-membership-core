@@ -37,6 +37,7 @@ final class SMC_Contracts {
 		$type = sanitize_key( get_user_meta( $user_id, '_sa_account_type', true ) );
 		$type = isset( smc_account_types()[ $type ] ) ? $type : 'member';
 		$now  = current_time( 'mysql', true );
+		$wpdb->query( 'START TRANSACTION' );
 		$ok   = $wpdb->insert(
 			$wpdb->prefix . 'smc_applications',
 			array(
@@ -51,12 +52,16 @@ final class SMC_Contracts {
 			),
 			array( '%d', '%s', '%s', '%s', '%s', '%d', '%s', '%s' )
 		);
-		if ( false === $ok ) {
+		$role_ok = 1 === $ok && self::set_exact_role( $user_id, smc_role_for_type( $type, false ) );
+		$audit_ok = $role_ok && SMC_Security::audit( 'account_imported', $user_id, array( 'source' => 'wordpress' ) );
+		if ( 1 !== $ok || ! $role_ok || ! $audit_ok ) {
+			$wpdb->query( 'ROLLBACK' );
+			clean_user_cache( $user_id );
 			SMC_Security::audit( 'account_import_failed', $user_id, array( 'db_error' => $wpdb->last_error ) );
 			return;
 		}
-		self::set_exact_role( $user_id, smc_role_for_type( $type, false ) );
-		SMC_Security::audit( 'account_imported', $user_id, array( 'source' => 'wordpress' ) );
+		$wpdb->query( 'COMMIT' );
+		clean_user_cache( $user_id );
 	}
 
 	public static function assertions( $user_id ) {
@@ -71,7 +76,9 @@ final class SMC_Contracts {
 		$professional_verified = ! smc_is_professional_type( $type ) || self::professional_verified( $user_id, $type );
 		$phone_verified = self::contact_verified( $user_id, 'mobile' );
 		$email_verified = self::contact_verified( $user_id, 'email' );
-		$eligible = $approved && $professional_verified && $two_factor_ready;
+		$guardian_verified = ! $row || empty( $row['guardian_required'] ) || self::guardian_verified( $user_id );
+		$contacts_verified = (bool) $state['institutional_account'] || ( $phone_verified && $email_verified );
+		$eligible = $approved && $professional_verified && $two_factor_ready && $guardian_verified && $contacts_verified;
 		$user = get_userdata( $user_id );
 		$roles = $user ? (array) $user->roles : array();
 		return array(
@@ -83,13 +90,13 @@ final class SMC_Contracts {
 			'membership_type'        => $type,
 			'status'                 => $status,
 			'approved'               => $approved,
-			'suspended'              => in_array( $status, array( 'suspended', 'rejected', 'expired', 'erasure_pending' ), true ),
+			'suspended'              => in_array( $status, array( 'suspended', 'rejected', 'expired', 'appeal_review', 'erasure_pending', 'invalid_application' ), true ),
 			'eligible'               => $eligible,
 			'two_factor_ready'       => $two_factor_ready,
 			'session_two_factor'     => $session_verified,
 			'phone_verified'         => $phone_verified,
 			'email_verified'         => $email_verified,
-			'guardian_verified'      => ! $row || empty( $row['guardian_required'] ) || self::guardian_verified( $user_id ),
+			'guardian_verified'      => $guardian_verified,
 			'professional_verified'  => $professional_verified,
 			'can_message'            => $eligible && $session_verified,
 			'can_comment'            => $eligible && $session_verified,
@@ -153,10 +160,11 @@ final class SMC_Contracts {
 
 	public static function guardian_verified( $user_id ) {
 		global $wpdb;
-		return 'verified' === $wpdb->get_var(
+		return (bool) $wpdb->get_var(
 			$wpdb->prepare(
-				"SELECT status FROM {$wpdb->prefix}smc_guardian_consents WHERE user_id=%d LIMIT 1",
-				absint( $user_id )
+				"SELECT id FROM {$wpdb->prefix}smc_guardian_consents WHERE user_id=%d AND status='verified' AND policy_version=%s AND withdrawn_at IS NULL LIMIT 1",
+				absint( $user_id ),
+				(string) smc_policy()['version']
 			)
 		);
 	}
@@ -266,13 +274,52 @@ final class SMC_Contracts {
 		return self::assertions( $profile_user_id )['public_profile_allowed'];
 	}
 
+	private static function invalidate_contact_assertion( $user_id, $channel, $reason ) {
+		global $wpdb;
+		$deleted = $wpdb->delete(
+			$wpdb->prefix . 'smc_contact_otps',
+			array( 'user_id' => absint( $user_id ), 'channel' => sanitize_key( $channel ) ),
+			array( '%d', '%s' )
+		);
+		$sessions_ok = SMC_Security::revoke_all_sessions( $user_id, $reason );
+		$audit_ok = SMC_Security::audit( 'contact_reverification_required', $user_id, array( 'channel' => sanitize_key( $channel ), 'reason' => sanitize_key( $reason ) ) );
+		return false !== $deleted && $sessions_ok && $audit_ok;
+	}
+
 	public static function contact_changed( $meta_id, $user_id, $meta_key, $meta_value ) {
-		if ( '_sa_phone' !== $meta_key || ! smc_application( $user_id ) ) {
+		if ( '_sa_phone' !== $meta_key ) {
 			return;
 		}
-		delete_user_meta( $user_id, '_smc_mobile_verified' );
-		SMC_Security::revoke_all_sessions( $user_id, 'contact_changed' );
-		SMC_Security::audit( 'contact_reverification_required', $user_id );
+		$app = smc_application( $user_id );
+		if ( ! $app ) {
+			return;
+		}
+		$phone = smc_normalize_phone( $meta_value );
+		$phone_enc = is_wp_error( $phone ) ? null : SMC_Security::encrypt( $phone, 'membership-phone', array( 'user_id' => absint( $user_id ) ) );
+		$phone_hash = is_wp_error( $phone ) ? null : SMC_Security::blind_index( $phone, 'phone' );
+		if ( is_wp_error( $phone_enc ) || is_wp_error( $phone_hash ) ) {
+			$phone_enc = null;
+			$phone_hash = null;
+		}
+		global $wpdb;
+		$wpdb->query( 'START TRANSACTION' );
+		$updated = $wpdb->update(
+			$wpdb->prefix . 'smc_applications',
+			array( 'phone_e164_enc' => $phone_enc, 'phone_hash' => $phone_hash, 'row_version' => (int) $app['row_version'] + 1, 'updated_at' => current_time( 'mysql', true ) ),
+			array( 'user_id' => absint( $user_id ), 'row_version' => (int) $app['row_version'] ),
+			array( '%s', '%s', '%d', '%s' ),
+			array( '%d', '%d' )
+		);
+		$invalidated = 1 === $updated && self::invalidate_contact_assertion( $user_id, 'mobile', 'contact_changed' );
+		if ( 1 !== $updated || ! $invalidated ) {
+			$wpdb->query( 'ROLLBACK' );
+			clean_user_cache( $user_id );
+			self::invalidate_contact_assertion( $user_id, 'mobile', 'contact_sync_failed' );
+			SMC_Security::audit( 'contact_sync_failed', $user_id, array( 'channel' => 'mobile' ) );
+			return;
+		}
+		$wpdb->query( 'COMMIT' );
+		clean_user_cache( $user_id );
 	}
 
 	public static function email_changed( $user_id, $old_user_data ) {
@@ -280,9 +327,7 @@ final class SMC_Contracts {
 		if ( ! $current || ! $old_user_data instanceof WP_User || hash_equals( (string) $old_user_data->user_email, (string) $current->user_email ) ) {
 			return;
 		}
-		delete_user_meta( $user_id, '_smc_email_verified' );
-		SMC_Security::revoke_all_sessions( $user_id, 'email_changed' );
-		SMC_Security::audit( 'email_reverification_required', $user_id );
+		self::invalidate_contact_assertion( $user_id, 'email', 'email_changed' );
 	}
 }
 
