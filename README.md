@@ -9,10 +9,14 @@ Canonical membership eligibility, identity assurance, guardian consent, security
 - Database schema version: `1.2.0` — unchanged; no structural database migration is required
 - Editable source: `source/sabri-membership-core/`
 - Deterministic package target: `dist/00-sabri-membership-core-1.2.4.zip`
+- Verified package SHA-256: `c22e05c4bd60fb2540715f507a11f905d1d01d9d44fd8b53bf9946e48bc7934a`
+- Corrective GitHub Actions run: `30732165567` — **passed**
+- Corrective PR #6 merge commit: `1ef2a3898eafbe5b5c023ab24e42fcca1b89a472`
 - Authoritative master-plan project artifact: `00-Sabri-Membership-Core-Complete-Master-Plan-2026-Four-Round-Reviewed-Final.docx`
 - Master-plan SHA-256: `3b1f81aa8aed39c76be9e6e2da3eef4e6671a581c13c359f52d163c9bbc6bc9d`
 - Requirement traceability: `F00-R001` through `F00-R100`
-- Staging approval: **Pending**
+- Staging installation candidate: **Yes**
+- Staging accepted: **No**
 - Production approval: **No**
 
 Version 1.2.4 audits the 1.2.3 runtime against the four-round reviewed master plan and corrects authorization-boundary defects:
@@ -21,7 +25,7 @@ Version 1.2.4 audits the 1.2.3 runtime against the four-round reviewed master pl
 - broad `smc_*` and `sa_*` recovery-prefix exemptions are replaced by exact allowlists;
 - effective eligibility requires guardian validity, verified ordinary-account email/mobile ownership, and a current session challenge for protected actions;
 - safe/public reads are separated from protected REST mutations;
-- ordinary Founder reassignment is locked after configuration;
+- ordinary Founder reassignment and clearing are locked after configuration;
 - client age rules derive from the canonical server policy;
 - the complete plan and 100-requirement implementation/evidence map are checksum-governed and tested.
 
@@ -40,4 +44,4 @@ npm install --ignore-scripts
 npm run verify
 ```
 
-Local and GitHub checks authorize a staging candidate only. Hostinger staging acceptance remains mandatory.
+The verified repository package is authorized as a Hostinger staging installation candidate only. Staging acceptance, production approval and live deployment remain separate mandatory gates.
