@@ -2,6 +2,7 @@
 defined( 'ABSPATH' ) || exit;
 
 final class SMC_Lifecycle {
+	private static $repair_failures = 0;
 	private const AUTOMATED_AGE_REASON = 'age_eligibility_failed';
 	private const INSTITUTIONAL_AGE_META = '_smc_institutional_age_evidence_attention';
 
@@ -44,6 +45,7 @@ final class SMC_Lifecycle {
 	 */
 	public static function repair_institutional_accounts() {
 		global $wpdb;
+		self::$repair_failures = 0;
 		$rows = $wpdb->get_results(
 			"SELECT * FROM {$wpdb->prefix}smc_applications WHERE status='suspended' ORDER BY id ASC LIMIT 500",
 			ARRAY_A
@@ -60,9 +62,15 @@ final class SMC_Lifecycle {
 			}
 			if ( self::repair_institutional_account( $app ) ) {
 				++$repaired;
+			} else {
+				++self::$repair_failures;
 			}
 		}
 		return $repaired;
+	}
+
+	public static function institutional_repair_complete() {
+		return 0 === self::$repair_failures;
 	}
 
 	private static function recheck_ages() {
@@ -80,7 +88,8 @@ final class SMC_Lifecycle {
 			$user_id = (int) $app['user_id'];
 			$dob = SMC_Security::decrypt( $app['date_of_birth_enc'], 'date-of-birth', array( 'user_id' => $user_id ) );
 			$age = is_wp_error( $dob ) ? false : smc_age_from_dob( $dob );
-			$invalid = false === $age || $age < smc_minimum_age_for_gender( $app['gender'] ) || ( $age < 18 && smc_is_professional_type( $app['membership_type'] ) );
+			$minimum_age = smc_minimum_age_for_gender( $app['gender'] );
+			$invalid = false === $age || false === $minimum_age || $age < $minimum_age || ( $age < 18 && smc_is_professional_type( $app['membership_type'] ) );
 
 			if ( $invalid ) {
 				if ( self::is_institutional_user( $user_id ) ) {
@@ -92,12 +101,26 @@ final class SMC_Lifecycle {
 			}
 
 			if ( get_user_meta( $user_id, self::INSTITUTIONAL_AGE_META, true ) ) {
+				$wpdb->query( 'START TRANSACTION' );
 				delete_user_meta( $user_id, self::INSTITUTIONAL_AGE_META );
-				SMC_Security::audit( 'institutional_age_evidence_resolved', $user_id );
+				$deleted = ! metadata_exists( 'user', $user_id, self::INSTITUTIONAL_AGE_META );
+				$audit_ok = $deleted && SMC_Security::audit( 'institutional_age_evidence_resolved', $user_id );
+				if ( $deleted && $audit_ok ) {
+					$wpdb->query( 'COMMIT' );
+				} else {
+					$wpdb->query( 'ROLLBACK' );
+					clean_user_cache( $user_id );
+				}
 			}
 			if ( $age >= 18 && $app['guardian_required'] ) {
-				$wpdb->update( $wpdb->prefix . 'smc_applications', array( 'guardian_required' => 0, 'row_version' => (int) $app['row_version'] + 1, 'updated_at' => current_time( 'mysql', true ) ), array( 'id' => (int) $app['id'], 'row_version' => (int) $app['row_version'] ) );
-				SMC_Security::audit( 'guardian_requirement_ended_at_adulthood', $user_id );
+				$wpdb->query( 'START TRANSACTION' );
+				$updated = $wpdb->update( $wpdb->prefix . 'smc_applications', array( 'guardian_required' => 0, 'row_version' => (int) $app['row_version'] + 1, 'updated_at' => current_time( 'mysql', true ) ), array( 'id' => (int) $app['id'], 'row_version' => (int) $app['row_version'] ) );
+				$audit_ok = 1 === $updated && SMC_Security::audit( 'guardian_requirement_ended_at_adulthood', $user_id );
+				if ( 1 === $updated && $audit_ok ) {
+					$wpdb->query( 'COMMIT' );
+				} else {
+					$wpdb->query( 'ROLLBACK' );
+				}
 			}
 		}
 		update_option( 'smc_age_recheck_cursor', count( $rows ) < 500 ? 0 : $cursor, false );
@@ -109,16 +132,29 @@ final class SMC_Lifecycle {
 	}
 
 	private static function record_institutional_age_attention( $user_id, $reason ) {
+		global $wpdb;
 		$reason = sanitize_key( $reason );
-		if ( $reason === get_user_meta( $user_id, self::INSTITUTIONAL_AGE_META, true ) ) {
-			return;
+		$current = get_user_meta( $user_id, self::INSTITUTIONAL_AGE_META, true );
+		if ( is_array( $current ) && $reason === ( $current['reason'] ?? '' ) && ! empty( $current['audited_at'] ) ) {
+			return true;
 		}
-		update_user_meta( $user_id, self::INSTITUTIONAL_AGE_META, $reason );
-		SMC_Security::audit(
+		$state = array( 'reason' => $reason, 'audited_at' => current_time( 'mysql', true ) );
+		$wpdb->query( 'START TRANSACTION' );
+		update_user_meta( $user_id, self::INSTITUTIONAL_AGE_META, $state );
+		$stored = get_user_meta( $user_id, self::INSTITUTIONAL_AGE_META, true );
+		$stored_ok = is_array( $stored ) && $reason === ( $stored['reason'] ?? '' ) && ! empty( $stored['audited_at'] );
+		$audit_ok = $stored_ok && SMC_Security::audit(
 			'institutional_age_evidence_attention_required',
 			$user_id,
 			array( 'reason' => $reason )
 		);
+		if ( ! $stored_ok || ! $audit_ok ) {
+			$wpdb->query( 'ROLLBACK' );
+			clean_user_cache( $user_id );
+			return false;
+		}
+		$wpdb->query( 'COMMIT' );
+		return true;
 	}
 
 	private static function latest_hard_block_context( $user_id ) {
@@ -233,6 +269,8 @@ final class SMC_Lifecycle {
 
 	private static function restrict( $app, $reason, $status = 'suspended' ) {
 		global $wpdb;
+		$user_id = (int) $app['user_id'];
+		$wpdb->query( 'START TRANSACTION' );
 		$updated = $wpdb->query(
 			$wpdb->prepare(
 				"UPDATE {$wpdb->prefix}smc_applications SET status=%s,row_version=row_version+1,updated_at=%s WHERE id=%d AND row_version=%d",
@@ -242,11 +280,17 @@ final class SMC_Lifecycle {
 				(int) $app['row_version']
 			)
 		);
-		if ( 1 === $updated ) {
-			SMC_Contracts::set_exact_role( (int) $app['user_id'], smc_role_for_type( $app['membership_type'], false ) );
-			SMC_Security::revoke_all_sessions( (int) $app['user_id'], $reason );
-			SMC_Security::audit( 'membership_restricted', (int) $app['user_id'], array( 'reason' => $reason ) );
+		$role_ok = 1 === $updated && SMC_Contracts::set_exact_role( $user_id, smc_role_for_type( $app['membership_type'], false ) );
+		$sessions_ok = $role_ok && SMC_Security::revoke_all_sessions( $user_id, $reason );
+		$audit_ok = $sessions_ok && SMC_Security::audit( 'membership_restricted', $user_id, array( 'reason' => $reason ) );
+		if ( 1 !== $updated || ! $role_ok || ! $sessions_ok || ! $audit_ok ) {
+			$wpdb->query( 'ROLLBACK' );
+			clean_user_cache( $user_id );
+			return false;
 		}
+		$wpdb->query( 'COMMIT' );
+		clean_user_cache( $user_id );
+		return true;
 	}
 
 	private static function cleanup_database() {

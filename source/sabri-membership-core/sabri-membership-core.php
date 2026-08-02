@@ -3,7 +3,7 @@
  * Plugin Name: Sabri Membership Core
  * Plugin URI: https://github.com/majidhussainqadri1-dot/00-sabri-membership-core
  * Description: Canonical membership eligibility, identity assurance, guardian consent, security assertions, and verification governance for the Sabri Social Homeopathy Platform.
- * Version: 1.2.5
+ * Version: 1.2.6
  * Requires at least: 6.4
  * Requires PHP: 7.4
  * Author: Dr. Allamah Majid Hussain Sabri Muhaddith Mursheed
@@ -13,7 +13,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'SMC_VERSION', '1.2.5' );
+define( 'SMC_VERSION', '1.2.6' );
 define( 'SMC_DB_VERSION', '1.2.0' );
 define( 'SMC_CONTRACT_VERSION', '1.1.2' );
 define( 'SMC_FILE', __FILE__ );
@@ -56,10 +56,14 @@ add_action(
 		SMC_Installer::maybe_upgrade();
 		if ( SMC_VERSION !== get_option( 'smc_institutional_repair_version', '' ) ) {
 			$repaired = SMC_Lifecycle::repair_institutional_accounts();
-			update_option( 'smc_institutional_repair_version', SMC_VERSION, false );
-			update_option( 'smc_release_version', SMC_VERSION, false );
-			if ( $repaired > 0 ) {
-				set_transient( 'smc_institutional_repair_notice', (string) $repaired, 300 );
+			if ( SMC_Lifecycle::institutional_repair_complete() ) {
+				update_option( 'smc_institutional_repair_version', SMC_VERSION, false );
+				update_option( 'smc_release_version', SMC_VERSION, false );
+				if ( $repaired > 0 ) {
+					set_transient( 'smc_institutional_repair_notice', (string) $repaired, 300 );
+				}
+			} else {
+				update_option( 'smc_last_migration_failure', array( 'message' => __( 'Institutional lifecycle repair remains incomplete and will retry.', 'sabri-membership-core' ), 'updated_at' => current_time( 'mysql', true ) ), false );
 			}
 		}
 	}

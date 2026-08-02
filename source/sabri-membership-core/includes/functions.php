@@ -118,6 +118,10 @@ function smc_age_from_dob( $dob ) {
 }
 
 function smc_minimum_age_for_gender( $gender ) {
+	$gender = sanitize_key( $gender );
+	if ( ! isset( smc_allowed_genders()[ $gender ] ) ) {
+		return false;
+	}
 	$policy = smc_policy();
 	return 'female' === $gender ? (int) $policy['female_minimum_age'] : (int) $policy['male_minimum_age'];
 }
