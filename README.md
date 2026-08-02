@@ -8,27 +8,43 @@ Canonical membership eligibility, identity assurance, guardian consent, security
 - Contract version: `1.1.2`
 - Database schema version: `1.2.0` — unchanged; no structural database migration is required
 - Editable source: `source/sabri-membership-core/`
-- Deterministic package target: `dist/00-sabri-membership-core-1.2.5.zip`
+- Deterministic package: `dist/00-sabri-membership-core-1.2.5.zip`
+- Verified package SHA-256: `442adaf73cdef8859edf45b241cc1abffa9f073a9ee3e2fef8d6f7670b80f385`
+- Corrective head: `eade3f32784d56f91cbfa5731f965f32c89f6d43`
+- Corrective GitHub Actions run: `30756909004` — **passed**
+- Workflow artifact: `8836209197`
+- Corrective PR: `#8`
+- Merge commit: `ce292b22a6af14f7c7efe7d6efe5fe505e70444f`
 - Authoritative master-plan artifact: `00-Sabri-Membership-Core-Complete-Master-Plan-2026-Four-Round-Reviewed-Final.docx`
 - Master-plan SHA-256: `3b1f81aa8aed39c76be9e6e2da3eef4e6671a581c13c359f52d163c9bbc6bc9d`
 - Requirement traceability: `F00-R001` through `F00-R100`
-- Exact-head corrective CI: **Pending on the proposed 1.2.5 pull request**
-- Staging installation candidate: **No until exact-head CI passes**
+- Staging installation candidate: **Yes**
 - Staging accepted: **No**
 - Production approval: **No**
 
-Version 1.2.5 performs a fresh completion-hardening review after 1.2.4 and corrects:
+Version 1.2.5 completed two fresh adversarial review-and-correction rounds after 1.2.4 and corrects:
 
 - professional dual-review finalization deadlock: independent votes persist until a senior finalizer acts;
 - stale approval inheritance: votes count only against the exact submitted evidence snapshot;
+- stale votes after resubmission/appeal: applicant generation is locked and advanced atomically in both canonical records;
 - privacy erasure resurrection: a persistent lock outranks Founder/Administrator institutional precedence and application absence;
 - non-atomic erasure and audit-chain corruption risk: active records delete transactionally while hash-chained audit rows remain unchanged under retention;
+- unsafe erasure completion when private storage or completion-audit evidence is unavailable: both states remain fail-closed and retryable;
 - account/role recreation after erasure;
 - recovery-code receipt deletion before successful decryption;
 - partial two-factor setup after receipt failure;
 - reviewer contact status drift from canonical assertions.
 
 Version 1.2.4 remains the authorization-boundary and master-plan traceability foundation. Version 1.2.3 remains the institutional lifecycle repair foundation. Version 1.2.2 remains the institutional/application precedence foundation.
+
+## Verified automated evidence
+
+- completion hardening contract: **35 PASS, 0 FAIL**;
+- approval-gate runtime: **5 PASS, 0 FAIL**;
+- privacy-erasure runtime: **3 PASS, 0 FAIL**;
+- resubmission-generation runtime: **4 PASS, 0 FAIL**;
+- all inherited source, membership-state, institutional-lifecycle, authorization-boundary and master-plan traceability suites: **passed**;
+- deterministic ZIP, manifest, CRC, unsafe-path and symlink verification: **passed**.
 
 ## Canonical boundaries
 
@@ -43,4 +59,4 @@ npm ci --ignore-scripts
 npm run verify
 ```
 
-Local or CI checks do not authorize live installation. Hostinger staging acceptance, real providers, cross-plugin runtime, browser/accessibility, backup/restore/rollback, legal approval and Founder acceptance remain mandatory.
+The verified repository package is a Hostinger staging installation candidate. CI does not authorize live installation. Hostinger staging acceptance, real providers, cross-plugin runtime, browser/accessibility, backup/restore/rollback, legal approval and Founder acceptance remain mandatory.
