@@ -59,7 +59,7 @@ Local source and GitHub checks do not authorize production. Test fresh activatio
 == Changelog ==
 
 = 1.2.4 =
-* Added the checksum-verified four-round master plan and 100-row requirement traceability.
+* Added the checksum-verified four-round master plan and 100-requirement traceability.
 * Removed broad Administrator bypasses from File 00/platform capabilities and protected requests.
 * Replaced broad recovery-prefix behavior with exact action and REST-route allowlists.
 * Added guardian- and contact-aware effective eligibility and contextual REST mutation enforcement.

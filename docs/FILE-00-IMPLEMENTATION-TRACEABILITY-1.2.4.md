@@ -3,7 +3,7 @@
 Normative project artifact: `00-Sabri-Membership-Core-Complete-Master-Plan-2026-Four-Round-Reviewed-Final.docx`  
 SHA-256: `3b1f81aa8aed39c76be9e6e2da3eef4e6671a581c13c359f52d163c9bbc6bc9d`
 
-Plugin `1.2.4`; contract `1.1.3`; database `1.2.0`. Staging accepted: **No**. Production approved: **No**.
+Plugin `1.2.4`; contract `1.1.2`; database `1.2.0`. Staging accepted: **No**. Production approved: **No**.
 
 Codes: `C` corrected in 1.2.4, exact-head CI pending; `I` implemented, staging pending; `G` specified/governed; `P` partial evidence, external or staging gate pending.
 

@@ -5,7 +5,7 @@ Canonical membership eligibility, identity assurance, guardian consent, security
 ## Current corrective release
 
 - Version: `1.2.4`
-- Contract version: `1.1.3`
+- Contract version: `1.1.2`
 - Database schema version: `1.2.0` — unchanged; no structural database migration is required
 - Editable source: `source/sabri-membership-core/`
 - Deterministic package target: `dist/00-sabri-membership-core-1.2.4.zip`
@@ -23,7 +23,7 @@ Version 1.2.4 audits the 1.2.3 runtime against the four-round reviewed master pl
 - safe/public reads are separated from protected REST mutations;
 - ordinary Founder reassignment is locked after configuration;
 - client age rules derive from the canonical server policy;
-- the complete plan and 100-row implementation/evidence map are checksum-governed and tested.
+- the complete plan and 100-requirement implementation/evidence map are checksum-governed and tested.
 
 Version 1.2.3 remains the institutional lifecycle repair foundation. Version 1.2.2 remains the institutional/application precedence foundation.
 

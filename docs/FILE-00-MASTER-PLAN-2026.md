@@ -8,10 +8,10 @@ This repository document is the authoritative index for the four-round reviewed 
 - SHA-256: `3b1f81aa8aed39c76be9e6e2da3eef4e6671a581c13c359f52d163c9bbc6bc9d`
 - Document version: `2.0 — Four-Round Reviewed and Corrected Final Specification`
 - Runtime audit release: `1.2.4`
-- Contract version: `1.1.3`
+- Contract version: `1.1.2`
 - Database schema: `1.2.0` (no structural migration in 1.2.4)
 
-The DOCX project artifact is normative for full requirement wording and governance hierarchy. This repository preserves its exact checksum, all stable requirement IDs, and the current machine-readable implementation/acceptance status.
+The DOCX project artifact is normative for full requirement wording and governance hierarchy. This repository preserves its exact checksum, all stable requirement IDs/titles, and the current machine-readable implementation/acceptance status.
 
 ## Source hierarchy
 

@@ -17,7 +17,7 @@ function assert(condition, name) {
 assert(main.includes('Version: 1.2.4'), 'Plugin header is 1.2.4');
 assert(main.includes("define( 'SMC_VERSION', '1.2.4' )"), 'Runtime version is 1.2.4');
 assert(main.includes("define( 'SMC_DB_VERSION', '1.2.0' )"), 'Database version remains 1.2.0');
-assert(main.includes("define( 'SMC_CONTRACT_VERSION', '1.1.3' )"), 'Contract version is 1.1.3');
+assert(main.includes("define( 'SMC_CONTRACT_VERSION', '1.1.2' )"), 'Contract version is 1.1.2');
 assert(main.includes("SMC_Lifecycle::repair_institutional_accounts()"), 'Release path invokes bounded institutional repair');
 assert(main.includes("smc_institutional_repair_version"), 'Repair is version-bounded');
 assert(lifecycle.includes('public static function repair_institutional_accounts()'), 'Institutional repair entry point exists');

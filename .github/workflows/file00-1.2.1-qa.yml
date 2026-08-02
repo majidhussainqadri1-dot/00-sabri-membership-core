@@ -46,7 +46,7 @@ jobs:
           grep -Fq 'Version: 1.2.4' source/sabri-membership-core/sabri-membership-core.php
           grep -Fq "define( 'SMC_VERSION', '1.2.4' )" source/sabri-membership-core/sabri-membership-core.php
           grep -Fq "define( 'SMC_DB_VERSION', '1.2.0' )" source/sabri-membership-core/sabri-membership-core.php
-          grep -Fq "define( 'SMC_CONTRACT_VERSION', '1.1.3' )" source/sabri-membership-core/sabri-membership-core.php
+          grep -Fq "define( 'SMC_CONTRACT_VERSION', '1.1.2' )" source/sabri-membership-core/sabri-membership-core.php
           grep -Fq 'SMC_Authorization::init()' source/sabri-membership-core/sabri-membership-core.php
           grep -Fq 'smc_membership_hard_block' source/sabri-membership-core/includes/class-smc-authorization.php
           grep -Fq 'Founder reassignment is locked' source/sabri-membership-core/includes/class-smc-authorization.php

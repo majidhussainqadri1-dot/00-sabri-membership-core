@@ -13,7 +13,7 @@
 - Added guardian- and contact-aware effective eligibility, protected capability/session gates and contextual REST mutation enforcement.
 - Locked ordinary Founder reassignment and derived client age values from the canonical server policy.
 - Added static and runtime authorization regression matrices.
-- Updated package, CI, release, architecture, security and WordPress metadata to 1.2.4/contract 1.1.3.
+- Updated package, CI, release, architecture, security and WordPress metadata to 1.2.4/contract 1.1.2.
 
 ## Preserved earlier corrections
 

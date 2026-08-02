@@ -198,6 +198,16 @@ try {
 	expect_true( 409 === $error->status, 'Ordinary Founder reassignment is locked' );
 }
 
+
+// Clearing an existing Founder is also a reassignment and must be blocked.
+$_POST = array( 'founder_user_id' => 0 );
+try {
+	SMC_Authorization::enforce_admin_state();
+	expect_true( false, 'Ordinary Founder clearing is locked' );
+} catch ( SMC_Test_Stop $error ) {
+	expect_true( 409 === $error->status, 'Ordinary Founder clearing is locked' );
+}
+
 if ( $failures ) {
 	fwrite( STDERR, 'authorization boundary runtime: ' . $passed . ' PASS, ' . count( $failures ) . " FAIL\n" );
 	foreach ( $failures as $failure ) { fwrite( STDERR, '- ' . $failure . "\n" ); }

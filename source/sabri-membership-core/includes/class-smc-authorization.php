@@ -55,6 +55,11 @@ final class SMC_Authorization {
 		add_filter( 'user_has_cap', array( __CLASS__, 'filter_capabilities' ), 90, 4 );
 	}
 
+	private static function restricted_capabilities() {
+		$caps = (array) apply_filters( 'smc_restricted_capabilities', self::$restricted_caps );
+		return array_values( array_unique( array_filter( array_map( 'sanitize_key', $caps ) ) ) );
+	}
+
 	public static function hard_block_statuses() {
 		return (array) apply_filters(
 			'smc_hard_block_statuses',
@@ -122,12 +127,13 @@ final class SMC_Authorization {
 
 	public static function filter_capabilities( $allcaps, $caps, $args, $user ) {
 		unset( $args );
-		if ( ! $user instanceof WP_User || ! array_intersect( (array) $caps, self::$restricted_caps ) ) {
+		$restricted = self::restricted_capabilities();
+		if ( ! $user instanceof WP_User || ! array_intersect( (array) $caps, $restricted ) ) {
 			return $allcaps;
 		}
 		$assertions = self::assertions( $user->ID );
 		if ( empty( $assertions['effective_eligible'] ) || empty( $assertions['session_two_factor'] ) ) {
-			foreach ( self::$restricted_caps as $cap ) {
+			foreach ( $restricted as $cap ) {
 				$allcaps[ $cap ] = false;
 			}
 		}
@@ -180,7 +186,7 @@ final class SMC_Authorization {
 		if ( 'smc_save_founder' === self::request_action() ) {
 			$current = smc_founder_user_id();
 			$requested = isset( $_POST['founder_user_id'] ) ? absint( $_POST['founder_user_id'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Missing
-			if ( $current && $requested && $current !== $requested ) {
+			if ( $current && $current !== $requested ) {
 				wp_die(
 					esc_html__( 'Founder reassignment is locked. Use the explicit audited recovery process or SMC_FOUNDER_USER_ID.', 'sabri-membership-core' ),
 					'',
@@ -204,15 +210,27 @@ final class SMC_Authorization {
 		return false === $position ? '' : '/' . ltrim( substr( $path, $position + strlen( $prefix ) ), '/' );
 	}
 
-	private static function rest_is_recovery_route( $route ) {
-		$routes = (array) apply_filters( 'smc_membership_recovery_rest_routes', array() );
-		$routes = array_map(
-			static function ( $value ) {
-				return '/' . ltrim( (string) $value, '/' );
-			},
-			$routes
-		);
-		return in_array( '/' . ltrim( (string) $route, '/' ), $routes, true );
+	private static function rest_is_recovery_route( $route, $method ) {
+		$route  = '/' . ltrim( (string) $route, '/' );
+		$method = strtoupper( (string) $method );
+		$rules  = (array) apply_filters( 'smc_membership_recovery_rest_routes', array() );
+		foreach ( $rules as $key => $rule ) {
+			if ( is_string( $rule ) ) {
+				$candidate = $rule;
+				$methods   = array( 'POST' );
+			} elseif ( is_array( $rule ) ) {
+				$candidate = isset( $rule['route'] ) ? $rule['route'] : ( is_string( $key ) ? $key : '' );
+				$methods   = isset( $rule['methods'] ) ? (array) $rule['methods'] : array( 'POST' );
+			} else {
+				continue;
+			}
+			$candidate = '/' . ltrim( (string) $candidate, '/' );
+			$methods   = array_values( array_unique( array_map( 'strtoupper', array_map( 'strval', $methods ) ) ) );
+			if ( $candidate === $route && in_array( $method, $methods, true ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	public static function enforce_rest_state( $result ) {
@@ -221,7 +239,7 @@ final class SMC_Authorization {
 		}
 		$route = self::rest_route();
 		$method = strtoupper( isset( $_SERVER['REQUEST_METHOD'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) : 'GET' );
-		if ( self::rest_is_recovery_route( $route ) ) {
+		if ( self::rest_is_recovery_route( $route, $method ) ) {
 			return $result;
 		}
 		$default = ! in_array( $method, array( 'GET', 'HEAD', 'OPTIONS' ), true );

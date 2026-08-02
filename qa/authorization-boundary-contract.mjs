@@ -15,7 +15,7 @@ function assert(condition, name) {
 
 assert(main.includes('Version: 1.2.4'), 'Plugin header is 1.2.4');
 assert(main.includes("define( 'SMC_VERSION', '1.2.4' )"), 'Runtime version is 1.2.4');
-assert(main.includes("define( 'SMC_CONTRACT_VERSION', '1.1.3' )"), 'Contract version is 1.1.3');
+assert(main.includes("define( 'SMC_CONTRACT_VERSION', '1.1.2' )"), 'Contract version remains 1.1.2 for consumer compatibility');
 assert(main.includes("require_once SMC_PATH . 'includes/class-smc-authorization.php'"), 'Authorization boundary is loaded');
 assert(main.includes('SMC_Authorization::init()'), 'Authorization boundary is initialized');
 assert(main.includes("$policy = smc_policy();"), 'Client policy derives from canonical server policy');
@@ -25,6 +25,7 @@ for (const symbol of [
   "remove_action( 'admin_init', array( 'SMC_Contracts', 'enforce_admin_state' ), 1 )",
   "remove_filter( 'rest_authentication_errors', array( 'SMC_Contracts', 'enforce_rest_state' ), 90 )",
   "remove_filter( 'user_has_cap', array( 'SMC_Contracts', 'filter_capabilities' ), 90 )",
+  'smc_restricted_capabilities',
   'smc_hard_block_statuses',
   'smc_membership_recovery_actions',
   'smc_membership_recovery_rest_routes',
@@ -44,6 +45,8 @@ for (const symbol of [
 assert(!auth.includes("0 === strpos( $action, 'sa_' )"), 'No broad sa_ recovery bypass exists');
 assert(!auth.includes("0 === strpos( $action, 'smc_' ) ||"), 'No broad smc_ recovery bypass exists');
 assert(auth.includes("in_array( $action, self::recovery_actions(), true )"), 'Recovery actions use exact allowlist matching');
+assert(auth.includes("rest_is_recovery_route( $route, $method )"), 'REST recovery matching is route-and-method exact');
+assert(auth.includes("if ( $current && $current !== $requested )"), 'Founder clearing and reassignment are both locked');
 assert(auth.includes("array( 'GET', 'HEAD', 'OPTIONS' )"), 'Safe REST methods remain readable by default');
 assert(auth.includes("isset( $GLOBALS['wp'] ) && is_object( $GLOBALS['wp'] )"), 'REST route discovery guards the global WordPress object');
 assert(auth.includes("array( 'rejected', 'suspended', 'expired', 'appeal_review', 'erasure_pending', 'invalid_application' )"), 'Hard-block census is explicit and fail-closed');

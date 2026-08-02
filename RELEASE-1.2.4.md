@@ -7,7 +7,7 @@ Release 1.2.4 converts the four-round reviewed File 00 master plan into reposito
 ## Version state
 
 - Plugin: `1.2.4`
-- Contract: `1.1.3`
+- Contract: `1.1.2`
 - Database: `1.2.0` — unchanged; no structural migration
 - Staging approval: **Pending**
 - Production approval: **No**

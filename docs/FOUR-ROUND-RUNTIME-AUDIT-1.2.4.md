@@ -9,7 +9,7 @@ Audit baseline: File 00 master plan requirements `F00-R001`–`F00-R100`, curren
 ### Defects confirmed
 
 - `manage_options` bypassed membership capability, admin and REST enforcement.
-- Institutional identity precedence could therefore become a practical bypass for explicit `rejected`, `suspended`, `appeal_review`, `erasure_pending`, `expired` or corrupt states.
+- Institutional identity precedence could therefore become a practical bypass for explicit manual `rejected`, `suspended`, `appeal_review`, `erasure_pending` or corrupt states; ordinary expired evidence also remains restricted.
 - A broad action-prefix exemption treated arbitrary `smc_*` and `sa_*` actions as recovery.
 
 ### Corrections
@@ -58,7 +58,7 @@ Audit baseline: File 00 master plan requirements `F00-R001`–`F00-R100`, curren
 
 - Added a checksum-governed repository index, 100-requirement Markdown/JSON traceability and automated integrity contract for the reviewed project DOCX.
 - Added static and runtime authorization regressions.
-- Updated release, package, CI, WordPress readme, status and architecture evidence to 1.2.4/contract 1.1.3.
+- Updated release, package, CI, WordPress readme, status and architecture evidence to 1.2.4/contract 1.1.2.
 
 ## Residual mandatory gates
 

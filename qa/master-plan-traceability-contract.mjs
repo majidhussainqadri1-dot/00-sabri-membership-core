@@ -14,7 +14,7 @@ const data = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
 assert(data.master_plan_sha256 === expectedSha, 'Registry records the exact DOCX checksum');
 assert(data.master_plan_artifact.endsWith('Four-Round-Reviewed-Final.docx'), 'Registry names the normative project artifact');
 assert(data.plugin_version === '1.2.4', 'Registry plugin version is 1.2.4');
-assert(data.contract_version === '1.1.3', 'Registry contract version is 1.1.3');
+assert(data.contract_version === '1.1.2', 'Registry contract version is 1.1.2');
 assert(data.database_version === '1.2.0', 'Database version remains 1.2.0');
 assert(data.staging_accepted === false, 'Registry does not overclaim staging acceptance');
 assert(data.production_approved === false, 'Registry does not overclaim production approval');

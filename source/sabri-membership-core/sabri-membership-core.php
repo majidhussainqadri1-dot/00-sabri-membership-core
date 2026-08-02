@@ -15,7 +15,7 @@ defined( 'ABSPATH' ) || exit;
 
 define( 'SMC_VERSION', '1.2.4' );
 define( 'SMC_DB_VERSION', '1.2.0' );
-define( 'SMC_CONTRACT_VERSION', '1.1.3' );
+define( 'SMC_CONTRACT_VERSION', '1.1.2' );
 define( 'SMC_FILE', __FILE__ );
 define( 'SMC_PATH', plugin_dir_path( __FILE__ ) );
 define( 'SMC_URL', plugin_dir_url( __FILE__ ) );
