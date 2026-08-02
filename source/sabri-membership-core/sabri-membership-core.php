@@ -3,7 +3,7 @@
  * Plugin Name: Sabri Membership Core
  * Plugin URI: https://github.com/majidhussainqadri1-dot/00-sabri-membership-core
  * Description: Canonical membership eligibility, identity assurance, guardian consent, security assertions, and verification governance for the Sabri Social Homeopathy Platform.
- * Version: 1.2.3
+ * Version: 1.2.4
  * Requires at least: 6.4
  * Requires PHP: 7.4
  * Author: Dr. Allamah Majid Hussain Sabri Muhaddith Mursheed
@@ -13,9 +13,9 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'SMC_VERSION', '1.2.3' );
+define( 'SMC_VERSION', '1.2.4' );
 define( 'SMC_DB_VERSION', '1.2.0' );
-define( 'SMC_CONTRACT_VERSION', '1.1.2' );
+define( 'SMC_CONTRACT_VERSION', '1.1.3' );
 define( 'SMC_FILE', __FILE__ );
 define( 'SMC_PATH', plugin_dir_path( __FILE__ ) );
 define( 'SMC_URL', plugin_dir_url( __FILE__ ) );
@@ -24,6 +24,7 @@ require_once SMC_PATH . 'includes/functions.php';
 require_once SMC_PATH . 'includes/class-smc-installer.php';
 require_once SMC_PATH . 'includes/class-smc-security.php';
 require_once SMC_PATH . 'includes/class-smc-contracts.php';
+require_once SMC_PATH . 'includes/class-smc-authorization.php';
 require_once SMC_PATH . 'includes/class-smc-workflow.php';
 require_once SMC_PATH . 'includes/class-smc-admin.php';
 require_once SMC_PATH . 'includes/class-smc-privacy.php';
@@ -37,6 +38,7 @@ add_action(
 		load_plugin_textdomain( 'sabri-membership-core', false, dirname( plugin_basename( SMC_FILE ) ) . '/languages' );
 		SMC_Security::init();
 		SMC_Contracts::init();
+		SMC_Authorization::init();
 		SMC_Workflow::init();
 		SMC_Admin::init();
 		SMC_Privacy::init();
@@ -71,14 +73,15 @@ add_action(
 		wp_enqueue_style( 'smc-membership', SMC_URL . 'assets/membership.css', array(), SMC_VERSION );
 		wp_style_add_data( 'smc-membership', 'rtl', 'replace' );
 		wp_enqueue_script( 'smc-membership', SMC_URL . 'assets/membership.js', array(), SMC_VERSION, true );
+		$policy = smc_policy();
 		wp_localize_script(
 			'smc-membership',
 			'smcPolicy',
 			array(
-				'maleMinimumAge'   => 15,
-				'femaleMinimumAge' => 12,
-				'guardianAge'      => 18,
-				'professionalAge'  => 18,
+				'maleMinimumAge'   => (int) $policy['male_minimum_age'],
+				'femaleMinimumAge' => (int) $policy['female_minimum_age'],
+				'guardianAge'      => (int) $policy['guardian_required_under'],
+				'professionalAge'  => (int) $policy['professional_minimum_age'],
 			)
 		);
 	}
