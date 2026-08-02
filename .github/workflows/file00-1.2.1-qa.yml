@@ -1,4 +1,4 @@
-name: File 00 Version 1.2.4 QA
+name: File 00 Version 1.2.5 QA
 
 on:
   pull_request:
@@ -41,27 +41,32 @@ jobs:
       - name: Build and verify deterministic package
         run: npm run verify
 
-      - name: Verify declared versions, master plan, and authorization boundary
+      - name: Verify declared versions and completion hardening
         run: |
-          grep -Fq 'Version: 1.2.4' source/sabri-membership-core/sabri-membership-core.php
-          grep -Fq "define( 'SMC_VERSION', '1.2.4' )" source/sabri-membership-core/sabri-membership-core.php
+          grep -Fq 'Version: 1.2.5' source/sabri-membership-core/sabri-membership-core.php
+          grep -Fq "define( 'SMC_VERSION', '1.2.5' )" source/sabri-membership-core/sabri-membership-core.php
           grep -Fq "define( 'SMC_DB_VERSION', '1.2.0' )" source/sabri-membership-core/sabri-membership-core.php
           grep -Fq "define( 'SMC_CONTRACT_VERSION', '1.1.2' )" source/sabri-membership-core/sabri-membership-core.php
-          grep -Fq 'SMC_Authorization::init()' source/sabri-membership-core/sabri-membership-core.php
-          grep -Fq 'smc_membership_hard_block' source/sabri-membership-core/includes/class-smc-authorization.php
-          grep -Fq 'Founder reassignment is locked' source/sabri-membership-core/includes/class-smc-authorization.php
+          grep -Fq 'private static function approval_gate' source/sabri-membership-core/includes/class-smc-admin.php
+          grep -Fq 'BINARY evidence_snapshot=%s' source/sabri-membership-core/includes/class-smc-admin.php
+          grep -Fq 'function smc_privacy_erasure_lock' source/sabri-membership-core/includes/functions.php
+          grep -Fq 'private static function lock_for_erasure' source/sabri-membership-core/includes/class-smc-privacy.php
+          test -f qa/completion-hardening-contract.mjs
+          test -f qa/approval-gate-runtime.php
+          test -f qa/privacy-erasure-runtime.php
           test -f qa/requirements-traceability.json
-          test -f dist/00-sabri-membership-core-1.2.4.zip
+          test -f dist/00-sabri-membership-core-1.2.5.zip
           test -f dist/CHECKSUMS.sha256
 
       - name: Upload verified WordPress package and traceability evidence
         uses: actions/upload-artifact@v4
         with:
-          name: 00-sabri-membership-core-1.2.4-${{ github.sha }}
+          name: 00-sabri-membership-core-1.2.5-${{ github.sha }}
           path: |
-            dist/00-sabri-membership-core-1.2.4.zip
+            dist/00-sabri-membership-core-1.2.5.zip
             dist/CHECKSUMS.sha256
-            docs/FILE-00-IMPLEMENTATION-TRACEABILITY-1.2.4.md
+            docs/FILE-00-IMPLEMENTATION-TRACEABILITY-1.2.5.md
+            docs/COMPLETION-HARDENING-AUDIT-1.2.5.md
             qa/requirements-traceability.json
           if-no-files-found: error
           retention-days: 30

@@ -158,6 +158,30 @@ final class SMC_Privacy {
 		return $erasers;
 	}
 
+	private static function lock_for_erasure( $user_id ) {
+		$existing = smc_privacy_erasure_lock( $user_id );
+		if ( $existing ) {
+			return $existing;
+		}
+		$now = current_time( 'mysql', true );
+		$receipt = substr( hash_hmac( 'sha256', $user_id . '|' . $now . '|' . wp_generate_uuid4(), wp_salt( 'auth' ) ), 0, 32 );
+		$lock = array(
+			'version'   => 1,
+			'locked_at' => $now,
+			'receipt'   => $receipt,
+		);
+		if ( ! update_user_meta( $user_id, '_smc_privacy_erasure_lock', $lock ) || ! smc_privacy_erasure_lock( $user_id ) ) {
+			return new WP_Error( 'smc_erasure_lock_failed', __( 'The account could not be placed into a fail-closed erasure state.', 'sabri-membership-core' ) );
+		}
+		update_user_meta( $user_id, '_smc_privacy_erasure_receipt', $receipt );
+		$sessions_ok = SMC_Security::revoke_all_sessions( $user_id, 'privacy_erasure_locked' );
+		$audit_ok = SMC_Security::audit( 'privacy_erasure_locked', $user_id, array( 'receipt' => $receipt ) );
+		if ( ! $sessions_ok || ! $audit_ok ) {
+			return new WP_Error( 'smc_erasure_containment_incomplete', __( 'Erasure is locked fail-closed, but containment evidence requires retry.', 'sabri-membership-core' ) );
+		}
+		return $lock;
+	}
+
 	public static function erase( $email, $page = 1 ) {
 		$user = get_user_by( 'email', $email );
 		if ( ! $user ) {
@@ -173,20 +197,30 @@ final class SMC_Privacy {
 				'done'           => true,
 			);
 		}
+		$lock = self::lock_for_erasure( $user_id );
+		if ( is_wp_error( $lock ) ) {
+			return array( 'items_removed' => false, 'items_retained' => true, 'messages' => array( $lock->get_error_message() ), 'done' => false );
+		}
 		$page = max( 1, absint( $page ) );
 		$file_result = self::erase_files( $user_id );
 		if ( ! empty( $file_result['pending'] ) ) {
 			unset( $file_result['pending'] );
 			return $file_result;
 		}
-		return self::erase_records( $user_id );
+		return self::erase_records( $user_id, $lock );
 	}
 
 	private static function erase_files( $user_id ) {
 		global $wpdb;
 		$dir = SMC_Security::private_dir();
 		if ( is_wp_error( $dir ) ) {
-			return array( 'items_removed' => false, 'items_retained' => true, 'messages' => array( $dir->get_error_message() ), 'done' => true );
+			return array(
+				'items_removed'  => false,
+				'items_retained' => true,
+				'messages'       => array( $dir->get_error_message() ),
+				'done'           => false,
+				'pending'        => true,
+			);
 		}
 		$docs = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}smc_identity_documents WHERE user_id=%d ORDER BY id LIMIT 50", $user_id ), ARRAY_A );
 		$removed = false;
@@ -231,14 +265,12 @@ final class SMC_Privacy {
 		);
 	}
 
-	private static function erase_records( $user_id ) {
+	private static function erase_records( $user_id, $lock ) {
 		global $wpdb;
-		$receipt = SMC_Security::subject_hash( $user_id );
 		$tables = array(
 			'smc_contact_otps'          => 'user_id',
 			'smc_recovery_codes'        => 'user_id',
 			'smc_auth_sessions'         => 'user_id',
-			'smc_approval_votes'        => null,
 			'smc_verification_events'   => 'user_id',
 			'smc_verification_requests' => 'user_id',
 			'smc_consents'              => 'user_id',
@@ -247,6 +279,7 @@ final class SMC_Privacy {
 			'smc_applications'          => 'user_id',
 		);
 		$failed = array();
+		$wpdb->query( 'START TRANSACTION' );
 		$request_ids = $wpdb->get_col( $wpdb->prepare( "SELECT id FROM {$wpdb->prefix}smc_verification_requests WHERE user_id=%d", $user_id ) );
 		if ( $request_ids ) {
 			$ids = implode( ',', array_map( 'absint', $request_ids ) );
@@ -255,28 +288,52 @@ final class SMC_Privacy {
 			}
 		}
 		foreach ( $tables as $table => $column ) {
-			if ( null === $column ) {
-				continue;
-			}
 			if ( false === $wpdb->delete( $wpdb->prefix . $table, array( $column => $user_id ), array( '%d' ) ) ) {
 				$failed[] = $table;
 			}
 		}
+		$preserved_meta = array( '_smc_privacy_erasure_lock', '_smc_privacy_erasure_receipt' );
 		$meta = get_user_meta( $user_id );
 		foreach ( array_keys( $meta ) as $key ) {
-			if ( 0 === strpos( $key, '_smc_' ) && ! delete_user_meta( $user_id, $key ) && metadata_exists( 'user', $user_id, $key ) ) {
+			if ( 0 === strpos( $key, '_smc_' ) && ! in_array( $key, $preserved_meta, true ) && ! delete_user_meta( $user_id, $key ) && metadata_exists( 'user', $user_id, $key ) ) {
 				$failed[] = 'meta:' . $key;
 			}
 		}
-		$subject_hash = SMC_Security::subject_hash( $user_id );
-		if ( $subject_hash && false === $wpdb->delete( $wpdb->prefix . 'smc_audit_log', array( 'subject_hash' => $subject_hash ), array( '%s' ) ) ) {
-			$failed[] = 'audit';
+		if ( $failed ) {
+			$wpdb->query( 'ROLLBACK' );
+			clean_user_cache( $user_id );
+			return array(
+				'items_removed'  => false,
+				'items_retained' => true,
+				'messages'       => array( sprintf( __( 'Membership erasure remains fail-closed and will retry because atomic deletion failed: %s', 'sabri-membership-core' ), implode( ', ', $failed ) ) ),
+				'done'           => false,
+			);
 		}
-		SMC_Security::audit( 'privacy_erasure_completed', 0, array( 'anonymous_receipt' => substr( hash( 'sha256', $receipt . '|' . current_time( 'mysql', true ) ), 0, 24 ) ) );
+		$wpdb->query( 'COMMIT' );
+		clean_user_cache( $user_id );
+
+		// Tamper-evident audit rows are intentionally retained unchanged. Deleting
+		// or rewriting rows would break the append-only hash chain and destroy
+		// security evidence. They remain purpose-limited, pseudonymous evidence
+		// subject to the published security/legal retention schedule.
+		$anonymous_receipt = substr( hash( 'sha256', (string) $lock['receipt'] . '|' . current_time( 'mysql', true ) ), 0, 24 );
+		$audit_ok = SMC_Security::audit( 'privacy_erasure_completed', 0, array( 'anonymous_receipt' => $anonymous_receipt, 'audit_evidence_retained' => true ) );
+		$messages = array(
+			__( 'Active membership, identity, guardian, consent, session and verification records were erased. A minimal erasure lock and unchanged tamper-evident security audit evidence are retained under the published security/legal retention schedule.', 'sabri-membership-core' ),
+		);
+		if ( ! $audit_ok ) {
+			$messages[] = __( 'Completion evidence could not be appended; the account remains fail-closed and the eraser will retry until completion evidence is recorded.', 'sabri-membership-core' );
+			return array(
+				'items_removed'  => true,
+				'items_retained' => true,
+				'messages'       => $messages,
+				'done'           => false,
+			);
+		}
 		return array(
-			'items_removed'  => empty( $failed ),
-			'items_retained' => ! empty( $failed ),
-			'messages'       => empty( $failed ) ? array() : array( sprintf( __( 'Some membership records remain because deletion failed: %s', 'sabri-membership-core' ), implode( ', ', $failed ) ) ),
+			'items_removed'  => true,
+			'items_retained' => true,
+			'messages'       => $messages,
 			'done'           => true,
 		);
 	}
@@ -298,7 +355,7 @@ final class SMC_Privacy {
 		}
 		wp_add_privacy_policy_content(
 			__( 'Sabri Membership Core', 'sabri-membership-core' ),
-			'<p>' . esc_html__( 'This module processes membership eligibility, date of birth, gender-specific minimum-age rules, contact-verification state, encrypted government identity evidence, guardian consent, two-factor security state, verification decisions, and tamper-evident audit records. Identity evidence is scanner-gated, authenticated, encrypted, stored outside the public web root, and restricted to authorized reviewers. Data is retained only for the published membership, legal, security, dispute, and restoration periods. Documented legal or safety holds are reported during erasure; otherwise personal membership data and identifying audit links are removed through the WordPress privacy process.', 'sabri-membership-core' ) . '</p>'
+			'<p>' . esc_html__( 'This module processes membership eligibility, date of birth, gender-specific minimum-age rules, contact-verification state, encrypted government identity evidence, guardian consent, two-factor security state, verification decisions, and tamper-evident audit records. Identity evidence is scanner-gated, authenticated, encrypted, stored outside the public web root, and restricted to authorized reviewers. Data is retained only for the published membership, legal, security, dispute, and restoration periods. Documented legal or safety holds are reported during erasure. Active membership and identity records are erased through the WordPress privacy process, while a minimal fail-closed erasure lock and unchanged tamper-evident security audit evidence are retained under the published security/legal retention schedule so deleted records cannot silently restore access or corrupt the audit chain.', 'sabri-membership-core' ) . '</p>'
 		);
 	}
 }

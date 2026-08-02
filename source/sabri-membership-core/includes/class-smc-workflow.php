@@ -553,9 +553,17 @@ final class SMC_Workflow {
 		delete_user_meta( $user_id, '_smc_totp_pending_expires' );
 		$codes = SMC_Security::recovery_codes( $user_id );
 		if ( is_wp_error( $codes ) || ! self::store_recovery_receipt( $user_id, $codes ) ) {
+			global $wpdb;
+			delete_user_meta( $user_id, '_smc_2fa_enabled' );
+			delete_user_meta( $user_id, '_smc_totp_secret_enc' );
+			$wpdb->delete( $wpdb->prefix . 'smc_recovery_codes', array( 'user_id' => $user_id ), array( '%d' ) );
+			SMC_Security::revoke_all_sessions( $user_id, 'two_factor_setup_rollback' );
 			self::redirect( 'security', 'invalid' );
 		}
-		SMC_Security::verify_two_factor_challenge( $user_id, $code );
+		$challenge = SMC_Security::verify_two_factor_challenge( $user_id, $code );
+		if ( is_wp_error( $challenge ) || false === $challenge ) {
+			self::redirect( 'security', 'invalid' );
+		}
 		self::redirect( 'security', 'two_factor' );
 	}
 
@@ -637,14 +645,24 @@ final class SMC_Workflow {
 	private static function recovery_receipt( $user_id ) {
 		$expires = (int) get_user_meta( $user_id, '_smc_recovery_receipt_expires', true );
 		$enc = get_user_meta( $user_id, '_smc_recovery_receipt', true );
-		delete_user_meta( $user_id, '_smc_recovery_receipt' );
-		delete_user_meta( $user_id, '_smc_recovery_receipt_expires' );
 		if ( ! $enc || $expires < time() ) {
+			delete_user_meta( $user_id, '_smc_recovery_receipt' );
+			delete_user_meta( $user_id, '_smc_recovery_receipt_expires' );
 			return array();
 		}
 		$json = SMC_Security::decrypt( $enc, 'recovery-receipt', array( 'user_id' => $user_id, 'expires' => $expires ) );
-		$codes = is_wp_error( $json ) ? array() : json_decode( $json, true );
-		return is_array( $codes ) ? $codes : array();
+		if ( is_wp_error( $json ) ) {
+			// Preserve the one-time receipt until expiry so a transient key/storage
+			// problem cannot destroy the user's only copy of the recovery codes.
+			return array();
+		}
+		$codes = json_decode( $json, true );
+		if ( ! is_array( $codes ) ) {
+			return array();
+		}
+		delete_user_meta( $user_id, '_smc_recovery_receipt' );
+		delete_user_meta( $user_id, '_smc_recovery_receipt_expires' );
+		return $codes;
 	}
 
 	public static function guardian_shortcode() {
@@ -726,14 +744,55 @@ final class SMC_Workflow {
 		global $wpdb;
 		$now = current_time( 'mysql', true );
 		$wpdb->query( 'START TRANSACTION' );
-		$ok1 = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_applications SET status=%s,row_version=row_version+1,updated_at=%s WHERE user_id=%d AND status=%s", $new, $now, $user_id, $old ) );
-		$ok2 = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_verification_requests SET status=%s,reviewer_note=%s,assigned_reviewer=0,row_version=row_version+1,updated_at=%s WHERE user_id=%d AND status=%s", $new, $note, $now, $user_id, $old ) );
+		$app = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT row_version FROM {$wpdb->prefix}smc_applications WHERE user_id=%d AND status=%s LIMIT 1 FOR UPDATE",
+				$user_id,
+				$old
+			),
+			ARRAY_A
+		);
+		if ( ! $app ) {
+			$wpdb->query( 'ROLLBACK' );
+			return false;
+		}
+		$current_version = (int) $app['row_version'];
+		$next_applicant_version = $current_version + 1;
+		$ok1 = $wpdb->query(
+			$wpdb->prepare(
+				"UPDATE {$wpdb->prefix}smc_applications SET status=%s,row_version=%d,updated_at=%s WHERE user_id=%d AND status=%s AND row_version=%d",
+				$new,
+				$next_applicant_version,
+				$now,
+				$user_id,
+				$old,
+				$current_version
+			)
+		);
+		$ok2 = $wpdb->query(
+			$wpdb->prepare(
+				"UPDATE {$wpdb->prefix}smc_verification_requests SET status=%s,reviewer_note=%s,assigned_reviewer=0,applicant_version=%d,row_version=row_version+1,updated_at=%s WHERE user_id=%d AND status=%s",
+				$new,
+				$note,
+				$next_applicant_version,
+				$now,
+				$user_id,
+				$old
+			)
+		);
 		if ( 1 !== $ok1 || 1 !== $ok2 ) {
 			$wpdb->query( 'ROLLBACK' );
 			return false;
 		}
 		$wpdb->query( 'COMMIT' );
-		SMC_Security::audit( 'membership_' . $new, $user_id, array( 'note' => $note ) );
+		SMC_Security::audit(
+			'membership_' . $new,
+			$user_id,
+			array(
+				'note'              => $note,
+				'applicant_version' => $next_applicant_version,
+			)
+		);
 		return true;
 	}
 

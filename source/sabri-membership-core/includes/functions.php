@@ -137,6 +137,22 @@ function smc_application( $user_id ) {
 }
 
 /**
+ * Return the persistent privacy-erasure lock for a WordPress account.
+ *
+ * The lock is intentionally stored outside the File 00 application tables so
+ * an erased Founder or Administrator cannot become implicitly verified again
+ * merely because their membership row no longer exists.
+ *
+ * @param int $user_id WordPress user ID.
+ * @return array<string,mixed>|false
+ */
+function smc_privacy_erasure_lock( $user_id ) {
+	$lock = get_user_meta( absint( $user_id ), '_smc_privacy_erasure_lock', true );
+	return is_array( $lock ) && ! empty( $lock['locked_at'] ) ? $lock : false;
+}
+
+
+/**
  * Return the explicit membership state without conflating an absent application
  * with a real draft application.
  *
@@ -149,6 +165,7 @@ function smc_application( $user_id ) {
  * @param int $user_id WordPress user ID.
  * @return array<string,mixed>
  */
+
 function smc_membership_state( $user_id ) {
 	$user_id   = absint( $user_id );
 	$row       = $user_id ? smc_application( $user_id ) : false;
@@ -161,6 +178,23 @@ function smc_membership_state( $user_id ) {
 	$is_admin      = $user && user_can( $user, 'manage_options' );
 	$institutional = $is_founder || $is_admin;
 	$hard_blocks   = array( 'rejected', 'suspended', 'appeal_review', 'erasure_pending' );
+	$erasure_lock = $user_id ? smc_privacy_erasure_lock( $user_id ) : false;
+
+	// A persistent erasure lock outranks institutional identity and application
+	// absence. This prevents deleted application rows from resurrecting access.
+	if ( $erasure_lock ) {
+		return array(
+			'contract_version'      => SMC_CONTRACT_VERSION,
+			'user_id'               => $user_id,
+			'application_exists'    => (bool) $row,
+			'application_status'    => 'erasure_pending',
+			'status'                => 'erasure_pending',
+			'membership_type'       => $type,
+			'institutional_account' => (bool) $institutional,
+			'account_class'         => $is_founder ? 'founder' : ( $is_admin ? 'administrator' : 'member' ),
+			'approved'              => false,
+		);
+	}
 
 	if ( $row && '' === $status ) {
 		return array(
