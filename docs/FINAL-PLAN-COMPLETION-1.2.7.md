@@ -14,21 +14,32 @@ This record reconciles File 00 against both governing sources: the Platform Defi
 - enforced jurisdiction mismatch denial, replay resistance, rate limiting and atomic recovery-code evidence;
 - enforced PHP 7.4 compatibility while testing PHP 7.4 and PHP 8.3;
 - verified deterministic packaging, source/archive integrity, unsafe path/symlink/LFS rejection and secret scanning;
-- reconciled all F00-R001 through F00-R100 into an explicit machine-readable and human-readable traceability register.
+- reconciled all F00-R001 through F00-R100 into explicit machine-readable and human-readable traceability registers.
 
-## Two fresh review-and-correction rounds
+## Runtime review-and-correction rounds
 
-### Round 1
+### Runtime round 1
 
 Corrected jurisdiction enforcement, authentication-versus-authorization separation, TOTP replay protection, recovery-code atomicity and stale membership evidence behavior.
 
-### Round 2
+### Runtime round 2
 
 Corrected stale release assertions, PHP-version incompatibilities, encrypted recovery-receipt lifecycle tests, public-repository archive policy precision and brittle contract checks.
 
-### Final evidence review
+## Final dual-plan evidence review-and-correction rounds
 
-A post-merge evidence audit found stale 1.2.5 README, STATUS and traceability metadata even though runtime 1.2.7 had merged. This record, the 1.2.7 traceability matrix and the strengthened master-plan contract correct that evidence defect and prevent recurrence.
+### Evidence round 1
+
+A post-merge evidence audit found stale 1.2.5 README, STATUS, traceability registry, traceability regression and QA workflow assertions even though runtime 1.2.7 had merged. All were reconciled to 1.2.7; the traceability model was expanded into 100 explicit requirements, and the QA workflow was pinned and corrected.
+
+### Fresh evidence round 2
+
+A new whole-repository review after round 1 found two additional governance defects:
+
+1. the active final workflow still carried the obsolete filename `file00-1.2.1-qa.yml`, creating misleading release identity;
+2. `docs/FILE-00-MASTER-PLAN-2026.md` still identified runtime 1.2.4 and obsolete 1.2.4 traceability files.
+
+The workflow was renamed to `.github/workflows/file00-final-dual-plan-qa.yml`, the obsolete workflow path was deleted, and the authoritative master-plan index was reconciled to both plan checksums, runtime 1.2.7, current evidence artifacts and truthful external gates. The final workflow now rejects recurrence of stale master-index or traceability identity.
 
 ## Exact repository evidence
 
