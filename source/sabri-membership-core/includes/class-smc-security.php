@@ -201,7 +201,10 @@ final class SMC_Security {
 
 	public static function private_dir() {
 		$configured = defined( 'SMC_PRIVATE_STORAGE_DIR' ) ? SMC_PRIVATE_STORAGE_DIR : trailingslashit( dirname( untrailingslashit( ABSPATH ) ) ) . 'sabri-private/smc';
-		$dir = wp_normalize_path( $configured );
+		$dir = wp_normalize_path( trim( (string) $configured ) );
+		if ( '' === $dir || false !== strpos( $dir, "\0" ) || preg_match( '#(^|/)\.{1,2}(/|$)#', $dir ) || ! preg_match( '#^(?:[A-Za-z]:/|/)#', $dir ) ) {
+			return new WP_Error( 'smc_storage_path', __( 'Private membership storage must use an absolute canonical path without dot segments.', 'sabri-membership-core' ) );
+		}
 		if ( self::path_is_within( $dir, ABSPATH ) || self::path_is_within( $dir, WP_CONTENT_DIR ) ) {
 			return new WP_Error( 'smc_public_storage', __( 'Private membership storage must be outside the public WordPress and wp-content directories.', 'sabri-membership-core' ) );
 		}
@@ -212,8 +215,17 @@ final class SMC_Security {
 		if ( ! is_dir( $dir ) && ! wp_mkdir_p( $dir ) ) {
 			return new WP_Error( 'smc_storage_create', __( 'Private membership storage could not be created.', 'sabri-membership-core' ) );
 		}
-		if ( is_link( $dir ) || ! is_dir( $dir ) || ! is_writable( $dir ) ) {
-			return new WP_Error( 'smc_storage_invalid', __( 'Private membership storage is unsafe or not writable.', 'sabri-membership-core' ) );
+		$real = realpath( $dir );
+		if ( false === $real ) {
+			return new WP_Error( 'smc_storage_realpath', __( 'Private membership storage could not be resolved canonically.', 'sabri-membership-core' ) );
+		}
+		$dir = wp_normalize_path( $real );
+		if ( self::path_is_within( $dir, realpath( ABSPATH ) ?: ABSPATH ) || self::path_is_within( $dir, realpath( WP_CONTENT_DIR ) ?: WP_CONTENT_DIR ) ) {
+			return new WP_Error( 'smc_public_storage', __( 'Private membership storage resolves inside a public WordPress directory.', 'sabri-membership-core' ) );
+		}
+		$safe = self::reject_symlink_path( $dir );
+		if ( is_wp_error( $safe ) || is_link( $dir ) || ! is_dir( $dir ) || ! is_writable( $dir ) ) {
+			return is_wp_error( $safe ) ? $safe : new WP_Error( 'smc_storage_invalid', __( 'Private membership storage is unsafe or not writable.', 'sabri-membership-core' ) );
 		}
 		@chmod( $dir, 0700 );
 		clearstatcache( true, $dir );
@@ -221,7 +233,7 @@ final class SMC_Security {
 			return new WP_Error( 'smc_storage_mode', __( 'Private membership storage must enforce mode 0700.', 'sabri-membership-core' ) );
 		}
 		$marker_payload = "<?php http_response_code(403); exit;\n";
-		$marker_mac = self::blind_index( $marker_payload . '|' . wp_normalize_path( $dir ), 'storage-marker' );
+		$marker_mac = self::blind_index( $marker_payload . '|' . $dir, 'storage-marker' );
 		if ( is_wp_error( $marker_mac ) ) {
 			return $marker_mac;
 		}
@@ -236,7 +248,7 @@ final class SMC_Security {
 			if ( is_link( $path ) ) {
 				return new WP_Error( 'smc_marker_symlink', __( 'A private-storage protection marker is a symbolic link.', 'sabri-membership-core' ) );
 			}
-			if ( ! file_exists( $path ) || ! hash_equals( hash( 'sha256', $contents ), hash_file( 'sha256', $path ) ) ) {
+			if ( ! file_exists( $path ) || ! hash_equals( hash( 'sha256', $contents ), (string) hash_file( 'sha256', $path ) ) ) {
 				$written = self::atomic_write( $path, $contents, true );
 				if ( is_wp_error( $written ) ) {
 					return $written;
@@ -253,7 +265,7 @@ final class SMC_Security {
 
 	private static function atomic_write( $target, $contents, $allow_marker = false ) {
 		$dir = dirname( $target );
-		if ( is_link( $target ) || is_link( $dir ) || ( ! $allow_marker && ! preg_match( '/^[a-f0-9-]+\.smcdoc$/', basename( $target ) ) ) ) {
+		if ( is_link( $target ) || is_link( $dir ) || ( ! $allow_marker && ! preg_match( '/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.smcdoc$/', basename( $target ) ) ) ) {
 			return new WP_Error( 'smc_atomic_target', __( 'Unsafe private file target.', 'sabri-membership-core' ) );
 		}
 		$temp = trailingslashit( $dir ) . '.smc-tmp-' . wp_generate_uuid4();
@@ -332,13 +344,32 @@ final class SMC_Security {
 			return $editor;
 		}
 		$temp = wp_tempnam( 'smc-sanitized-image' );
+		if ( ! $temp ) {
+			return new WP_Error( 'smc_image_temp', __( 'A secure image-sanitization file could not be created.', 'sabri-membership-core' ) );
+		}
+		$saved_path = '';
+		$bytes = false;
+		$error = null;
 		$saved = $editor->save( $temp, $mime );
 		if ( is_wp_error( $saved ) || empty( $saved['path'] ) ) {
-			return new WP_Error( 'smc_image_sanitize', __( 'The image could not be safely re-encoded.', 'sabri-membership-core' ) );
+			$error = new WP_Error( 'smc_image_sanitize', __( 'The image could not be safely re-encoded.', 'sabri-membership-core' ) );
+		} else {
+			$saved_path = wp_normalize_path( $saved['path'] );
+			$bytes = file_get_contents( $saved_path );
+			if ( false === $bytes ) {
+				$error = new WP_Error( 'smc_image_read', __( 'The sanitized image could not be read.', 'sabri-membership-core' ) );
+			}
 		}
-		$bytes = file_get_contents( $saved['path'] );
-		@unlink( $saved['path'] );
-		return false === $bytes ? new WP_Error( 'smc_image_read', __( 'The sanitized image could not be read.', 'sabri-membership-core' ) ) : $bytes;
+		$cleanup_ok = true;
+		foreach ( array_unique( array_filter( array( wp_normalize_path( $temp ), $saved_path ) ) ) as $plain_path ) {
+			if ( file_exists( $plain_path ) && ! self::verified_unlink( $plain_path ) ) {
+				$cleanup_ok = false;
+			}
+		}
+		if ( ! $cleanup_ok ) {
+			return new WP_Error( 'smc_image_plaintext_cleanup', __( 'Temporary sanitized plaintext could not be verified as deleted.', 'sabri-membership-core' ) );
+		}
+		return $error ?: $bytes;
 	}
 
 	public static function store_uploaded_document( $field, $label, $user_id, $document_key ) {
@@ -467,6 +498,9 @@ final class SMC_Security {
 			if ( 1 !== $ok ) {
 				throw new RuntimeException( 'The document database record could not be committed.' );
 			}
+			if ( ! self::audit( 'identity_document_stored', $user_id, array( 'document_key' => $document_key, 'version' => $version ) ) ) {
+				throw new RuntimeException( 'The document audit evidence could not be committed.' );
+			}
 			$wpdb->query( 'COMMIT' );
 			$committed = true;
 			if ( ! self::verified_unlink( $lease_path ) ) {
@@ -476,11 +510,10 @@ final class SMC_Security {
 				$old_path = trailingslashit( $dir ) . basename( $old['stored_name'] );
 				if ( ! self::verified_unlink( $old_path ) ) {
 					self::queue_file_job( basename( $old_path ), 'delete_superseded', (string) $old['lease_id'], 'document_replacement' );
-					return new WP_Error( 'smc_cleanup_pending', __( 'The new document was stored, but secure cleanup of the superseded copy is pending operator verification.', 'sabri-membership-core' ) );
+					self::audit( 'identity_document_cleanup_pending', $user_id, array( 'document_key' => $document_key, 'superseded_name_hash' => hash( 'sha256', basename( $old_path ) ) ) );
 				}
 				self::verified_unlink( $old_path . '.lease' );
 			}
-			self::audit( 'identity_document_stored', $user_id, array( 'document_key' => $document_key, 'version' => $version ) );
 			return true;
 		} catch ( Throwable $error ) {
 			$wpdb->query( 'ROLLBACK' );
@@ -564,9 +597,27 @@ final class SMC_Security {
 		return ! file_exists( $path );
 	}
 
+	private static function file_job_name_valid( $stored_name, $job_type ) {
+		$uuid = '[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
+		$patterns = array(
+			'delete_lease'      => '/^' . $uuid . '\\.smcdoc\\.lease$/',
+			'delete_quarantine' => '/^' . $uuid . '\\.smcdoc\\.erase-' . $uuid . '$/',
+			'delete_superseded' => '/^' . $uuid . '\\.smcdoc$/',
+			'delete_failed_upload' => '/^' . $uuid . '\\.smcdoc$/',
+			'delete_orphan'     => '/^' . $uuid . '\\.smcdoc$/',
+			'privacy_delete'    => '/^' . $uuid . '\\.smcdoc(?:\\.erase-' . $uuid . ')?$/',
+		);
+		return isset( $patterns[ $job_type ] ) && 1 === preg_match( $patterns[ $job_type ], $stored_name );
+	}
+
 	public static function queue_file_job( $stored_name, $job_type, $lease_id, $reason = '' ) {
 		global $wpdb;
-		$stored_name = basename( $stored_name );
+		$stored_name = basename( (string) $stored_name );
+		$job_type = sanitize_key( $job_type );
+		if ( ! self::file_job_name_valid( $stored_name, $job_type ) ) {
+			self::audit( 'file_job_rejected', 0, array( 'type' => $job_type, 'name_hash' => hash( 'sha256', $stored_name ) ) );
+			return false;
+		}
 		$path_hash = self::blind_index( $stored_name, 'file-job' );
 		if ( is_wp_error( $path_hash ) ) {
 			return false;
@@ -579,7 +630,7 @@ final class SMC_Security {
 			ON DUPLICATE KEY UPDATE status='pending',next_attempt_at=VALUES(next_attempt_at),last_error=VALUES(last_error),updated_at=VALUES(updated_at)",
 			$stored_name,
 			$path_hash,
-			sanitize_key( $job_type ),
+			$job_type,
 			sanitize_text_field( $lease_id ),
 			$now,
 			sanitize_text_field( $reason ),
@@ -598,31 +649,42 @@ final class SMC_Security {
 		$now = current_time( 'mysql', true );
 		$jobs = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT * FROM {$wpdb->prefix}smc_file_jobs WHERE status IN ('pending','retry') AND next_attempt_at<=%s ORDER BY id LIMIT 25",
+				"SELECT * FROM {$wpdb->prefix}smc_file_jobs WHERE ((status IN ('pending','retry') AND next_attempt_at<=%s) OR (status='processing' AND updated_at<UTC_TIMESTAMP() - INTERVAL 30 MINUTE)) ORDER BY id LIMIT 25",
 				$now
 			),
 			ARRAY_A
 		);
 		foreach ( $jobs as $job ) {
-			$path = trailingslashit( $dir ) . basename( $job['stored_name'] );
-			$ok = self::verified_unlink( $path );
+			$claimed = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_file_jobs SET status='processing',updated_at=%s WHERE id=%d AND ((status IN ('pending','retry') AND next_attempt_at<=%s) OR (status='processing' AND updated_at<UTC_TIMESTAMP() - INTERVAL 30 MINUTE))", $now, (int) $job['id'], $now ) );
+			if ( 1 !== $claimed ) {
+				continue;
+			}
+			$name = basename( (string) $job['stored_name'] );
+			$expected_hash = self::blind_index( $name, 'file-job' );
+			$valid = ! is_wp_error( $expected_hash ) && hash_equals( (string) $expected_hash, (string) $job['path_hash'] ) && self::file_job_name_valid( $name, sanitize_key( $job['job_type'] ) );
+			if ( $valid && preg_match( '/\\.smcdoc$/', $name ) ) {
+				$referenced = (bool) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$wpdb->prefix}smc_identity_documents WHERE stored_name=%s LIMIT 1", $name ) );
+				$valid = ! $referenced;
+			}
+			$path = trailingslashit( $dir ) . $name;
+			$ok = $valid && self::path_is_within( $path, $dir ) && self::verified_unlink( $path );
 			$attempts = (int) $job['attempts'] + 1;
-			$status = $ok ? 'complete' : ( $attempts >= 10 ? 'failed' : 'retry' );
+			$status = $ok ? 'complete' : ( $attempts >= 10 || ! $valid ? 'failed' : 'retry' );
 			$wpdb->update(
 				$wpdb->prefix . 'smc_file_jobs',
 				array(
 					'status'          => $status,
 					'attempts'        => $attempts,
 					'next_attempt_at' => gmdate( 'Y-m-d H:i:s', time() + min( DAY_IN_SECONDS, 300 * ( 2 ** min( $attempts, 8 ) ) ) ),
-					'last_error'      => $ok ? null : 'Verified deletion failed.',
-					'updated_at'      => $now,
+					'last_error'      => $ok ? null : ( $valid ? 'Verified deletion failed.' : 'File-job integrity validation failed.' ),
+					'updated_at'      => current_time( 'mysql', true ),
 				),
-				array( 'id' => (int) $job['id'] ),
+				array( 'id' => (int) $job['id'], 'status' => 'processing' ),
 				array( '%s', '%d', '%s', '%s', '%s' ),
-				array( '%d' )
+				array( '%d', '%s' )
 			);
 			if ( 'failed' === $status ) {
-				self::audit( 'file_job_permanently_failed', 0, array( 'job_id' => (int) $job['id'], 'type' => $job['job_type'] ) );
+				self::audit( 'file_job_permanently_failed', 0, array( 'job_id' => (int) $job['id'], 'type' => $job['job_type'], 'integrity_valid' => $valid ) );
 			}
 		}
 	}
@@ -705,8 +767,44 @@ final class SMC_Security {
 		return (bool) get_user_meta( $user_id, '_smc_2fa_enabled', true ) && ! is_wp_error( self::two_factor_secret( $user_id ) );
 	}
 
+	private static function transaction_active() {
+		global $wpdb;
+		$value = $wpdb->get_var( 'SELECT @@session.in_transaction' );
+		return false !== $value && null !== $value && 1 === (int) $value;
+	}
+
+	private static function session_token_meta_key( $token_hash ) {
+		return '_smc_session_token_' . substr( preg_replace( '/[^a-f0-9]/', '', strtolower( (string) $token_hash ) ), 0, 40 );
+	}
+
+	private static function store_session_token_envelope( $user_id, $token_hash, $token ) {
+		$key = self::session_token_meta_key( $token_hash );
+		$envelope = self::encrypt( $token, 'session-token-envelope', array( 'user_id' => absint( $user_id ), 'token_hash' => (string) $token_hash ) );
+		if ( is_wp_error( $envelope ) ) {
+			return false;
+		}
+		update_user_meta( absint( $user_id ), $key, $envelope );
+		return hash_equals( (string) $envelope, (string) get_user_meta( absint( $user_id ), $key, true ) );
+	}
+
+	private static function session_token_from_hash( $user_id, $token_hash ) {
+		$envelope = get_user_meta( absint( $user_id ), self::session_token_meta_key( $token_hash ), true );
+		if ( ! is_string( $envelope ) || '' === $envelope ) {
+			return new WP_Error( 'smc_session_token_missing', __( 'The exact WordPress session token is unavailable.', 'sabri-membership-core' ) );
+		}
+		return self::decrypt( $envelope, 'session-token-envelope', array( 'user_id' => absint( $user_id ), 'token_hash' => (string) $token_hash ) );
+	}
+
+	private static function delete_session_token_envelope( $user_id, $token_hash ) {
+		$key = self::session_token_meta_key( $token_hash );
+		delete_user_meta( absint( $user_id ), $key );
+		return ! metadata_exists( 'user', absint( $user_id ), $key );
+	}
+
 	public static function register_session( $user_id, $token, $expiration ) {
-		if ( ! $user_id || ! $token ) {
+		$user_id = absint( $user_id );
+		$token = (string) $token;
+		if ( ! $user_id || '' === $token ) {
 			return false;
 		}
 		global $wpdb;
@@ -721,16 +819,25 @@ final class SMC_Security {
 			"INSERT INTO {$wpdb->prefix}smc_auth_sessions
 			(user_id,token_hash,expires_at,two_factor_at,last_totp_slice,ip_hash,device_hash,revoked_at,created_at,updated_at)
 			VALUES (%d,%s,%s,NULL,NULL,%s,%s,NULL,%s,%s)
-			ON DUPLICATE KEY UPDATE user_id=VALUES(user_id),expires_at=VALUES(expires_at),two_factor_at=NULL,last_totp_slice=NULL,ip_hash=VALUES(ip_hash),device_hash=VALUES(device_hash),revoked_at=NULL,updated_at=VALUES(updated_at)",
+			ON DUPLICATE KEY UPDATE expires_at=IF(revoked_at IS NULL,VALUES(expires_at),expires_at),ip_hash=IF(revoked_at IS NULL,VALUES(ip_hash),ip_hash),device_hash=IF(revoked_at IS NULL,VALUES(device_hash),device_hash),updated_at=IF(revoked_at IS NULL,VALUES(updated_at),updated_at)",
 			$user_id,
 			$hash,
-			gmdate( 'Y-m-d H:i:s', $expiration ),
+			gmdate( 'Y-m-d H:i:s', max( time() + MINUTE_IN_SECONDS, (int) $expiration ) ),
 			$ip,
 			$device,
 			$now,
 			$now
 		);
-		return false !== $wpdb->query( $sql );
+		if ( false === $wpdb->query( $sql ) ) {
+			return false;
+		}
+		$active = (bool) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$wpdb->prefix}smc_auth_sessions WHERE user_id=%d AND token_hash=%s AND revoked_at IS NULL LIMIT 1", $user_id, $hash ) );
+		if ( ! $active || ! self::store_session_token_envelope( $user_id, $hash, $token ) ) {
+			$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_auth_sessions SET revoked_at=%s,updated_at=%s WHERE user_id=%d AND token_hash=%s AND revoked_at IS NULL", $now, $now, $user_id, $hash ) );
+			self::delete_session_token_envelope( $user_id, $hash );
+			return false;
+		}
+		return true;
 	}
 
 	public static function session_is_verified( $user_id ) {
@@ -743,20 +850,30 @@ final class SMC_Security {
 			return false;
 		}
 		global $wpdb;
-		$cutoff = gmdate( 'Y-m-d H:i:s', time() - 12 * HOUR_IN_SECONDS );
-		return (bool) $wpdb->get_var(
+		$mfa_cutoff = gmdate( 'Y-m-d H:i:s', time() - 12 * HOUR_IN_SECONDS );
+		$activity_cutoff = gmdate( 'Y-m-d H:i:s', time() - 30 * MINUTE_IN_SECONDS );
+		$row = $wpdb->get_row(
 			$wpdb->prepare(
-				"SELECT id FROM {$wpdb->prefix}smc_auth_sessions
-				WHERE user_id=%d AND token_hash=%s AND revoked_at IS NULL AND expires_at>UTC_TIMESTAMP() AND two_factor_at>=%s LIMIT 1",
+				"SELECT id,updated_at FROM {$wpdb->prefix}smc_auth_sessions WHERE user_id=%d AND token_hash=%s AND revoked_at IS NULL AND expires_at>UTC_TIMESTAMP() AND two_factor_at>=%s AND updated_at>=%s LIMIT 1",
 				absint( $user_id ),
 				$hash,
-				$cutoff
-			)
+				$mfa_cutoff,
+				$activity_cutoff
+			),
+			ARRAY_A
 		);
+		if ( ! $row ) {
+			return false;
+		}
+		if ( strtotime( (string) $row['updated_at'] . ' UTC' ) < time() - 5 * MINUTE_IN_SECONDS ) {
+			return false !== $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_auth_sessions SET updated_at=%s WHERE id=%d AND revoked_at IS NULL", current_time( 'mysql', true ), (int) $row['id'] ) );
+		}
+		return true;
 	}
 
 	public static function verify_two_factor_challenge( $user_id, $code ) {
-		if ( self::rate_limited( 'totp|' . absint( $user_id ), 7, 900 ) ) {
+		$user_id = absint( $user_id );
+		if ( self::rate_limited( 'totp|' . $user_id, 7, 900 ) ) {
 			return new WP_Error( 'smc_totp_rate', __( 'Too many verification attempts. Please wait and try again.', 'sabri-membership-core' ) );
 		}
 		$secret = self::two_factor_secret( $user_id );
@@ -774,40 +891,24 @@ final class SMC_Security {
 			return new WP_Error( 'smc_session', __( 'The login session is unavailable.', 'sabri-membership-core' ) );
 		}
 		global $wpdb;
-		$now = current_time( 'mysql', true );
-		$updated = $wpdb->query(
-			$wpdb->prepare(
-				"UPDATE {$wpdb->prefix}smc_auth_sessions
-				SET two_factor_at=%s,last_totp_slice=%d,updated_at=%s
-				WHERE user_id=%d AND token_hash=%s AND revoked_at IS NULL AND (last_totp_slice IS NULL OR last_totp_slice<%d)",
-				$now,
-				$slice,
-				$now,
-				absint( $user_id ),
-				$hash,
-				$slice
-			)
-		);
-		if ( 0 === $updated ) {
-			self::register_session( $user_id, $token, time() + 2 * DAY_IN_SECONDS );
-			$updated = $wpdb->query(
-				$wpdb->prepare(
-					"UPDATE {$wpdb->prefix}smc_auth_sessions
-					SET two_factor_at=%s,last_totp_slice=%d,updated_at=%s
-					WHERE user_id=%d AND token_hash=%s AND revoked_at IS NULL AND (last_totp_slice IS NULL OR last_totp_slice<%d)",
-					$now,
-					$slice,
-					$now,
-					absint( $user_id ),
-					$hash,
-					$slice
-				)
-			);
+		$session_id = (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$wpdb->prefix}smc_auth_sessions WHERE user_id=%d AND token_hash=%s AND revoked_at IS NULL LIMIT 1", $user_id, $hash ) );
+		if ( ! $session_id && ( ! self::register_session( $user_id, $token, time() + 2 * DAY_IN_SECONDS ) ) ) {
+			return new WP_Error( 'smc_session_register', __( 'The login session could not be registered safely.', 'sabri-membership-core' ) );
 		}
-		if ( 1 !== $updated ) {
+		$wpdb->query( 'START TRANSACTION' );
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT id,last_totp_slice FROM {$wpdb->prefix}smc_auth_sessions WHERE user_id=%d AND token_hash=%s AND revoked_at IS NULL AND expires_at>UTC_TIMESTAMP() LIMIT 1 FOR UPDATE", $user_id, $hash ), ARRAY_A );
+		if ( ! $row || ( null !== $row['last_totp_slice'] && (int) $row['last_totp_slice'] >= (int) $slice ) ) {
+			$wpdb->query( 'ROLLBACK' );
 			return new WP_Error( 'smc_totp_replay', __( 'This verification code was already used for the current session.', 'sabri-membership-core' ) );
 		}
-		self::audit( 'two_factor_passed', $user_id );
+		$now = current_time( 'mysql', true );
+		$updated = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_auth_sessions SET two_factor_at=%s,last_totp_slice=%d,updated_at=%s WHERE id=%d AND user_id=%d AND token_hash=%s AND revoked_at IS NULL AND (last_totp_slice IS NULL OR last_totp_slice<%d)", $now, $slice, $now, (int) $row['id'], $user_id, $hash, $slice ) );
+		$audit_ok = 1 === $updated && self::audit( 'two_factor_passed', $user_id, array( 'session_id' => (int) $row['id'], 'totp_slice' => (int) $slice ) );
+		if ( 1 !== $updated || ! $audit_ok ) {
+			$wpdb->query( 'ROLLBACK' );
+			return new WP_Error( 'smc_totp_commit', __( 'The two-factor verification could not be committed atomically.', 'sabri-membership-core' ) );
+		}
+		$wpdb->query( 'COMMIT' );
 		return true;
 	}
 
@@ -918,32 +1019,63 @@ final class SMC_Security {
 
 	public static function consume_recovery_code( $user_id, $code ) {
 		global $wpdb;
-		$lookup = self::blind_index( strtoupper( trim( (string) $code ) ), 'recovery-code' );
+		$user_id = absint( $user_id );
+		$code = strtoupper( trim( (string) $code ) );
+		$lookup = self::blind_index( $code, 'recovery-code' );
 		if ( is_wp_error( $lookup ) ) {
 			return false;
 		}
-		$row = $wpdb->get_row(
-			$wpdb->prepare(
-				"SELECT * FROM {$wpdb->prefix}smc_recovery_codes WHERE user_id=%d AND code_lookup_hash=%s AND consumed_at IS NULL LIMIT 1",
-				absint( $user_id ),
-				$lookup
-			),
-			ARRAY_A
-		);
-		if ( ! $row || ! wp_check_password( strtoupper( trim( (string) $code ) ), $row['code_hash'] ) ) {
+		$wpdb->query( 'START TRANSACTION' );
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}smc_recovery_codes WHERE user_id=%d AND code_lookup_hash=%s AND consumed_at IS NULL LIMIT 1 FOR UPDATE", $user_id, $lookup ), ARRAY_A );
+		if ( ! $row || ! wp_check_password( $code, $row['code_hash'] ) ) {
+			$wpdb->query( 'ROLLBACK' );
 			return false;
 		}
-		$updated = $wpdb->query(
-			$wpdb->prepare(
-				"UPDATE {$wpdb->prefix}smc_recovery_codes SET consumed_at=%s WHERE id=%d AND consumed_at IS NULL",
-				current_time( 'mysql', true ),
-				(int) $row['id']
-			)
-		);
-		if ( 1 !== $updated ) {
+		$updated = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_recovery_codes SET consumed_at=%s WHERE id=%d AND consumed_at IS NULL", current_time( 'mysql', true ), (int) $row['id'] ) );
+		$audit_ok = 1 === $updated && self::audit( 'recovery_code_used', $user_id, array( 'standalone' => true ) );
+		if ( 1 !== $updated || ! $audit_ok ) {
+			$wpdb->query( 'ROLLBACK' );
 			return false;
 		}
-		self::audit( 'recovery_code_used', $user_id );
+		$wpdb->query( 'COMMIT' );
+		return true;
+	}
+
+	public static function revoke_session_by_id( $user_id, $session_id, $reason = 'user_requested' ) {
+		global $wpdb;
+		$user_id = absint( $user_id );
+		$session_id = absint( $session_id );
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}smc_auth_sessions WHERE id=%d AND user_id=%d AND revoked_at IS NULL LIMIT 1", $session_id, $user_id ), ARRAY_A );
+		if ( ! $row ) {
+			return false;
+		}
+		$raw = self::session_token_from_hash( $user_id, $row['token_hash'] );
+		if ( is_wp_error( $raw ) ) {
+			return self::revoke_all_sessions( $user_id, 'legacy_exact_token_unavailable' );
+		}
+		if ( ! class_exists( 'WP_Session_Tokens' ) ) {
+			return false;
+		}
+		$owns_transaction = ! self::transaction_active();
+		if ( $owns_transaction ) {
+			$wpdb->query( 'START TRANSACTION' );
+		}
+		WP_Session_Tokens::get_instance( $user_id )->destroy( $raw );
+		$now = current_time( 'mysql', true );
+		$updated = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_auth_sessions SET revoked_at=%s,updated_at=%s WHERE id=%d AND user_id=%d AND revoked_at IS NULL", $now, $now, $session_id, $user_id ) );
+		$envelope_ok = self::delete_session_token_envelope( $user_id, $row['token_hash'] );
+		$audit_ok = 1 === $updated && $envelope_ok && self::audit( 'membership_session_revoked', $user_id, array( 'session_id' => $session_id, 'reason' => sanitize_key( $reason ) ) );
+		if ( 1 !== $updated || ! $envelope_ok || ! $audit_ok ) {
+			if ( $owns_transaction ) {
+				$wpdb->query( 'ROLLBACK' );
+			}
+			clean_user_cache( $user_id );
+			return false;
+		}
+		if ( $owns_transaction ) {
+			$wpdb->query( 'COMMIT' );
+		}
+		clean_user_cache( $user_id );
 		return true;
 	}
 
@@ -953,31 +1085,41 @@ final class SMC_Security {
 			return false;
 		}
 		global $wpdb;
-		return false !== $wpdb->update(
-			$wpdb->prefix . 'smc_auth_sessions',
-			array( 'revoked_at' => current_time( 'mysql', true ), 'updated_at' => current_time( 'mysql', true ) ),
-			array( 'user_id' => absint( $user_id ), 'token_hash' => $hash ),
-			array( '%s', '%s' ),
-			array( '%d', '%s' )
-		);
+		$id = (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$wpdb->prefix}smc_auth_sessions WHERE user_id=%d AND token_hash=%s AND revoked_at IS NULL LIMIT 1", absint( $user_id ), $hash ) );
+		return $id ? self::revoke_session_by_id( $user_id, $id, 'token_revocation' ) : false;
 	}
 
 	public static function revoke_all_sessions( $user_id, $reason = '' ) {
 		global $wpdb;
-		$now = current_time( 'mysql', true );
-		$updated = $wpdb->query(
-			$wpdb->prepare(
-				"UPDATE {$wpdb->prefix}smc_auth_sessions SET revoked_at=%s,updated_at=%s WHERE user_id=%d AND revoked_at IS NULL",
-				$now,
-				$now,
-				absint( $user_id )
-			)
-		);
-		if ( class_exists( 'WP_Session_Tokens' ) ) {
-			WP_Session_Tokens::get_instance( absint( $user_id ) )->destroy_all();
+		$user_id = absint( $user_id );
+		$owns_transaction = ! self::transaction_active();
+		if ( $owns_transaction ) {
+			$wpdb->query( 'START TRANSACTION' );
 		}
-		self::audit( 'sessions_revoked', $user_id, array( 'reason' => sanitize_text_field( $reason ) ) );
-		return false !== $updated;
+		if ( class_exists( 'WP_Session_Tokens' ) ) {
+			WP_Session_Tokens::get_instance( $user_id )->destroy_all();
+		}
+		$now = current_time( 'mysql', true );
+		$updated = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_auth_sessions SET revoked_at=%s,updated_at=%s WHERE user_id=%d AND revoked_at IS NULL", $now, $now, $user_id ) );
+		$envelopes_ok = true;
+		foreach ( array_keys( get_user_meta( $user_id ) ) as $meta_key ) {
+			if ( 0 === strpos( $meta_key, '_smc_session_token_' ) && ! delete_user_meta( $user_id, $meta_key ) ) {
+				$envelopes_ok = false;
+			}
+		}
+		$audit_ok = false !== $updated && $envelopes_ok && self::audit( 'sessions_revoked', $user_id, array( 'reason' => sanitize_text_field( $reason ), 'count' => (int) $updated ) );
+		if ( false === $updated || ! $envelopes_ok || ! $audit_ok ) {
+			if ( $owns_transaction ) {
+				$wpdb->query( 'ROLLBACK' );
+			}
+			clean_user_cache( $user_id );
+			return false;
+		}
+		if ( $owns_transaction ) {
+			$wpdb->query( 'COMMIT' );
+		}
+		clean_user_cache( $user_id );
+		return true;
 	}
 
 	public static function rate_limited( $bucket, $limit = 7, $seconds = 900 ) {
@@ -1021,6 +1163,46 @@ final class SMC_Security {
 	public static function subject_hash( $user_id ) {
 		$key = self::key();
 		return is_wp_error( $key ) ? '' : hash_hmac( 'sha256', 'user|' . absint( $user_id ), $key );
+	}
+
+	public static function verify_audit_chain( $limit = 0 ) {
+		global $wpdb;
+		$key = self::key();
+		if ( is_wp_error( $key ) ) {
+			return array( 'valid' => false, 'checked' => 0, 'failed_id' => 0, 'reason' => 'key_unavailable' );
+		}
+		$previous = '';
+		$checked = 0;
+		$cursor = 0;
+		$maximum = absint( $limit );
+		do {
+			$batch_size = $maximum ? min( 500, $maximum - $checked ) : 500;
+			if ( $batch_size <= 0 ) {
+				break;
+			}
+			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}smc_audit_log WHERE id>%d ORDER BY id ASC LIMIT %d", $cursor, $batch_size ), ARRAY_A );
+			foreach ( (array) $rows as $row ) {
+				if ( ! hash_equals( $previous, (string) $row['previous_hash'] ) ) {
+					return array( 'valid' => false, 'checked' => $checked, 'failed_id' => (int) $row['id'], 'reason' => 'previous_hash_mismatch' );
+				}
+				$record = array(
+					'actor_id'      => (int) $row['actor_id'],
+					'subject_hash'  => null === $row['subject_hash'] ? null : (string) $row['subject_hash'],
+					'action'        => (string) $row['action'],
+					'details'       => (string) $row['details'],
+					'previous_hash' => (string) $row['previous_hash'],
+					'created_at'    => (string) $row['created_at'],
+				);
+				$expected = hash_hmac( 'sha256', self::canonical_json( $record ), $key );
+				if ( ! hash_equals( $expected, (string) $row['row_hash'] ) ) {
+					return array( 'valid' => false, 'checked' => $checked, 'failed_id' => (int) $row['id'], 'reason' => 'row_hash_mismatch' );
+				}
+				$previous = (string) $row['row_hash'];
+				$cursor = (int) $row['id'];
+				++$checked;
+			}
+		} while ( count( (array) $rows ) === $batch_size && ( ! $maximum || $checked < $maximum ) );
+		return array( 'valid' => true, 'checked' => $checked, 'failed_id' => 0, 'reason' => '' );
 	}
 
 	public static function audit( $action, $subject_user_id = 0, $details = array() ) {

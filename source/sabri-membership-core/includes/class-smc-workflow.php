@@ -413,11 +413,6 @@ final class SMC_Workflow {
 		if ( is_wp_error( $lookup ) || is_wp_error( $target_hash ) ) {
 			self::redirect( 'status', 'invalid' );
 		}
-		$sent = apply_filters( 'smc_send_contact_otp', false, array( 'user_id' => $user_id, 'channel' => $channel, 'target' => $target, 'code' => $code, 'expires_in' => 600 ) );
-		if ( true !== $sent ) {
-			SMC_Security::audit( 'contact_otp_delivery_failed', $user_id, array( 'channel' => $channel ) );
-			self::redirect( 'status', 'provider' );
-		}
 		global $wpdb;
 		$now = current_time( 'mysql', true );
 		$sql = $wpdb->prepare(
@@ -428,6 +423,12 @@ final class SMC_Workflow {
 		);
 		if ( false === $wpdb->query( $sql ) ) {
 			self::redirect( 'status', 'invalid' );
+		}
+		$sent = apply_filters( 'smc_send_contact_otp', false, array( 'user_id' => $user_id, 'channel' => $channel, 'target' => $target, 'code' => $code, 'expires_in' => 600 ) );
+		if ( true !== $sent ) {
+			$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->prefix}smc_contact_otps WHERE user_id=%d AND channel=%s AND target_hash=%s AND code_lookup_hash=%s AND verified_at IS NULL", $user_id, $channel, $target_hash, $lookup ) );
+			SMC_Security::audit( 'contact_otp_delivery_failed', $user_id, array( 'channel' => $channel ) );
+			self::redirect( 'status', 'provider' );
 		}
 		self::redirect( 'status', 'otp_sent' );
 	}
@@ -642,27 +643,23 @@ final class SMC_Workflow {
 	}
 
 	public static function handle_revoke_session() {
-		if ( ! is_user_logged_in() || ! SMC_Security::session_is_verified( get_current_user_id() ) ) {
+		$user_id = get_current_user_id();
+		if ( ! is_user_logged_in() || ! SMC_Security::session_is_verified( $user_id ) ) {
 			auth_redirect();
 		}
 		$id = absint( $_POST['session_id'] ?? 0 );
 		check_admin_referer( 'smc_revoke_session_' . $id, 'smc_nonce' );
 		global $wpdb;
-		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}smc_auth_sessions WHERE id=%d AND user_id=%d AND revoked_at IS NULL", $id, get_current_user_id() ), ARRAY_A );
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT id,token_hash FROM {$wpdb->prefix}smc_auth_sessions WHERE id=%d AND user_id=%d AND revoked_at IS NULL", $id, $user_id ), ARRAY_A );
 		if ( ! $row ) {
 			self::redirect( 'security', 'invalid' );
 		}
-		$now = current_time( 'mysql', true );
-		$wpdb->query( 'START TRANSACTION' );
-		$updated = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_auth_sessions SET revoked_at=%s,updated_at=%s WHERE id=%d AND revoked_at IS NULL", $now, $now, $id ) );
-		$audit_ok = 1 === $updated && SMC_Security::audit( 'membership_session_revoked', get_current_user_id(), array( 'session_id' => $id ) );
-		if ( 1 !== $updated || ! $audit_ok ) {
-			$wpdb->query( 'ROLLBACK' );
+		$current = SMC_Security::blind_index( wp_get_session_token(), 'session-token' );
+		$is_current = ! is_wp_error( $current ) && hash_equals( $current, $row['token_hash'] );
+		if ( ! SMC_Security::revoke_session_by_id( $user_id, $id, 'user_requested' ) ) {
 			self::redirect( 'security', 'invalid' );
 		}
-		$wpdb->query( 'COMMIT' );
-		$current = SMC_Security::blind_index( wp_get_session_token(), 'session-token' );
-		if ( ! is_wp_error( $current ) && hash_equals( $current, $row['token_hash'] ) ) {
+		if ( $is_current ) {
 			wp_logout();
 			wp_safe_redirect( home_url( '/' ) );
 			exit;

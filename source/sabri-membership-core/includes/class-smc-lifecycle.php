@@ -24,12 +24,24 @@ final class SMC_Lifecycle {
 	}
 
 	public static function daily() {
-		self::repair_institutional_accounts();
-		self::recheck_ages();
-		self::expire_documents();
-		self::cleanup_database();
-		self::cleanup_filesystem();
-		SMC_Security::process_file_jobs();
+		global $wpdb;
+		$lock = 'smc_lifecycle_' . substr( hash( 'sha256', DB_NAME . '|' . $wpdb->prefix ), 0, 32 );
+		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s,0)', $lock ) ) ) {
+			return;
+		}
+		try {
+			self::repair_institutional_accounts();
+			self::recheck_ages();
+			self::expire_documents();
+			self::cleanup_database();
+			self::cleanup_filesystem();
+			SMC_Security::process_file_jobs();
+		} finally {
+			$released = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock ) );
+			if ( 1 !== $released ) {
+				SMC_Security::audit( 'lifecycle_lock_release_failed', 0 );
+			}
+		}
 	}
 
 	/**
@@ -320,7 +332,7 @@ final class SMC_Lifecycle {
 				SMC_Security::verified_unlink( $path );
 				continue;
 			}
-			if ( preg_match( '/^[a-f0-9-]+\.smcdoc$/', $name ) ) {
+			if ( preg_match( '/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.smcdoc$/', $name ) ) {
 				$registered = (bool) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$wpdb->prefix}smc_identity_documents WHERE stored_name=%s LIMIT 1", $name ) );
 				$lease = $path . '.lease';
 				if ( ! $registered && ( ! is_file( $lease ) || filemtime( $lease ) < $now - DAY_IN_SECONDS ) ) {

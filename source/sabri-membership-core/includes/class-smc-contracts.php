@@ -78,7 +78,8 @@ final class SMC_Contracts {
 		$email_verified = self::contact_verified( $user_id, 'email' );
 		$guardian_verified = ! $row || empty( $row['guardian_required'] ) || self::guardian_verified( $user_id );
 		$contacts_verified = (bool) $state['institutional_account'] || ( $phone_verified && $email_verified );
-		$eligible = $approved && $professional_verified && $two_factor_ready && $guardian_verified && $contacts_verified;
+		$identity_documents_current = (bool) $state['institutional_account'] || self::identity_documents_current( $user_id );
+		$eligible = $approved && $professional_verified && $two_factor_ready && $guardian_verified && $contacts_verified && $identity_documents_current;
 		$user = get_userdata( $user_id );
 		$roles = $user ? (array) $user->roles : array();
 		return array(
@@ -98,6 +99,7 @@ final class SMC_Contracts {
 			'email_verified'         => $email_verified,
 			'guardian_verified'      => $guardian_verified,
 			'professional_verified'  => $professional_verified,
+			'identity_documents_current' => $identity_documents_current,
 			'can_message'            => $eligible && $session_verified,
 			'can_comment'            => $eligible && $session_verified,
 			'can_book_appointment'   => $eligible && $session_verified,
@@ -182,16 +184,41 @@ final class SMC_Contracts {
 		return (bool) apply_filters( 'smc_professional_verification_state', false, absint( $user_id ), sanitize_key( $type ) );
 	}
 
+	public static function identity_documents_current( $user_id ) {
+		global $wpdb;
+		$required = array_keys( smc_required_identity_documents() );
+		if ( ! $required ) {
+			return true;
+		}
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT document_key FROM {$wpdb->prefix}smc_identity_documents WHERE user_id=%d AND scan_status='passed' AND status='approved' AND (expiry_date IS NULL OR expiry_date>=UTC_DATE())",
+				absint( $user_id )
+			),
+			ARRAY_A
+		);
+		$approved = array_unique( array_map( 'sanitize_key', array_column( (array) $rows, 'document_key' ) ) );
+		return ! array_diff( $required, $approved );
+	}
+
 	public static function set_exact_role( $user_id, $role ) {
-		$user = new WP_User( absint( $user_id ) );
-		if ( smc_privacy_erasure_lock( $user_id ) || ! $user->exists() || user_can( $user, 'manage_options' ) ) {
+		$user = get_userdata( absint( $user_id ) );
+		$role = sanitize_key( $role );
+		$allowed = array();
+		foreach ( array_keys( smc_account_types() ) as $type ) {
+			$allowed[] = smc_role_for_type( $type, false );
+			$allowed[] = smc_role_for_type( $type, true );
+		}
+		$allowed = array_values( array_unique( array_filter( $allowed ) ) );
+		if ( ! $user || smc_privacy_erasure_lock( $user_id ) || user_can( $user, 'manage_options' ) || ! in_array( $role, $allowed, true ) ) {
 			return false;
 		}
 		foreach ( smc_managed_roles() as $managed ) {
 			$user->remove_role( $managed );
 		}
-		$user->add_role( sanitize_key( $role ) );
-		return in_array( $role, (array) $user->roles, true );
+		$user->add_role( $role );
+		$roles = (array) get_userdata( absint( $user_id ) )->roles;
+		return in_array( $role, $roles, true ) && 1 === count( array_intersect( $roles, $allowed ) );
 	}
 
 	public static function record_session( $logged_in_cookie, $expire, $expiration, $user_id, $scheme, $token ) {

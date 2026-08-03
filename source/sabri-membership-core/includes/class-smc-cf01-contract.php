@@ -121,7 +121,7 @@ final class SMC_CF01_Contract {
 		$record_version = $app ? (int) ( $app['row_version'] ?? 0 ) : 0;
 
 		$capabilities = array(
-			'clinical_identity_link' => ! empty( $base['eligible'] ),
+			'clinical_identity_link' => ! empty( $base['eligible'] ) && ! empty( $base['session_two_factor'] ),
 			'clinical_read'          => ! empty( $base['eligible'] ) && ! empty( $base['session_two_factor'] ),
 			'clinical_write'         => ! empty( $base['eligible'] ) && ! empty( $base['session_two_factor'] ),
 			'prescription_sign'      => ! empty( $base['can_practice'] ) && ! empty( $base['session_two_factor'] ),
@@ -197,6 +197,8 @@ final class SMC_CF01_Contract {
 			'purpose'          => $purpose,
 			'scope_hash'       => is_wp_error( $scope_hash ) ? '' : $scope_hash,
 			'method'           => '',
+			'issued_at'        => gmdate( 'c', $now ),
+			'expires_at'       => gmdate( 'c', $now + self::ASSERTION_TTL ),
 			'verified_at'      => '',
 			'trace_id'         => $trace,
 			'result'           => 'unknown',
@@ -239,7 +241,7 @@ final class SMC_CF01_Contract {
 				$verified = '' !== $replay_marker;
 			}
 		} else {
-			$verified = self::consume_recovery_code_atomic( $user_id, $code, $purpose, $trace );
+			$verified = self::consume_recovery_code_atomic( $user_id, $code, $purpose, $result['scope_hash'], $trace );
 			$method = 'recovery_code';
 		}
 		if ( ! $verified ) {
@@ -249,7 +251,10 @@ final class SMC_CF01_Contract {
 			$result['method'] = $method;
 			return $result;
 		}
-		if ( ! SMC_Security::audit( 'cf01_step_up_verified', $user_id, array( 'purpose' => $purpose, 'scope_hash' => $result['scope_hash'], 'method' => $method, 'trace_id' => $trace ) ) ) {
+		if ( 'totp' === $method && ! SMC_Security::audit( 'cf01_step_up_verified', $user_id, array( 'purpose' => $purpose, 'scope_hash' => $result['scope_hash'], 'method' => $method, 'trace_id' => $trace ) ) ) {
+			if ( $replay_marker ) {
+				delete_option( $replay_marker );
+			}
 			$result['result'] = 'deny';
 			$result['reason_code'] = 'audit_commit_failed';
 			$result['method'] = $method;
@@ -262,7 +267,7 @@ final class SMC_CF01_Contract {
 		return $result;
 	}
 
-	private static function consume_recovery_code_atomic( $user_id, $code, $purpose, $trace ) {
+	private static function consume_recovery_code_atomic( $user_id, $code, $purpose, $scope_hash, $trace ) {
 		global $wpdb;
 		$code = strtoupper( trim( (string) $code ) );
 		$lookup = SMC_Security::blind_index( $code, 'recovery-code' );
@@ -284,7 +289,7 @@ final class SMC_CF01_Contract {
 		}
 		$now = current_time( 'mysql', true );
 		$updated = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_recovery_codes SET consumed_at=%s WHERE id=%d AND consumed_at IS NULL", $now, (int) $row['id'] ) );
-		$audit_ok = 1 === $updated && SMC_Security::audit( 'cf01_recovery_code_used', $user_id, array( 'purpose' => $purpose, 'trace_id' => $trace ) );
+		$audit_ok = 1 === $updated && SMC_Security::audit( 'cf01_step_up_verified', $user_id, array( 'purpose' => $purpose, 'scope_hash' => (string) $scope_hash, 'method' => 'recovery_code', 'trace_id' => $trace ) );
 		if ( 1 !== $updated || ! $audit_ok ) {
 			$wpdb->query( 'ROLLBACK' );
 			return false;
@@ -316,15 +321,7 @@ final class SMC_CF01_Contract {
 	}
 
 	private static function step_up_rate_limited( $user_id, $purpose ) {
-		$key = 'smc_cf01_rate_' . substr( hash( 'sha256', absint( $user_id ) . '|' . sanitize_key( $purpose ) ), 0, 32 );
-		$state = get_transient( $key );
-		$state = is_array( $state ) ? $state : array( 'count' => 0, 'started' => time() );
-		if ( time() - (int) $state['started'] >= self::STEP_UP_WINDOW ) {
-			$state = array( 'count' => 0, 'started' => time() );
-		}
-		$state['count'] = (int) $state['count'] + 1;
-		set_transient( $key, $state, self::STEP_UP_WINDOW );
-		return $state['count'] > self::STEP_UP_LIMIT;
+		return SMC_Security::rate_limited( 'cf01-step-up|' . absint( $user_id ) . '|' . sanitize_key( $purpose ), self::STEP_UP_LIMIT, self::STEP_UP_WINDOW );
 	}
 
 	private static function identity_assurance( $base ) {
