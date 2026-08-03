@@ -73,28 +73,28 @@ final class SMC_Test_DB {
 	public function prepare( $query, ...$args ) { return array( 'query' => $query, 'args' => $args ); }
 	public function get_results( $query, $format = null ) {
 		unset( $format );
-		if ( is_string( $query ) && str_contains( $query, "status='suspended'" ) ) {
+		if ( is_string( $query ) && false !== strpos( $query, "status='suspended'" ) ) {
 			return array_values( array_filter( $this->apps, static fn( $app ) => 'suspended' === $app['status'] ) );
 		}
-		if ( is_array( $query ) && str_contains( $query['query'], 'WHERE id>%d' ) ) {
+		if ( is_array( $query ) && false !== strpos( $query['query'], 'WHERE id>%d' ) ) {
 			return array();
 		}
 		return array();
 	}
 	public function get_row( $query, $format = null ) {
 		unset( $format );
-		if ( is_array( $query ) && str_contains( $query['query'], 'smc_audit_log' ) ) {
+		if ( is_array( $query ) && false !== strpos( $query['query'], 'smc_audit_log' ) ) {
 			return $this->hard_block_context[ $query['args'][0] ] ?? null;
 		}
 		return null;
 	}
 	public function get_var( $query ) {
-		if ( is_array( $query ) && str_contains( $query['query'], 'smc_verification_requests' ) ) {
+		if ( is_array( $query ) && false !== strpos( $query['query'], 'smc_verification_requests' ) ) {
 			return $this->request_status[ (int) $query['args'][0] ] ?? '';
 		}
-		if ( is_array( $query ) && str_contains( $query['query'], 'smc_audit_log' ) ) {
+		if ( is_array( $query ) && false !== strpos( $query['query'], 'smc_audit_log' ) ) {
 			$subject = $query['args'][0];
-			if ( str_contains( $query['query'], "verification_approved" ) ) {
+			if ( false !== strpos( $query['query'], 'verification_approved' ) ) {
 				return $this->cleared_block_id[ $subject ] ?? 0;
 			}
 			return $this->manual_block_id[ $subject ] ?? 0;
@@ -105,7 +105,7 @@ final class SMC_Test_DB {
 		if ( in_array( $query, array( 'START TRANSACTION', 'COMMIT', 'ROLLBACK' ), true ) ) {
 			return true;
 		}
-		if ( is_array( $query ) && str_contains( $query['query'], 'UPDATE wp_smc_applications' ) ) {
+		if ( is_array( $query ) && false !== strpos( $query['query'], 'UPDATE wp_smc_applications' ) ) {
 			list( $status, $time, $id, $version ) = $query['args'];
 			unset( $time );
 			foreach ( $this->apps as &$app ) {
