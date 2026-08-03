@@ -1,0 +1,39 @@
+name: Apply File 00 Forty-Round Evidence Record
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - codex/file00-forty-review-cycles-1.2.8
+
+permissions:
+  contents: write
+
+jobs:
+  record:
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout evidence branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: codex/file00-forty-review-cycles-1.2.8
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Apply verified evidence
+        run: python3 tools/record_forty_round_evidence.py
+
+      - name: Commit evidence reconciliation
+        run: |
+          set -euo pipefail
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add README.md STATUS.md docs/FILE-00-MASTER-PLAN-2026.md docs/FILE-00-IMPLEMENTATION-TRACEABILITY-1.2.8.md docs/FINAL-PLAN-COMPLETION-1.2.8.md qa/requirements-traceability.json
+          git diff --cached --check
+          git commit -m 'File 00 1.2.8: record verified forty-round evidence'
+          git push origin HEAD:codex/file00-forty-review-cycles-1.2.8
