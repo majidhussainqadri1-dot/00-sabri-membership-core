@@ -17,12 +17,12 @@ assert(main.includes('SMC_CF01_Contract::init()'), 'CF-01 provider is initialize
 assert(contract.includes("const CONTRACT_NAME    = 'smc.cf01.membership-assurance'"), 'Named contract exists');
 assert(contract.includes("'result'           => 'unknown'"), 'Assertion defaults fail-unknown');
 assert(contract.includes("'key_recovery'           => false"), 'Membership never grants key recovery');
-assert(contract.includes("'platform_uuid' => $subject_uuid"), 'Opaque platform UUID is returned');
-assert(contract.includes("'record_version'=> $record_version"), 'Source record version is returned');
+assert(/'platform_uuid'\s*=>\s*\$subject_uuid/.test(contract), 'Opaque platform UUID is returned');
+assert(/'record_version'\s*=>\s*\$record_version/.test(contract), 'Source record version is returned');
 assert(contract.includes("'guardian_required'"), 'Guardian state is explicit');
 assert(contract.includes("'jurisdiction_context'"), 'Jurisdiction context is explicit');
 assert(contract.includes("SMC_Security::decrypt( $encrypted, 'totp-secret'"), 'Second-factor secret stays inside File 00');
-assert(!contract.includes("'secret' =>"), 'No secret field is returned');
+assert(!/'secret'\s*=>/.test(contract), 'No secret field is returned');
 assert(contract.includes("SMC_Security::audit( 'cf01_step_up_verified'"), 'Successful step-up requires audit evidence');
 assert(contract.includes("'audit_commit_failed'"), 'Audit failure denies assurance');
 
