@@ -25,12 +25,23 @@ jobs:
           fetch-depth: 0
           persist-credentials: true
 
-      - name: Reassemble and validate overlay archive
+      - name: Reassemble and verify overlay archive
         run: |
           set -euo pipefail
-          cat .forty-round-overlay/chunk0 .forty-round-overlay/chunk1 .forty-round-overlay/chunk2 .forty-round-overlay/chunk3 .forty-round-overlay/chunk4 > /tmp/file00-overlay.b64
+          cat \
+            .forty-round-overlay/chunk0part0 \
+            .forty-round-overlay/chunk0tail0 \
+            .forty-round-overlay/chunk0tail1 \
+            .forty-round-overlay/chunk0tail2 \
+            .forty-round-overlay/chunk0tail3 \
+            .forty-round-overlay/chunk0tail4 \
+            .forty-round-overlay/chunk0tail5 \
+            .forty-round-overlay/chunk1 \
+            .forty-round-overlay/chunk2 \
+            .forty-round-overlay/chunk3 \
+            .forty-round-overlay/chunk4 > /tmp/file00-overlay.b64
           base64 --decode /tmp/file00-overlay.b64 > /tmp/file00-overlay.tar.gz
-          sha256sum /tmp/file00-overlay.tar.gz
+          echo '0783c72740a0c37b8875a4658cf43df9a4313e6c757a7276845555ae05d6bb2e  /tmp/file00-overlay.tar.gz' | sha256sum --check
           tar -tzf /tmp/file00-overlay.tar.gz >/tmp/file00-overlay.entries
           test -s /tmp/file00-overlay.entries
           tar -xzf /tmp/file00-overlay.tar.gz -C .
