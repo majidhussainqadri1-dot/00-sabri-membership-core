@@ -59,7 +59,7 @@ jobs:
           git diff --check
           find source qa -type f -name '*.php' -print0 | xargs -0 -n1 php -l
           node qa/forty-round-contract.mjs
-          test "$(grep -Ec '^## Review Round [0-9]{2}$' docs/FORTY-ROUND-REVIEW-1.2.8.md)" -eq 40
+          test "$(grep -Ec '^## Review Round [0-9]{2} — ' docs/FORTY-ROUND-REVIEW-1.2.8.md)" -eq 40
           grep -Fq 'Version: 1.2.8' source/sabri-membership-core/sabri-membership-core.php
           grep -Fq "define( 'SMC_VERSION', '1.2.8' )" source/sabri-membership-core/sabri-membership-core.php
 
