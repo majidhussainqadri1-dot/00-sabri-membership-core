@@ -41,6 +41,7 @@ class SMC_Security {
   public static function two_factor_ready($id){ return !empty($GLOBALS['base'][(int)$id]['two_factor_ready']); }
   public static function verify_setup_code($secret,$code){ return $secret === 'SECRET' && $code === '123456'; }
   public static function blind_index($value,$purpose){ return hash('sha256',$purpose.'|'.$value); }
+  public static function rate_limited($key,$limit,$window){ return false; }
 }
 class FakeWpdb {
   public string $prefix='wp_';
