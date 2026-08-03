@@ -82,6 +82,14 @@ jobs:
       - name: Install locked Node test dependency
         run: npm ci --ignore-scripts
 
+      - name: Enforce declared PHP 7.4 compatibility
+        run: |
+          set -euo pipefail
+          if grep -RInE --include='*.php' '\b(str_contains|str_starts_with|str_ends_with|array_is_list|get_debug_type)\s*\(' source qa; then
+            echo 'PHP 8-only runtime helper found while Requires PHP remains 7.4.' >&2
+            exit 1
+          fi
+
       - name: Lint all plugin and runtime-test PHP
         run: |
           set -euo pipefail
