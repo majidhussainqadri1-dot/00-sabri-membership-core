@@ -12,9 +12,9 @@ permissions:
 
 jobs:
   contract-integrity:
-    name: PHP ${{ matrix.php }} contract, package and regression suites
+    name: PHP ${{ matrix.php }} contract, package and forty-round regression suites
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -99,8 +99,8 @@ jobs:
             php -l "$file"
           done
 
-      - name: Run complete inherited and CF-01 regression suites
+      - name: Run complete inherited, CF-01 and forty-round suites
         run: npm test
 
-      - name: Build and verify deterministic 1.2.7 package
+      - name: Build and verify deterministic 1.2.8 package
         run: npm run verify

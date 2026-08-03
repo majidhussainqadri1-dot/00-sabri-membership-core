@@ -1,6 +1,10 @@
 <?php
 defined( 'WP_UNINSTALL_PLUGIN' ) || exit;
 
+foreach ( array( 'smc_lifecycle_daily', 'smc_process_file_jobs', 'smc_continue_migration' ) as $hook ) {
+	wp_clear_scheduled_hook( $hook );
+}
+
 /*
  * Identity evidence is intentionally not deleted merely because plugin code is
  * removed. Administrators must first complete the WordPress privacy-erasure

@@ -14,11 +14,11 @@ const failures = [];
 let passed = 0;
 function check(c, n) { if (c) passed++; else failures.push(n); }
 
-check(main.includes('Version: 1.2.7'), 'plugin header 1.2.7');
-check(main.includes("define( 'SMC_VERSION', '1.2.7' )"), 'runtime version 1.2.7');
+check(main.includes('Version: 1.2.8'), 'plugin header 1.2.8');
+check(main.includes("define( 'SMC_VERSION', '1.2.8' )"), 'runtime version 1.2.8');
 check(main.includes("define( 'SMC_DB_VERSION', '1.2.0' )"), 'schema stays 1.2.0');
 check(main.includes("define( 'SMC_CONTRACT_VERSION', '1.1.2' )"), 'contract stays 1.1.2');
-check(readme.includes('Stable tag: 1.2.7'), 'readme stable tag');
+check(readme.includes('Stable tag: 1.2.8'), 'readme stable tag');
 
 check(admin.includes('private static function approval_gate'), 'approval gate helper exists');
 check(admin.includes("'pending_senior'"), 'senior pending state exists');
@@ -34,7 +34,7 @@ check(admin.includes("$a['phone_verified'] ?"), 'review UI uses canonical phone 
 check(functions.includes('function smc_privacy_erasure_lock'), 'persistent erasure lock helper exists');
 check(functions.includes("'status'                => 'erasure_pending'"), 'erasure lock maps to hard block');
 check(contracts.includes('smc_privacy_erasure_lock( $user_id ) || smc_application'), 'registration cannot resurrect erased membership');
-check(contracts.includes("if ( smc_privacy_erasure_lock( $user_id ) || ! $user->exists()"), 'role mutation denied while erased');
+check(contracts.includes('if ( ! $user || smc_privacy_erasure_lock( $user_id )'), 'role mutation denied while erased');
 check(privacy.includes('private static function lock_for_erasure'), 'erasure locks before deletion');
 check(privacy.includes("SMC_Security::revoke_all_sessions( $user_id, 'privacy_erasure_locked' )"), 'erasure revokes sessions');
 check(privacy.includes("$wpdb->query( 'START TRANSACTION' )"), 'record deletion starts transaction');

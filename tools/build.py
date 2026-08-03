@@ -8,9 +8,9 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "source" / "sabri-membership-core"
 DIST = ROOT / "dist"
-VERSION = "1.2.7"
+VERSION = "1.2.8"
 ARCHIVE = DIST / f"00-sabri-membership-core-{VERSION}.zip"
-FIXED_TIME = (2026, 8, 3, 0, 0, 0)
+FIXED_TIME = (2026, 8, 4, 0, 0, 0)
 def digest(path: Path) -> str:
     hasher = hashlib.sha256()
     with path.open("rb") as stream:

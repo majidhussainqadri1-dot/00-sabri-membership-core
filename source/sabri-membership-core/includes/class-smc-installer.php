@@ -40,6 +40,14 @@ final class SMC_Installer {
 		}
 	}
 
+	public static function deactivate() {
+		foreach ( array( 'smc_lifecycle_daily', 'smc_process_file_jobs', 'smc_continue_migration' ) as $hook ) {
+			wp_clear_scheduled_hook( $hook );
+		}
+		delete_transient( 'smc_activation_notice' );
+		delete_transient( 'smc_institutional_repair_notice' );
+	}
+
 	public static function maybe_upgrade() {
 		if ( SMC_DB_VERSION === get_option( 'smc_db_version', '' ) ) {
 			return;
@@ -78,7 +86,10 @@ final class SMC_Installer {
 		}
 		$got = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s,%d)', self::lock_name(), max( 0, (int) $timeout ) ) );
 		if ( 1 !== $got ) {
-			delete_option( 'smc_schema_owner_lock' );
+			$stored = get_option( 'smc_schema_owner_lock', array() );
+			if ( is_array( $stored ) && hash_equals( (string) ( $stored['token'] ?? '' ), $token ) ) {
+				delete_option( 'smc_schema_owner_lock' );
+			}
 			throw new RuntimeException( 'Sabri Membership could not acquire the database advisory lock.' );
 		}
 		return $owner;
