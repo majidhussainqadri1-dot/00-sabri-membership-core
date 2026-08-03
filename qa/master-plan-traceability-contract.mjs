@@ -3,8 +3,11 @@ import path from 'node:path';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const registryPath = path.join(root, 'qa', 'requirements-traceability.json');
+const masterIndexPath = path.join(root, 'docs', 'FILE-00-MASTER-PLAN-2026.md');
 const humanPath = path.join(root, 'docs', 'FILE-00-IMPLEMENTATION-TRACEABILITY-1.2.7.md');
 const completionPath = path.join(root, 'docs', 'FINAL-PLAN-COMPLETION-1.2.7.md');
+const finalWorkflowPath = path.join(root, '.github', 'workflows', 'file00-final-dual-plan-qa.yml');
+const obsoleteWorkflowPath = path.join(root, '.github', 'workflows', 'file00-1.2.1-qa.yml');
 const readmePath = path.join(root, 'README.md');
 const statusPath = path.join(root, 'STATUS.md');
 const runtimePath = path.join(root, 'source', 'sabri-membership-core', 'sabri-membership-core.php');
@@ -13,9 +16,10 @@ const failures = [];
 let passed = 0;
 function assert(condition, name) { if (condition) passed += 1; else failures.push(name); }
 
-for (const p of [registryPath, humanPath, completionPath, readmePath, statusPath, runtimePath, packagePath]) {
+for (const p of [registryPath, masterIndexPath, humanPath, completionPath, finalWorkflowPath, readmePath, statusPath, runtimePath, packagePath]) {
   assert(fs.existsSync(p), `${path.relative(root, p)} exists`);
 }
+assert(!fs.existsSync(obsoleteWorkflowPath), 'Obsolete 1.2.1-named workflow is absent');
 const data = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
 assert(data.platform_master_plan.sha256 === 'bd171fe39da8c10294d7cf1a92bc9ce917b082905b978280a25e1e3c9ec617e0', 'Platform master-plan checksum is exact');
 assert(data.file00_master_plan.sha256 === '3b1f81aa8aed39c76be9e6e2da3eef4e6671a581c13c359f52d163c9bbc6bc9d', 'File 00 master-plan checksum is exact');
@@ -53,11 +57,20 @@ for (const group of data.groups) {
 }
 assert(data.requirements[98].acceptance_status === 'hostinger_staging_acceptance_pending', 'R099 remains a truthful staging gate');
 assert(data.requirements[99].acceptance_status === 'founder_production_approval_pending', 'R100 remains a truthful Founder approval gate');
+const masterIndex = fs.readFileSync(masterIndexPath, 'utf8');
+assert(masterIndex.includes('Runtime implementation release: `1.2.7`'), 'Master-plan index is reconciled to runtime 1.2.7');
+assert(masterIndex.includes(data.platform_master_plan.sha256) && masterIndex.includes(data.file00_master_plan.sha256), 'Master-plan index records both exact governing checksums');
+assert(masterIndex.includes('docs/FILE-00-IMPLEMENTATION-TRACEABILITY-1.2.7.md'), 'Master-plan index points to current traceability');
+assert(!masterIndex.includes('Runtime audit release: `1.2.4`') && !masterIndex.includes('IMPLEMENTATION-TRACEABILITY-1.2.4'), 'Master-plan index has no obsolete 1.2.4 current-state identity');
 const human = fs.readFileSync(humanPath, 'utf8');
 assert((human.match(/\| F00-R\d{3} \|/g) || []).length === 100, 'Human traceability contains 100 requirement rows');
 assert(human.includes('Repository code completion: **100%**'), 'Human traceability records repository completion');
 const completion = fs.readFileSync(completionPath, 'utf8');
-assert(completion.includes('post-merge evidence audit found stale 1.2.5'), 'Final evidence defect and correction are recorded');
+assert(completion.includes('post-merge evidence audit found stale 1.2.5'), 'First final evidence defect and correction are recorded');
+assert(completion.includes('Fresh evidence round 2') && completion.includes('file00-1.2.1-qa.yml'), 'Second fresh evidence review and workflow correction are recorded');
+const workflow = fs.readFileSync(finalWorkflowPath, 'utf8');
+assert(workflow.includes('name: File 00 Version 1.2.7 Final Dual-Plan QA'), 'Final workflow has current release identity');
+assert(workflow.includes('file00-final-dual-plan-qa.yml') && !workflow.includes('dist/00-sabri-membership-core-1.2.5.zip'), 'Final workflow enforces current path and package identity');
 const readme = fs.readFileSync(readmePath, 'utf8');
 const status = fs.readFileSync(statusPath, 'utf8');
 const runtime = fs.readFileSync(runtimePath, 'utf8');
