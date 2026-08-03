@@ -4,6 +4,7 @@ define( 'ABSPATH', __DIR__ . '/' );
 define( 'ARRAY_A', 'ARRAY_A' );
 
 function current_time( $type, $gmt = false ) { unset( $type, $gmt ); return '2026-08-02 16:00:00'; }
+function smc_test_contains( $haystack, $needle ) { return false !== strpos( (string) $haystack, (string) $needle ); }
 
 final class SMC_Security {
 	public static array $audits = array();
@@ -45,14 +46,14 @@ if ( true !== $result ) {
 }
 
 $queries = $GLOBALS['wpdb']->queries;
-$select = array_values( array_filter( $queries, static fn( $q ) => str_contains( $q['query'], 'SELECT row_version' ) ) );
-$app_update = array_values( array_filter( $queries, static fn( $q ) => str_contains( $q['query'], 'UPDATE wp_smc_applications' ) ) );
-$request_update = array_values( array_filter( $queries, static fn( $q ) => str_contains( $q['query'], 'UPDATE wp_smc_verification_requests' ) ) );
+$select = array_values( array_filter( $queries, static fn( $q ) => smc_test_contains( $q['query'], 'SELECT row_version' ) ) );
+$app_update = array_values( array_filter( $queries, static fn( $q ) => smc_test_contains( $q['query'], 'UPDATE wp_smc_applications' ) ) );
+$request_update = array_values( array_filter( $queries, static fn( $q ) => smc_test_contains( $q['query'], 'UPDATE wp_smc_verification_requests' ) ) );
 
 $failures = array();
-if ( ! $select || ! str_contains( $select[0]['query'], 'FOR UPDATE' ) ) $failures[] = 'Application generation is not locked before resubmission.';
-if ( ! $app_update || ! in_array( 8, $app_update[0]['args'], true ) || ! str_contains( $app_update[0]['query'], 'row_version=%d' ) ) $failures[] = 'Application row version did not advance from 7 to 8 atomically.';
-if ( ! $request_update || ! in_array( 8, $request_update[0]['args'], true ) || ! str_contains( $request_update[0]['query'], 'applicant_version=%d' ) ) $failures[] = 'Verification request applicant generation did not advance to 8.';
+if ( ! $select || ! smc_test_contains( $select[0]['query'], 'FOR UPDATE' ) ) $failures[] = 'Application generation is not locked before resubmission.';
+if ( ! $app_update || ! in_array( 8, $app_update[0]['args'], true ) || ! smc_test_contains( $app_update[0]['query'], 'row_version=%d' ) ) $failures[] = 'Application row version did not advance from 7 to 8 atomically.';
+if ( ! $request_update || ! in_array( 8, $request_update[0]['args'], true ) || ! smc_test_contains( $request_update[0]['query'], 'applicant_version=%d' ) ) $failures[] = 'Verification request applicant generation did not advance to 8.';
 if ( ! SMC_Security::$audits || 8 !== ( SMC_Security::$audits[0][2]['applicant_version'] ?? 0 ) ) $failures[] = 'Resubmission audit did not bind the new applicant generation.';
 if ( $failures ) {
 	fwrite( STDERR, "FAILED\n- " . implode( "\n- ", $failures ) . "\n" );

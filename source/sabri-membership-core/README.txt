@@ -3,7 +3,7 @@ Contributors: sabrihomeopathy
 Tags: membership, identity, guardian consent, two-factor authentication, privacy
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 1.2.6
+Stable tag: 1.2.7
 License: GPL-2.0-or-later
 
 Canonical membership eligibility, identity assurance, guardian consent, security assertions, and verification governance for the Sabri Social Homeopathy Platform.
@@ -18,9 +18,16 @@ File 00 owns:
 * membership state transitions and reviewer governance;
 * two-factor membership challenges and session assertions;
 * versioned membership and communication assertions;
+* the privacy-minimal CF-01 membership/step-up provider contract;
 * privacy export, erasure, retention holds, and tamper-evident audit records.
 
-File 00 does not own authentication UI, public profiles, doctor credential storage, publishing, encyclopedia content, notifications, routes, or the application shell. Those remain with their canonical modules.
+File 00 does not own authentication UI, public profiles, doctor credential storage, publishing, encyclopedia content, notifications, routes, the application shell, or clinical records. CF-01 consumes assertions only and remains the future clinical system of record after its activation gates.
+
+== CF-01 Provider Contract ==
+
+Contract `smc.cf01.membership-assurance` version `1.0.0` returns a short-lived, purpose-bound, server-side assertion containing an opaque platform UUID, membership state, age/guardian context, jurisdiction context, source record version and explicit allow/deny/unknown result. It returns no clinical data, identity-document content, two-factor secret or recovery code.
+
+`SMC_CF01_Contract::verify_step_up()` verifies a File 00-owned second factor without exposing File 00 storage. The result is authentication evidence only; it never grants clinical object, field, relationship, prescription, export, break-glass or key authority by itself.
 
 == Governing Policy ==
 
@@ -35,6 +42,7 @@ File 00 does not own authentication UI, public profiles, doctor credential stora
 
 * Institutional identity never defeats an explicit membership hard block.
 * File 00/platform capabilities and protected mutations require effective eligibility, verified ordinary-account contact ownership, and a current two-factor session challenge.
+* A CF-01 assertion is derivative evidence and must be rechecked at action time; it is not a reusable bearer credential.
 * Recovery actions and routes use exact allowlists; arbitrary smc_* or sa_* prefixes are not authorization.
 * Ordinary Founder reassignment is locked after configuration.
 
@@ -54,9 +62,15 @@ File 19 receives membership notices through its canonical sabri_notify integrati
 
 == Staging Acceptance ==
 
-Local source and GitHub checks do not authorize production. Test fresh activation, 1.0.1 upgrade, MySQL advisory locks, concurrent reviewers, authorization matrices, filesystem denial and rollback, scanner providers, email/mobile/guardian delivery, File 02 Google sign-in, all named cross-file integrations, privacy erasure, restore, browser accessibility, and mobile layouts on Hostinger staging.
+Local source and GitHub checks do not authorize production. Test fresh activation, 1.0.1 upgrade, MySQL advisory locks, concurrent reviewers, authorization matrices, filesystem denial and rollback, scanner providers, email/mobile/guardian delivery, File 02 Google sign-in, CF-01 provider/consumer contracts, all named cross-file integrations, privacy erasure, restore, browser accessibility, and mobile layouts on Hostinger staging.
 
 == Changelog ==
+
+= 1.2.7 =
+* Adds a versioned, privacy-minimal CF-01 membership assertion with opaque platform subject UUID, source record version, age/guardian and jurisdiction context.
+* Adds a File 00-owned second-factor verification command that never exposes TOTP secrets or recovery-code storage.
+* Keeps clinical object, prescription, export, break-glass and key authorization with their native owners.
+* Adds static and runtime provider-contract regressions.
 
 = 1.2.6 =
 * Corrects professional dual-review finalization so independent votes persist until senior finalization.

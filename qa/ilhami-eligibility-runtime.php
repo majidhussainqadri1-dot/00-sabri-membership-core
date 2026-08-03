@@ -35,8 +35,8 @@ class FakeWpdb {
   public function prepare($q,...$args){ return ['q'=>$q,'args'=>$args]; }
   public function get_var($prepared){
     $q=$prepared['q']; $a=$prepared['args'];
-    if (str_contains($q,'smc_guardian_consents')) return $GLOBALS['guardians'][(int)$a[0]] ?? '';
-    if (str_contains($q,'smc_contact_otps')) return !empty($GLOBALS['contacts'][(int)$a[0]][(string)$a[1]]) ? 1 : 0;
+    if (false !== strpos($q,'smc_guardian_consents')) return $GLOBALS['guardians'][(int)$a[0]] ?? '';
+    if (false !== strpos($q,'smc_contact_otps')) return !empty($GLOBALS['contacts'][(int)$a[0]][(string)$a[1]]) ? 1 : 0;
     return null;
   }
   public function delete($table,$where,$formats=[]){ return 1; }
