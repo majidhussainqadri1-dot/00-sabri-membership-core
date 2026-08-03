@@ -49,10 +49,11 @@ check(workflow.includes("'applicant_version' => $next_applicant_version"), 'resu
 check(privacy.includes("'pending'        => true"), 'private-storage failure keeps erasure retryable');
 check(privacy.includes('the eraser will retry until completion evidence is recorded'), 'audit-evidence failure keeps erasure incomplete');
 
-const decryptPosition = workflow.indexOf("SMC_Security::decrypt( $enc, 'recovery-receipt'");
-const deletePosition = workflow.indexOf("delete_user_meta( $user_id, '_smc_recovery_receipt'", decryptPosition);
-check(decryptPosition >= 0 && deletePosition > decryptPosition, 'recovery receipt decrypts before deletion');
-check(workflow.includes("delete_user_meta( $user_id, '_smc_2fa_enabled' )"), 'incomplete 2FA setup rolls back enabled flag');
+const decryptPosition = workflow.indexOf("SMC_Security::decrypt( $receipt['envelope'], 'recovery-receipt'");
+const deletePosition = workflow.indexOf("self::delete_user_meta_verified( $user_id, '_smc_recovery_receipt_v2' )", decryptPosition);
+check(decryptPosition >= 0 && deletePosition > decryptPosition, 'v2 recovery receipt decrypts before verified one-time deletion');
+check(workflow.includes("self::delete_user_meta_verified( $user_id, '_smc_2fa_enabled' )"), 'incomplete 2FA setup verifiably rolls back enabled flag');
+check(workflow.includes("self::delete_user_meta_verified( $user_id, '_smc_totp_secret_enc' )"), 'incomplete 2FA setup verifiably removes encrypted TOTP secret');
 check(workflow.includes("SMC_Security::revoke_all_sessions( $user_id, 'two_factor_setup_rollback' )"), '2FA setup rollback revokes sessions');
 check(workflow.includes("$challenge = SMC_Security::verify_two_factor_challenge"), '2FA challenge result is checked');
 
