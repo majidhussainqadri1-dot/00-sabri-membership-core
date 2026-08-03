@@ -13,11 +13,11 @@
 - Forty review/fix rounds: `docs/FORTY-ROUND-REVIEW-1.2.8.md`
 - Current traceability: `docs/FILE-00-IMPLEMENTATION-TRACEABILITY-1.2.8.md`
 - Final completion record: `docs/FINAL-PLAN-COMPLETION-1.2.8.md`
-- Verified source head: `953a27e5184450e2ec809b1b84c1f4d48fef8bc1`
-- Final Dual-Plan QA: `30853003774` — success
-- PHP 7.4/8.3 and CF-01 Contract Integrity: `30853003787` — success
+- Final verified PR head: `e8ff52477f61a6cf446390afb337201338dabab2`
+- Final Dual-Plan QA: `30853368958` — success
+- PHP 7.4/8.3 and CF-01 Contract Integrity: `30853369022` — success
 - Deterministic package SHA-256: `544395db2bb4d798dd9bcc44c14ae61b56d844568086859ecb11679413905adc`
-- Final main merge: pending PR acceptance.
+- Runtime merge to main: `ca6d73e76b904512863617cd441eb85150a03b4a`.
 
 ## Source hierarchy
 
@@ -33,4 +33,4 @@ File 00 owns membership legitimacy, identity assurance, guardian consent, member
 
 ## Completion boundary
 
-Forty review/fix rounds and repository-correctable exact-head automated QA are complete. Final merge remains subject to PR acceptance. Repository completion never substitutes for Hostinger staging, real providers, cross-file runtime acceptance, browser/accessibility, performance/load, recovery rehearsal, legal approval or Founder production acceptance.
+Forty review/fix rounds, repository-correctable exact-head automated QA and the runtime merge to main are complete. Repository completion never substitutes for Hostinger staging, real providers, cross-file runtime acceptance, browser/accessibility, performance/load, recovery rehearsal, legal approval or Founder production acceptance.
