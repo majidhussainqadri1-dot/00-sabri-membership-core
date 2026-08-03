@@ -63,13 +63,13 @@ jobs:
           grep -Fq 'Version: 1.2.8' source/sabri-membership-core/sabri-membership-core.php
           grep -Fq "define( 'SMC_VERSION', '1.2.8' )" source/sabri-membership-core/sabri-membership-core.php
 
-      - name: Remove one-time transport and commit
+      - name: Commit non-workflow overlay changes
         run: |
           set -euo pipefail
+          git checkout HEAD -- .github/workflows/cf01-contract.yml .github/workflows/file00-final-dual-plan-qa.yml .github/workflows/apply-forty-round-overlay.yml
           rm -rf .forty-round-overlay overlay/source-1.2.8.patch
           rmdir overlay 2>/dev/null || true
           rm -f tools/prepare_forty_round_overlay.py
-          rm -f .github/workflows/apply-forty-round-overlay.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
