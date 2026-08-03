@@ -2,9 +2,9 @@
 
 ## Current state
 
-**File 00 1.2.8 forty-review correction candidate — forty source review/fix rounds completed; exact-head automated QA and final merge evidence pending.**
+**File 00 1.2.8 forty-review repository release — forty review/fix rounds and exact-head automated QA completed; final PR merge pending.**
 
-## Completed in source
+## Completed and verified
 
 - Forty consecutive, separately recorded review-and-correction rounds.
 - Runtime version `1.2.8`; contract `1.1.2`; schema `1.2.0`.
@@ -22,9 +22,14 @@
 ## Current authorization
 
 - Repository source review cycles: **40/40 complete**
-- Known unresolved defects in the reviewed local/source scope: **0 before CI**
-- Exact-head GitHub Actions: **Pending**
-- Deterministic package checksum: **Pending**
-- Merge to main: **Pending**
+- Known unresolved repository defects: **0**
+- Exact-head GitHub Actions: **Passed**
+- Verified source head: `953a27e5184450e2ec809b1b84c1f4d48fef8bc1`
+- Final Dual-Plan QA: `30853003774` — **success**
+- CF-01 Contract Integrity: `30853003787` — **success**
+- Deterministic package SHA-256: `544395db2bb4d798dd9bcc44c14ae61b56d844568086859ecb11679413905adc`
+- Workflow artifact: `8871339869`
+- Staging installation candidate: **Yes**
+- Merge to main: **Pending final PR acceptance**
 - Staging accepted: **No**
 - Production/live authorized: **No**

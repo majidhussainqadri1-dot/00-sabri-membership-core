@@ -13,7 +13,11 @@
 - Forty review/fix rounds: `docs/FORTY-ROUND-REVIEW-1.2.8.md`
 - Current traceability: `docs/FILE-00-IMPLEMENTATION-TRACEABILITY-1.2.8.md`
 - Final completion record: `docs/FINAL-PLAN-COMPLETION-1.2.8.md`
-- Exact-head CI/package/merge evidence: pending until verification completes.
+- Verified source head: `953a27e5184450e2ec809b1b84c1f4d48fef8bc1`
+- Final Dual-Plan QA: `30853003774` — success
+- PHP 7.4/8.3 and CF-01 Contract Integrity: `30853003787` — success
+- Deterministic package SHA-256: `544395db2bb4d798dd9bcc44c14ae61b56d844568086859ecb11679413905adc`
+- Final main merge: pending PR acceptance.
 
 ## Source hierarchy
 
@@ -29,4 +33,4 @@ File 00 owns membership legitimacy, identity assurance, guardian consent, member
 
 ## Completion boundary
 
-Forty source review/fix rounds are complete. Exact-head automated QA must pass before repository completion is merged. Repository completion never substitutes for Hostinger staging, real providers, cross-file runtime acceptance, browser/accessibility, performance/load, recovery rehearsal, legal approval or Founder production acceptance.
+Forty review/fix rounds and repository-correctable exact-head automated QA are complete. Final merge remains subject to PR acceptance. Repository completion never substitutes for Hostinger staging, real providers, cross-file runtime acceptance, browser/accessibility, performance/load, recovery rehearsal, legal approval or Founder production acceptance.

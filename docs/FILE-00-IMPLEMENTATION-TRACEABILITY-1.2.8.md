@@ -1,15 +1,15 @@
 # File 00 — Implementation Traceability 1.2.8
 
-> Forty-round source candidate. Exact-head CI, package checksum and merge evidence are pending and must not be inferred from 1.2.7.
+> Forty consecutive review-and-correction cycles and their repository-correctable source are exact-head verified. Final merge evidence remains pending until PR acceptance.
 
 ## Governing artifacts
 
 - Platform Definitive Master Plan v3.0 SHA-256: `bd171fe39da8c10294d7cf1a92bc9ce917b082905b978280a25e1e3c9ec617e0`
 - File 00 Four-Round Reviewed Final Master Plan SHA-256: `3b1f81aa8aed39c76be9e6e2da3eef4e6671a581c13c359f52d163c9bbc6bc9d`
 - Runtime `1.2.8`; contract `1.1.2`; schema `1.2.0`
-- Verified head `Pending exact-head CI`; GitHub Actions: **Pending exact-head CI**
-- Main merge `Pending`
-- Package SHA-256 `Pending`
+- Verified source head `953a27e5184450e2ec809b1b84c1f4d48fef8bc1`; GitHub Actions: `30853003774` and `30853003787` — **success**
+- Main merge `Pending final PR acceptance`
+- Package SHA-256 `544395db2bb4d798dd9bcc44c14ae61b56d844568086859ecb11679413905adc`
 
 ## Completion semantics
 

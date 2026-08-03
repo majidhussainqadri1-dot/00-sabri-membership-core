@@ -2,14 +2,20 @@
 
 Canonical membership eligibility, identity assurance, guardian consent, security assertions, privacy lifecycle and verification governance for the Sabri Social Homeopathy Platform.
 
-## Current forty-review candidate
+## Current verified forty-review release
 
 - Version: `1.2.8`
 - Contract version: `1.1.2`
 - Database schema version: `1.2.0`
-- Forty consecutive review-and-correction cycles: **completed in source; exact-head CI pending**
+- Forty consecutive review-and-correction cycles: **40/40 completed and exact-head verified**
+- Verified source head: `953a27e5184450e2ec809b1b84c1f4d48fef8bc1`
+- Final Dual-Plan QA run: `30853003774` — **success**
+- PHP 7.4/8.3 and CF-01 integrity run: `30853003787` — **success**
 - Requirement traceability: `F00-R001` through `F00-R100`
-- Deterministic package target: `dist/00-sabri-membership-core-1.2.8.zip`
+- Deterministic package: `dist/00-sabri-membership-core-1.2.8.zip`
+- Package SHA-256: `544395db2bb4d798dd9bcc44c14ae61b56d844568086859ecb11679413905adc`
+- Workflow artifact: `8871339869`
+- Staging installation candidate: **Yes**
 - Staging accepted: **No**
 - Production approval: **No**
 
