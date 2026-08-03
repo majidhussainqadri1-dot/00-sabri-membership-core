@@ -1,0 +1,92 @@
+name: File 00 CF-01 Contract Integrity
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - codex/**
+
+permissions:
+  contents: read
+
+jobs:
+  contract-integrity:
+    name: PHP ${{ matrix.php }} contract, package and regression suites
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        php:
+          - '7.4'
+          - '8.3'
+    steps:
+      - name: Checkout exact immutable head
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Set up PHP from immutable action
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+          tools: none
+
+      - name: Public repository and Git integrity
+        run: |
+          set -euo pipefail
+          git diff --check
+          test ! -f .gitmodules
+          if git ls-files -s | awk '$1 == "120000" { found=1 } END { exit !found }'; then
+            echo 'Symbolic links are prohibited.' >&2
+            exit 1
+          fi
+          if grep -RIl --exclude-dir=.git '^version https://git-lfs.github.com/spec/v1$' . | grep -q .; then
+            echo 'Git LFS pointer files are prohibited.' >&2
+            exit 1
+          fi
+          python3 - <<'PY'
+          import pathlib, re, sys
+          root = pathlib.Path('.')
+          forbidden_suffixes = ('.zip', '.tar', '.tgz', '.gz', '.7z', '.rar', '.env', '.pem', '.p12', '.pfx', '.key')
+          secret_patterns = {
+              'private key': rb'-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----',
+              'GitHub token': rb'\bgh[pousr]_[A-Za-z0-9]{20,}\b',
+              'AWS access key': rb'\bAKIA[0-9A-Z]{16}\b',
+              'JWT-like token': rb'\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b',
+          }
+          for path in root.rglob('*'):
+              if not path.is_file() or '.git' in path.parts or 'dist' in path.parts:
+                  continue
+              name = path.as_posix().lower()
+              if path.name.lower().startswith('.env') or name.endswith(forbidden_suffixes):
+                  print(f'forbidden artifact: {path}', file=sys.stderr)
+                  raise SystemExit(1)
+              data = path.read_bytes()
+              for label, pattern in secret_patterns.items():
+                  if re.search(pattern, data):
+                      print(f'possible {label}: {path}', file=sys.stderr)
+                      raise SystemExit(1)
+          PY
+
+      - name: Install locked Node test dependency
+        run: npm ci --ignore-scripts
+
+      - name: Lint all plugin and runtime-test PHP
+        run: |
+          set -euo pipefail
+          mapfile -t php_files < <(find source qa -type f -name '*.php' -print | sort)
+          test "${#php_files[@]}" -ge 15
+          for file in "${php_files[@]}"; do
+            php -l "$file"
+          done
+
+      - name: Run complete inherited and CF-01 regression suites
+        run: npm test
+
+      - name: Build and verify deterministic 1.2.7 package
+        run: npm run verify
