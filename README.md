@@ -8,13 +8,14 @@ Canonical membership eligibility, identity assurance, guardian consent, security
 - Contract version: `1.1.2`
 - Database schema version: `1.2.0`
 - Forty consecutive review-and-correction cycles: **40/40 completed and exact-head verified**
-- Verified source head: `953a27e5184450e2ec809b1b84c1f4d48fef8bc1`
-- Final Dual-Plan QA run: `30853003774` — **success**
-- PHP 7.4/8.3 and CF-01 integrity run: `30853003787` — **success**
+- Final verified PR head: `e8ff52477f61a6cf446390afb337201338dabab2`
+- Final Dual-Plan QA run: `30853368958` — **success**
+- PHP 7.4/8.3 and CF-01 integrity run: `30853369022` — **success**
 - Requirement traceability: `F00-R001` through `F00-R100`
 - Deterministic package: `dist/00-sabri-membership-core-1.2.8.zip`
 - Package SHA-256: `544395db2bb4d798dd9bcc44c14ae61b56d844568086859ecb11679413905adc`
-- Workflow artifact: `8871339869`
+- Workflow artifact: `8871478716`
+- Runtime merge to `main`: `ca6d73e76b904512863617cd441eb85150a03b4a`
 - Staging installation candidate: **Yes**
 - Staging accepted: **No**
 - Production approval: **No**
