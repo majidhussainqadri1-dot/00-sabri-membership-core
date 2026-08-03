@@ -137,16 +137,19 @@ final class SMC_Admin {
 		if ( ! $doc || (int) $doc['user_id'] === get_current_user_id() ) {
 			wp_die( esc_html__( 'A reviewer cannot decide their own evidence.', 'sabri-membership-core' ), '', array( 'response' => 403 ) );
 		}
+		$wpdb->query( 'START TRANSACTION' );
 		$updated = $wpdb->query(
 			$wpdb->prepare(
 				"UPDATE {$wpdb->prefix}smc_identity_documents SET status=%s,reviewed_by=%d,reviewed_at=%s,reviewer_note=%s,updated_at=%s WHERE id=%d AND version=%d",
 				$decision, get_current_user_id(), current_time( 'mysql', true ), $note, current_time( 'mysql', true ), $id, $version
 			)
 		);
-		if ( 1 !== $updated ) {
-			wp_die( esc_html__( 'The evidence changed while it was being reviewed. Reload and review the current version.', 'sabri-membership-core' ), '', array( 'response' => 409 ) );
+		$audit_ok = 1 === $updated && SMC_Security::audit( 'document_' . $decision, (int) $doc['user_id'], array( 'document_id' => $id, 'version' => $version, 'reason' => $note ) );
+		if ( 1 !== $updated || ! $audit_ok ) {
+			$wpdb->query( 'ROLLBACK' );
+			wp_die( esc_html__( 'The evidence decision could not be committed with its audit record. Reload and review the current version.', 'sabri-membership-core' ), '', array( 'response' => 409 ) );
 		}
-		SMC_Security::audit( 'document_' . $decision, (int) $doc['user_id'], array( 'document_id' => $id, 'version' => $version, 'reason' => $note ) );
+		$wpdb->query( 'COMMIT' );
 		self::redirect_review( (int) $doc['user_id'] );
 	}
 
@@ -212,6 +215,7 @@ final class SMC_Admin {
 			$dob = SMC_Security::decrypt( $app['date_of_birth_enc'], 'date-of-birth', array( 'user_id' => $user_id ) );
 			$age = is_wp_error( $dob ) ? false : smc_age_from_dob( $dob );
 		}
+		$minimum_age = $app ? smc_minimum_age_for_gender( $app['gender'] ) : false;
 		$required = array_keys( smc_required_identity_documents() );
 		$approved_document_rows = $wpdb->get_results(
 			$wpdb->prepare(
@@ -223,7 +227,7 @@ final class SMC_Admin {
 		$approved_docs = array_column( $approved_document_rows, 'document_key' );
 		$identity = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}smc_identity_records WHERE user_id=%d", $user_id ), ARRAY_A );
 		if (
-			! $app || false === $age || $age < smc_minimum_age_for_gender( $app['gender'] ) ||
+			! $app || false === $age || false === $minimum_age || $age < $minimum_age ||
 			( $age < 18 && smc_is_professional_type( $app['membership_type'] ) ) ||
 			! $a['email_verified'] || ! $a['phone_verified'] ||
 			! $a['two_factor_ready'] || ! $a['guardian_verified'] || ! $a['professional_verified'] ||
@@ -398,8 +402,16 @@ final class SMC_Admin {
 		if ( ! get_userdata( $id ) || empty( $_POST['confirm'] ) ) {
 			wp_die( esc_html__( 'Select and confirm an existing exact user account.', 'sabri-membership-core' ), '', array( 'response' => 400 ) );
 		}
+		global $wpdb;
+		$wpdb->query( 'START TRANSACTION' );
 		update_option( 'smc_founder_user_id', $id, false );
-		SMC_Security::audit( 'founder_account_configured', $id, array( 'configured_by' => get_current_user_id() ) );
+		$stored = (int) get_option( 'smc_founder_user_id', 0 );
+		$audit_ok = $stored === $id && SMC_Security::audit( 'founder_account_configured', $id, array( 'configured_by' => get_current_user_id() ) );
+		if ( $stored !== $id || ! $audit_ok ) {
+			$wpdb->query( 'ROLLBACK' );
+			wp_die( esc_html__( 'Founder identity could not be committed with its audit evidence.', 'sabri-membership-core' ), '', array( 'response' => 409 ) );
+		}
+		$wpdb->query( 'COMMIT' );
 		wp_safe_redirect( admin_url( 'admin.php?page=smc-settings&updated=1' ) );
 		exit;
 	}

@@ -550,6 +550,9 @@ final class SMC_Installer {
 		if ( 'complete' === $status ) {
 			update_option( 'smc_db_version', SMC_DB_VERSION, false );
 			update_option( 'smc_release_version', SMC_VERSION, false );
+			if ( SMC_DB_VERSION !== get_option( 'smc_db_version', '' ) || SMC_VERSION !== get_option( 'smc_release_version', '' ) ) {
+				throw new RuntimeException( 'Migration completion versions could not be persisted.' );
+			}
 		} elseif ( ! wp_next_scheduled( 'smc_continue_migration' ) ) {
 			wp_schedule_single_event( time() + 30, 'smc_continue_migration' );
 		}
@@ -622,9 +625,12 @@ final class SMC_Installer {
 				throw new RuntimeException( $migrated->get_error_message() );
 			}
 		}
-		SMC_Contracts::set_exact_role( $user_id, smc_role_for_type( $type, false ) );
-		SMC_Security::revoke_all_sessions( $user_id, 'legacy_reverification_required' );
-		SMC_Security::audit( 'legacy_membership_migrated_for_reverification', $user_id, array( 'type' => $type ) );
+		$role_ok = SMC_Contracts::set_exact_role( $user_id, smc_role_for_type( $type, false ) );
+		$sessions_ok = $role_ok && SMC_Security::revoke_all_sessions( $user_id, 'legacy_reverification_required' );
+		$audit_ok = $sessions_ok && SMC_Security::audit( 'legacy_membership_migrated_for_reverification', $user_id, array( 'type' => $type ) );
+		if ( ! $role_ok || ! $sessions_ok || ! $audit_ok ) {
+			throw new RuntimeException( 'Legacy membership migration could not commit role, session, and audit containment.' );
+		}
 	}
 
 	private static function record_failure( $scope, Throwable $error ) {

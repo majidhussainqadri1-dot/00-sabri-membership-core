@@ -159,27 +159,43 @@ final class SMC_Privacy {
 	}
 
 	private static function lock_for_erasure( $user_id ) {
-		$existing = smc_privacy_erasure_lock( $user_id );
-		if ( $existing ) {
-			return $existing;
+		$lock = smc_privacy_erasure_lock( $user_id );
+		if ( ! $lock ) {
+			$now = current_time( 'mysql', true );
+			$receipt = substr( hash_hmac( 'sha256', $user_id . '|' . $now . '|' . wp_generate_uuid4(), wp_salt( 'auth' ) ), 0, 32 );
+			$lock = array(
+				'version'        => 2,
+				'locked_at'      => $now,
+				'receipt'        => $receipt,
+				'containment_at' => '',
+			);
+			update_user_meta( $user_id, '_smc_privacy_erasure_lock', $lock );
+			$stored = smc_privacy_erasure_lock( $user_id );
+			if ( ! $stored || ! hash_equals( $receipt, (string) ( $stored['receipt'] ?? '' ) ) ) {
+				return new WP_Error( 'smc_erasure_lock_failed', __( 'The account could not be placed into a fail-closed erasure state.', 'sabri-membership-core' ) );
+			}
+			$lock = $stored;
 		}
-		$now = current_time( 'mysql', true );
-		$receipt = substr( hash_hmac( 'sha256', $user_id . '|' . $now . '|' . wp_generate_uuid4(), wp_salt( 'auth' ) ), 0, 32 );
-		$lock = array(
-			'version'   => 1,
-			'locked_at' => $now,
-			'receipt'   => $receipt,
-		);
-		if ( ! update_user_meta( $user_id, '_smc_privacy_erasure_lock', $lock ) || ! smc_privacy_erasure_lock( $user_id ) ) {
-			return new WP_Error( 'smc_erasure_lock_failed', __( 'The account could not be placed into a fail-closed erasure state.', 'sabri-membership-core' ) );
+		if ( ! empty( $lock['containment_at'] ) ) {
+			return $lock;
 		}
-		update_user_meta( $user_id, '_smc_privacy_erasure_receipt', $receipt );
+		$receipt = (string) ( $lock['receipt'] ?? '' );
+		if ( '' === $receipt ) {
+			return new WP_Error( 'smc_erasure_receipt_missing', __( 'The fail-closed erasure lock is incomplete and requires operator repair.', 'sabri-membership-core' ) );
+		}
 		$sessions_ok = SMC_Security::revoke_all_sessions( $user_id, 'privacy_erasure_locked' );
-		$audit_ok = SMC_Security::audit( 'privacy_erasure_locked', $user_id, array( 'receipt' => $receipt ) );
+		$audit_ok = $sessions_ok && SMC_Security::audit( 'privacy_erasure_locked', $user_id, array( 'receipt' => $receipt ) );
 		if ( ! $sessions_ok || ! $audit_ok ) {
 			return new WP_Error( 'smc_erasure_containment_incomplete', __( 'Erasure is locked fail-closed, but containment evidence requires retry.', 'sabri-membership-core' ) );
 		}
-		return $lock;
+		$lock['version'] = 2;
+		$lock['containment_at'] = current_time( 'mysql', true );
+		update_user_meta( $user_id, '_smc_privacy_erasure_lock', $lock );
+		$stored = smc_privacy_erasure_lock( $user_id );
+		if ( ! $stored || empty( $stored['containment_at'] ) || ! hash_equals( $receipt, (string) ( $stored['receipt'] ?? '' ) ) ) {
+			return new WP_Error( 'smc_erasure_containment_state', __( 'Erasure containment succeeded, but its durable state could not be confirmed.', 'sabri-membership-core' ) );
+		}
+		return $stored;
 	}
 
 	public static function erase( $email, $page = 1 ) {
@@ -292,7 +308,7 @@ final class SMC_Privacy {
 				$failed[] = $table;
 			}
 		}
-		$preserved_meta = array( '_smc_privacy_erasure_lock', '_smc_privacy_erasure_receipt' );
+		$preserved_meta = array( '_smc_privacy_erasure_lock' );
 		$meta = get_user_meta( $user_id );
 		foreach ( array_keys( $meta ) as $key ) {
 			if ( 0 === strpos( $key, '_smc_' ) && ! in_array( $key, $preserved_meta, true ) && ! delete_user_meta( $user_id, $key ) && metadata_exists( 'user', $user_id, $key ) ) {

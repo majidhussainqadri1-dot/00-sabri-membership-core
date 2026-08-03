@@ -811,36 +811,109 @@ final class SMC_Security {
 		return true;
 	}
 
-	public static function recovery_codes( $user_id, $count = 8 ) {
+	public static function recovery_codes( $user_id, $count = 8, $receipt_callback = null ) {
 		global $wpdb;
+		$user_id = absint( $user_id );
+		$count = max( 1, min( 20, absint( $count ) ) );
+		$plain = array();
+		$records = array();
+		for ( $i = 0; $i < $count; $i++ ) {
+			$code = strtoupper( wp_generate_password( 12, false, false ) );
+			$lookup = self::blind_index( $code, 'recovery-code' );
+			if ( is_wp_error( $lookup ) ) {
+				return $lookup;
+			}
+			$plain[] = $code;
+			$records[] = array(
+				'user_id'          => $user_id,
+				'code_lookup_hash' => $lookup,
+				'code_hash'        => wp_hash_password( $code ),
+				'created_at'       => current_time( 'mysql', true ),
+			);
+		}
 		$wpdb->query( 'START TRANSACTION' );
-		$deleted = $wpdb->delete( $wpdb->prefix . 'smc_recovery_codes', array( 'user_id' => absint( $user_id ) ), array( '%d' ) );
+		$deleted = $wpdb->delete( $wpdb->prefix . 'smc_recovery_codes', array( 'user_id' => $user_id ), array( '%d' ) );
 		if ( false === $deleted ) {
 			$wpdb->query( 'ROLLBACK' );
 			return new WP_Error( 'smc_recovery_reset', __( 'Existing recovery codes could not be replaced.', 'sabri-membership-core' ) );
 		}
-		$plain = array();
-		for ( $i = 0; $i < $count; $i++ ) {
-			$code = strtoupper( wp_generate_password( 12, false, false ) );
-			$lookup = self::blind_index( $code, 'recovery-code' );
-			if ( is_wp_error( $lookup ) || 1 !== $wpdb->insert(
+		foreach ( $records as $record ) {
+			if ( 1 !== $wpdb->insert(
 				$wpdb->prefix . 'smc_recovery_codes',
-				array(
-					'user_id'          => absint( $user_id ),
-					'code_lookup_hash'  => $lookup,
-					'code_hash'         => wp_hash_password( $code ),
-					'created_at'        => current_time( 'mysql', true ),
-				),
+				$record,
 				array( '%d', '%s', '%s', '%s' )
 			) ) {
 				$wpdb->query( 'ROLLBACK' );
+				clean_user_cache( $user_id );
 				return new WP_Error( 'smc_recovery_store', __( 'Recovery codes could not be stored.', 'sabri-membership-core' ) );
 			}
-			$plain[] = $code;
+		}
+		if ( is_callable( $receipt_callback ) && true !== call_user_func( $receipt_callback, $plain ) ) {
+			$wpdb->query( 'ROLLBACK' );
+			clean_user_cache( $user_id );
+			return new WP_Error( 'smc_recovery_receipt', __( 'Recovery codes were not replaced because the one-time receipt could not be stored.', 'sabri-membership-core' ) );
+		}
+		if ( ! self::audit( 'recovery_codes_rotated', $user_id ) ) {
+			$wpdb->query( 'ROLLBACK' );
+			clean_user_cache( $user_id );
+			return new WP_Error( 'smc_recovery_audit', __( 'Recovery codes were not replaced because the required audit evidence could not be recorded.', 'sabri-membership-core' ) );
 		}
 		$wpdb->query( 'COMMIT' );
-		self::audit( 'recovery_codes_rotated', $user_id );
+		clean_user_cache( $user_id );
 		return $plain;
+	}
+
+
+	public static function consume_recovery_code_for_session( $user_id, $code ) {
+		global $wpdb;
+		$user_id = absint( $user_id );
+		$code = strtoupper( trim( (string) $code ) );
+		$lookup = self::blind_index( $code, 'recovery-code' );
+		$token = wp_get_session_token();
+		$token_hash = self::blind_index( $token, 'session-token' );
+		if ( ! $token || is_wp_error( $lookup ) || is_wp_error( $token_hash ) ) {
+			return false;
+		}
+		$wpdb->query( 'START TRANSACTION' );
+		$row = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT * FROM {$wpdb->prefix}smc_recovery_codes WHERE user_id=%d AND code_lookup_hash=%s AND consumed_at IS NULL LIMIT 1 FOR UPDATE",
+				$user_id,
+				$lookup
+			),
+			ARRAY_A
+		);
+		if ( ! $row || ! wp_check_password( $code, $row['code_hash'] ) ) {
+			$wpdb->query( 'ROLLBACK' );
+			return false;
+		}
+		$now = current_time( 'mysql', true );
+		$session_id = $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT id FROM {$wpdb->prefix}smc_auth_sessions WHERE user_id=%d AND token_hash=%s AND revoked_at IS NULL AND expires_at>UTC_TIMESTAMP() LIMIT 1 FOR UPDATE",
+				$user_id,
+				$token_hash
+			)
+		);
+		if ( ! $session_id ) {
+			$registered = self::register_session( $user_id, $token, time() + 2 * DAY_IN_SECONDS );
+			$session_id = $registered ? $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT id FROM {$wpdb->prefix}smc_auth_sessions WHERE user_id=%d AND token_hash=%s AND revoked_at IS NULL AND expires_at>UTC_TIMESTAMP() LIMIT 1 FOR UPDATE",
+					$user_id,
+					$token_hash
+				)
+			) : 0;
+		}
+		$code_updated = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_recovery_codes SET consumed_at=%s WHERE id=%d AND consumed_at IS NULL", $now, (int) $row['id'] ) );
+		$session_updated = $session_id ? $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_auth_sessions SET two_factor_at=%s,updated_at=%s WHERE id=%d AND user_id=%d AND token_hash=%s AND revoked_at IS NULL", $now, $now, (int) $session_id, $user_id, $token_hash ) ) : 0;
+		$audit_ok = 1 === $code_updated && 1 === $session_updated && self::audit( 'recovery_code_used', $user_id, array( 'session_id' => (int) $session_id ) );
+		if ( 1 !== $code_updated || 1 !== $session_updated || ! $audit_ok ) {
+			$wpdb->query( 'ROLLBACK' );
+			return false;
+		}
+		$wpdb->query( 'COMMIT' );
+		return true;
 	}
 
 	public static function consume_recovery_code( $user_id, $code ) {
