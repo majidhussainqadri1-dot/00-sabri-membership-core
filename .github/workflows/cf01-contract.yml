@@ -49,9 +49,12 @@ jobs:
             echo 'Git LFS pointer files are prohibited.' >&2
             exit 1
           fi
+          test "$(sha256sum 'source-archive/00 sabri-membership-core-1.0.1.zip' | awk '{print $1}')" = "1418dff3410ebd66f6d440453f4bc4fe487828920d8fdaf8190df42844d426af"
+          test "$(stat -c '%s' 'source-archive/00 sabri-membership-core-1.0.1.zip')" = "59278"
           python3 - <<'PY'
           import pathlib, re, sys
           root = pathlib.Path('.')
+          approved_archive = 'source-archive/00 sabri-membership-core-1.0.1.zip'
           forbidden_suffixes = ('.zip', '.tar', '.tgz', '.gz', '.7z', '.rar', '.env', '.pem', '.p12', '.pfx', '.key')
           secret_patterns = {
               'private key': rb'-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----',
@@ -62,7 +65,10 @@ jobs:
           for path in root.rglob('*'):
               if not path.is_file() or '.git' in path.parts or 'dist' in path.parts:
                   continue
-              name = path.as_posix().lower()
+              relative = path.as_posix()
+              name = relative.lower()
+              if relative == approved_archive:
+                  continue
               if path.name.lower().startswith('.env') or name.endswith(forbidden_suffixes):
                   print(f'forbidden artifact: {path}', file=sys.stderr)
                   raise SystemExit(1)
