@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - codex/file00-forty-review-cycles-1.2.8
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
