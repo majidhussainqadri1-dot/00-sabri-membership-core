@@ -1,0 +1,61 @@
+name: Reconcile File 00 1.2.9 post-merge evidence
+
+on:
+  push:
+    branches: [codex/file00-1.2.9-post-merge-evidence]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    if: github.ref == 'refs/heads/codex/file00-1.2.9-post-merge-evidence'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: codex/file00-1.2.9-post-merge-evidence
+          fetch-depth: 0
+      - name: Reconcile successful main merge
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          merge_sha='1e76d4de96005d994da6ffe93939362442111cee'
+          p=Path('qa/requirements-traceability.json')
+          data=json.loads(p.read_text(encoding='utf-8'))
+          if data.get('runtime_evidence',{}).get('merge_sha')==merge_sha:
+              raise SystemExit(0)
+          data['document_version']='2.9-dual-plan-runtime-completion-merged'
+          data['runtime_evidence']['merge_sha']=merge_sha
+          p.write_text(json.dumps(data,ensure_ascii=False,separators=(',',':'))+'\n',encoding='utf-8')
+
+          p=Path('STATUS.md'); text=p.read_text(encoding='utf-8')
+          text=text.replace('- Merge to main: **Pending**',f'- Runtime merge to `main`: `{merge_sha}` — **completed**')
+          p.write_text(text,encoding='utf-8')
+
+          p=Path('README.md'); text=p.read_text(encoding='utf-8')
+          needle='- Known unresolved repository defects: **0**'
+          if 'Runtime merge to `main`' not in text:
+              text=text.replace(needle,needle+f'\n- Runtime merge to `main`: `{merge_sha}` — **completed**')
+          p.write_text(text,encoding='utf-8')
+
+          p=Path('docs/DUAL-PLAN-CODE-COMPLETION-1.2.9.md'); text=p.read_text(encoding='utf-8')
+          if '## Main merge evidence' not in text:
+              text += f'\n## Main merge evidence\n\nPR #17 merged successfully to `main` at `{merge_sha}`. This post-merge reconciliation changes evidence only and does not alter runtime, schema, contract or package source.\n'
+          p.write_text(text,encoding='utf-8')
+
+          p=Path('docs/FILE-00-IMPLEMENTATION-TRACEABILITY-1.2.9.md'); text=p.read_text(encoding='utf-8')
+          if 'Runtime merge to `main`' not in text:
+              text=text.replace('- Package SHA-256:',f'- Runtime merge to `main`: `{merge_sha}` — **completed**\n- Package SHA-256:')
+          p.write_text(text,encoding='utf-8')
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md STATUS.md qa/requirements-traceability.json docs/DUAL-PLAN-CODE-COMPLETION-1.2.9.md docs/FILE-00-IMPLEMENTATION-TRACEABILITY-1.2.9.md
+          if git diff --cached --quiet; then exit 0; fi
+          git diff --cached --check
+          git commit -m "File 00 1.2.9: reconcile successful main merge evidence"
+          git push origin HEAD:codex/file00-1.2.9-post-merge-evidence
