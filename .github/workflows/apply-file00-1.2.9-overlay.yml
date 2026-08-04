@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   apply:
-    if: github.head_ref == 'codex/file00-dual-plan-completion-1.2.9' || github.ref == 'refs/heads/codex/file00-dual-plan-completion-1.2.9'
+    if: (github.head_ref == 'codex/file00-dual-plan-completion-1.2.9' || github.ref == 'refs/heads/codex/file00-dual-plan-completion-1.2.9') && hashFiles('.github/file00-1.2.9-overlay.applied') == ''
     runs-on: ubuntu-latest
     steps:
       - name: Check out corrective branch
@@ -23,7 +23,7 @@ jobs:
           ref: codex/file00-dual-plan-completion-1.2.9
           fetch-depth: 0
 
-      - name: Decode, verify and apply the reviewed overlay
+      - name: Decode, verify and apply the reviewed source and evidence overlay
         run: |
           set -euo pipefail
           cat .github/file00-1.2.9-overlay.part* | base64 -d > /tmp/file00-overlay.tgz
@@ -33,10 +33,11 @@ jobs:
           awk 'BEGIN{skip=1} /^diff -ruN a\/source\/sabri-membership-core\/README.txt /{skip=0} !skip{print}' /tmp/file00-overlay/source-1.2.9.patch > /tmp/file00-overlay/source-1.2.9.repo.patch
           git apply --check /tmp/file00-overlay/source-1.2.9.repo.patch
           git apply /tmp/file00-overlay/source-1.2.9.repo.patch
+          rm -rf /tmp/file00-overlay/files/.github
           cp -a /tmp/file00-overlay/files/. .
           rm -f dist/00-sabri-membership-core-1.2.8.zip
           rm -f .github/file00-1.2.9-overlay.part*
-          rm -f .github/workflows/apply-file00-1.2.9-overlay.yml
+          printf '%s\n' 'source-and-evidence-applied' > .github/file00-1.2.9-overlay.applied
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
