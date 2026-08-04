@@ -1227,11 +1227,18 @@ final class SMC_Security {
 				'created_at'   => $created,
 			);
 			$record['row_hash'] = hash_hmac( 'sha256', self::canonical_json( $record ), $key );
-			return 1 === $wpdb->insert(
+			$inserted = 1 === $wpdb->insert(
 				$wpdb->prefix . 'smc_audit_log',
 				$record,
 				array( '%d', '%s', '%s', '%s', '%s', '%s', '%s' )
 			);
+			if ( ! $inserted ) {
+				return false;
+			}
+			if ( class_exists( 'SMC_Events' ) && ! SMC_Events::from_audit( $record['action'], $subject_user_id, $details, (int) $wpdb->insert_id ) ) {
+				return false;
+			}
+			return true;
 		} finally {
 			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) );
 		}

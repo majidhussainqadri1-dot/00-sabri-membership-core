@@ -3,7 +3,7 @@
  * Plugin Name: Sabri Membership Core
  * Plugin URI: https://github.com/majidhussainqadri1-dot/00-sabri-membership-core
  * Description: Canonical membership eligibility, identity assurance, guardian consent, security assertions, and verification governance for the Sabri Social Homeopathy Platform.
- * Version: 1.2.8
+ * Version: 1.2.9
  * Requires at least: 6.4
  * Requires PHP: 7.4
  * Author: Dr. Allamah Majid Hussain Sabri Muhaddith Mursheed
@@ -13,8 +13,8 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'SMC_VERSION', '1.2.8' );
-define( 'SMC_DB_VERSION', '1.2.0' );
+define( 'SMC_VERSION', '1.2.9' );
+define( 'SMC_DB_VERSION', '1.3.0' );
 define( 'SMC_CONTRACT_VERSION', '1.1.2' );
 define( 'SMC_CF01_CONTRACT_VERSION', '1.0.0' );
 define( 'SMC_FILE', __FILE__ );
@@ -24,6 +24,8 @@ define( 'SMC_URL', plugin_dir_url( __FILE__ ) );
 require_once SMC_PATH . 'includes/functions.php';
 require_once SMC_PATH . 'includes/class-smc-installer.php';
 require_once SMC_PATH . 'includes/class-smc-security.php';
+require_once SMC_PATH . 'includes/class-smc-events.php';
+require_once SMC_PATH . 'includes/class-smc-completion.php';
 require_once SMC_PATH . 'includes/class-smc-contracts.php';
 require_once SMC_PATH . 'includes/class-smc-cf01-contract.php';
 require_once SMC_PATH . 'includes/class-smc-authorization.php';
@@ -40,6 +42,8 @@ add_action(
 	static function () {
 		load_plugin_textdomain( 'sabri-membership-core', false, dirname( plugin_basename( SMC_FILE ) ) . '/languages' );
 		SMC_Security::init();
+		SMC_Events::init();
+		SMC_Completion::init();
 		SMC_Contracts::init();
 		SMC_CF01_Contract::init();
 		SMC_Authorization::init();
@@ -90,6 +94,14 @@ add_action(
 				'femaleMinimumAge' => (int) $policy['female_minimum_age'],
 				'guardianAge'      => (int) $policy['guardian_required_under'],
 				'professionalAge'  => (int) $policy['professional_minimum_age'],
+				'ajaxUrl'          => admin_url( 'admin-ajax.php' ),
+				'draftNonce'       => wp_create_nonce( 'smc_application_draft' ),
+				'messages'         => array(
+					'draftSaved'    => __( 'Draft saved securely.', 'sabri-membership-core' ),
+					'draftFailed'   => __( 'Draft could not be saved. Your current form remains on this device until you leave the page.', 'sabri-membership-core' ),
+					'uploading'     => __( 'Uploading authenticated evidence…', 'sabri-membership-core' ),
+					'networkError'  => __( 'Network interrupted. Review the form and retry; the server remains authoritative.', 'sabri-membership-core' ),
+				),
 			)
 		);
 	}

@@ -16,6 +16,12 @@ final class SMC_Lifecycle {
 		if ( ! wp_next_scheduled( 'smc_process_file_jobs' ) ) {
 			wp_schedule_event( time() + 300, 'smc_fifteen_minutes', 'smc_process_file_jobs' );
 		}
+		if ( ! wp_next_scheduled( 'smc_process_event_outbox' ) ) {
+			wp_schedule_event( time() + 360, 'smc_fifteen_minutes', 'smc_process_event_outbox' );
+		}
+		if ( ! wp_next_scheduled( 'smc_reconcile_applications' ) ) {
+			wp_schedule_event( time() + 420, 'smc_fifteen_minutes', 'smc_reconcile_applications' );
+		}
 	}
 
 	public static function schedules( $schedules ) {
@@ -274,6 +280,7 @@ final class SMC_Lifecycle {
 			$app = smc_application( $user_id );
 			if ( $app ) {
 				self::restrict( $app, 'identity_document_expired', 'expired' );
+				SMC_Security::audit( 'identity_document_expired', $user_id, array( 'status' => 'expired' ) );
 			}
 			smc_notify( $user_id, 'identity_evidence_expired', __( 'Identity Evidence Expired', 'sabri-membership-core' ), __( 'Your membership is restricted until current identity evidence is reviewed.', 'sabri-membership-core' ), 'critical', smc_page_url( 'application', '/membership-application/' ) );
 		}
@@ -292,7 +299,7 @@ final class SMC_Lifecycle {
 				(int) $app['row_version']
 			)
 		);
-		$role_ok = 1 === $updated && SMC_Contracts::set_exact_role( $user_id, smc_role_for_type( $app['membership_type'], false ) );
+		$role_ok = 1 === $updated && SMC_Contracts::set_all_roles_pending( $user_id, (int) $app['row_version'] + 1 );
 		$sessions_ok = $role_ok && SMC_Security::revoke_all_sessions( $user_id, $reason );
 		$audit_ok = $sessions_ok && SMC_Security::audit( 'membership_restricted', $user_id, array( 'reason' => $reason ) );
 		if ( 1 !== $updated || ! $role_ok || ! $sessions_ok || ! $audit_ok ) {
@@ -311,6 +318,9 @@ final class SMC_Lifecycle {
 		$wpdb->query( "DELETE FROM {$wpdb->prefix}smc_contact_otps WHERE expires_at<UTC_TIMESTAMP() - INTERVAL 7 DAY" );
 		$wpdb->query( "DELETE FROM {$wpdb->prefix}smc_auth_sessions WHERE expires_at<UTC_TIMESTAMP() - INTERVAL 30 DAY OR revoked_at<UTC_TIMESTAMP() - INTERVAL 30 DAY" );
 		$wpdb->query( "DELETE FROM {$wpdb->prefix}smc_file_jobs WHERE status='complete' AND updated_at<UTC_TIMESTAMP() - INTERVAL 30 DAY" );
+		$wpdb->query( "DELETE FROM {$wpdb->prefix}smc_event_outbox WHERE status='delivered' AND delivered_at<UTC_TIMESTAMP() - INTERVAL 90 DAY" );
+		$wpdb->query( "DELETE FROM {$wpdb->prefix}smc_event_inbox WHERE status='processed' AND processed_at<UTC_TIMESTAMP() - INTERVAL 90 DAY" );
+		$wpdb->query( "DELETE FROM {$wpdb->prefix}smc_application_repairs WHERE status='complete' AND resolved_at<UTC_TIMESTAMP() - INTERVAL 90 DAY" );
 		$wpdb->query( "UPDATE {$wpdb->prefix}smc_guardian_consents SET otp_hash=NULL,otp_lookup_hash=NULL,invitation_token_hash=NULL WHERE status='pending' AND otp_expires_at<UTC_TIMESTAMP()" );
 	}
 

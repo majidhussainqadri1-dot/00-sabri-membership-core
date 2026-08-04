@@ -1,41 +1,158 @@
 (() => {
 	'use strict';
-	const dob = document.querySelector('[name="date_of_birth"]');
-	const gender = document.querySelector('[name="gender"]');
-	const type = document.querySelector('[name="membership_type"]');
-	if (!dob || !gender || !type || !window.smcPolicy) return;
+	const form = document.getElementById('smc-membership-application');
+	if (!form || !window.smcPolicy) return;
 
-	const status = document.createElement('p');
-	status.setAttribute('role', 'status');
-	status.setAttribute('aria-live', 'polite');
-	dob.insertAdjacentElement('afterend', status);
+	const steps = Array.from(form.querySelectorAll('[data-smc-step]'));
+	const progress = document.getElementById('smc-application-progress');
+	const stepLabel = document.getElementById('smc-step-label');
+	const draftStatus = document.getElementById('smc-draft-status');
+	const uploadProgress = document.getElementById('smc-upload-progress');
+	const retryButton = document.getElementById('smc-retry-submit');
+	const previous = form.querySelector('[data-smc-prev]');
+	const next = form.querySelector('[data-smc-next]');
+	const dob = form.querySelector('[name="date_of_birth"]');
+	const gender = form.querySelector('[name="gender"]');
+	const guardianStep = form.querySelector('.smc-guardian-step');
+	const ageStatus = form.querySelector('.smc-age-status');
+	let current = Math.max(1, Math.min(steps.length, Number(form.dataset.currentStep || 1)));
+	let saveTimer = 0;
+	let submitting = false;
 
-	const update = () => {
-		if (!dob.value || !gender.value) {
-			status.textContent = '';
-			return;
-		}
+	const selectedTypes = () => Array.from(form.querySelectorAll('[name="membership_types[]"]:checked')).map((field) => field.value);
+	const calculateAge = () => {
+		if (!dob || !dob.value) return null;
 		const birth = new Date(`${dob.value}T12:00:00`);
-		if (Number.isNaN(birth.getTime())) return;
+		if (Number.isNaN(birth.getTime())) return null;
 		const today = new Date();
 		let age = today.getFullYear() - birth.getFullYear();
-		const beforeBirthday = today.getMonth() < birth.getMonth()
-			|| (today.getMonth() === birth.getMonth() && today.getDate() < birth.getDate());
-		if (beforeBirthday) age -= 1;
-		const minimum = gender.value === 'female'
-			? Number(window.smcPolicy.femaleMinimumAge)
-			: Number(window.smcPolicy.maleMinimumAge);
-		if (age < minimum) {
-			status.textContent = `The selected date is below the minimum age of ${minimum}.`;
-		} else if (age < Number(window.smcPolicy.professionalAge)
-			&& ['doctor', 'teacher', 'researcher', 'pharmacy', 'clinic', 'publisher'].includes(type.value)) {
-			status.textContent = 'Professional accounts require age 18 or older.';
-		} else if (age < Number(window.smcPolicy.guardianAge)) {
-			status.textContent = 'Verified guardian consent is required.';
-		} else {
-			status.textContent = 'The selected age meets the membership age rule.';
-		}
+		if (today.getMonth() < birth.getMonth() || (today.getMonth() === birth.getMonth() && today.getDate() < birth.getDate())) age -= 1;
+		return age;
 	};
 
-	[dob, gender, type].forEach((field) => field.addEventListener('change', update));
+	const updateEligibility = () => {
+		const age = calculateAge();
+		if (age === null || !gender || !gender.value) {
+			if (ageStatus) ageStatus.textContent = '';
+			return;
+		}
+		const minimum = gender.value === 'female' ? Number(window.smcPolicy.femaleMinimumAge) : Number(window.smcPolicy.maleMinimumAge);
+		const professional = selectedTypes().some((value) => ['doctor', 'teacher', 'researcher', 'pharmacy', 'clinic', 'publisher'].includes(value));
+		if (guardianStep) guardianStep.dataset.required = age < Number(window.smcPolicy.guardianAge) ? 'true' : 'false';
+		if (age < minimum) ageStatus.textContent = `The selected date is below the minimum age of ${minimum}.`;
+		else if (age < Number(window.smcPolicy.professionalAge) && professional) ageStatus.textContent = 'Professional account classes require age 18 or older.';
+		else if (age < Number(window.smcPolicy.guardianAge)) ageStatus.textContent = 'Verified guardian consent is required.';
+		else ageStatus.textContent = 'The selected age meets the membership age rule.';
+	};
+
+	const showStep = (number, focus = true) => {
+		current = Math.max(1, Math.min(steps.length, number));
+		steps.forEach((step, index) => {
+			step.hidden = index + 1 !== current;
+			step.setAttribute('aria-hidden', index + 1 === current ? 'false' : 'true');
+		});
+		if (progress) progress.value = current;
+		if (stepLabel) stepLabel.textContent = ` Step ${current} of ${steps.length}`;
+		if (previous) previous.hidden = current === 1;
+		if (next) next.hidden = current === steps.length;
+		if (focus) {
+			const heading = steps[current - 1]?.querySelector('legend, h2');
+			if (heading) { heading.setAttribute('tabindex', '-1'); heading.focus(); }
+		}
+		scheduleDraftSave();
+	};
+
+	const validateStep = () => {
+		const controls = Array.from(steps[current - 1].querySelectorAll('input, select, textarea'));
+		if (current === 1 && selectedTypes().length === 0) {
+			steps[0].querySelector('input')?.focus();
+			return false;
+		}
+		for (const control of controls) {
+			if (!control.checkValidity()) { control.reportValidity(); control.focus(); return false; }
+		}
+		return true;
+	};
+
+	const draftPayload = () => ({
+		legal_name: form.elements.legal_name?.value || '',
+		date_of_birth: form.elements.date_of_birth?.value || '',
+		gender: form.elements.gender?.value || '',
+		residence_country: form.elements.residence_country?.value || '',
+		city: form.elements.city?.value || '',
+		address: form.elements.address?.value || '',
+		phone: form.elements.phone?.value || '',
+		identity_type: form.elements.identity_type?.value || '',
+		issuing_country: form.elements.issuing_country?.value || '',
+		guardian_name: form.elements.guardian_name?.value || '',
+		guardian_relationship: form.elements.guardian_relationship?.value || '',
+		guardian_email: form.elements.guardian_email?.value || '',
+		guardian_phone: form.elements.guardian_phone?.value || '',
+		membership_types: selectedTypes(),
+		current_step: current,
+	});
+
+	const saveDraft = async () => {
+		if (!window.smcPolicy.ajaxUrl || !window.smcPolicy.draftNonce || submitting) return;
+		const body = new URLSearchParams({action: 'smc_save_application_draft', nonce: window.smcPolicy.draftNonce, draft: JSON.stringify(draftPayload())});
+		try {
+			const response = await fetch(window.smcPolicy.ajaxUrl, {method: 'POST', credentials: 'same-origin', headers: {'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'}, body});
+			const result = await response.json();
+			if (!response.ok || !result.success) throw new Error('draft');
+			if (draftStatus) draftStatus.textContent = ` ${window.smcPolicy.messages?.draftSaved || 'Draft saved securely.'}`;
+		} catch (error) {
+			if (draftStatus) draftStatus.textContent = ` ${window.smcPolicy.messages?.draftFailed || 'Draft could not be saved.'}`;
+		}
+	};
+	function scheduleDraftSave() { window.clearTimeout(saveTimer); saveTimer = window.setTimeout(saveDraft, 700); }
+
+	const updateReview = () => {
+		const summary = document.getElementById('smc-review-summary');
+		if (!summary) return;
+		const roles = selectedTypes().map((type) => form.querySelector(`[name="membership_types[]"][value="${CSS.escape(type)}"]`)?.parentElement?.textContent.trim()).filter(Boolean);
+		summary.textContent = `Name: ${form.elements.legal_name?.value || '—'}; roles: ${roles.join(', ') || '—'}; residence: ${form.elements.city?.value || '—'}, ${form.elements.residence_country?.value || '—'}; issuing country: ${form.elements.issuing_country?.value || '—'}. Sensitive document numbers and files are intentionally not repeated here.`;
+	};
+
+	const submitViaXHR = () => {
+		if (submitting || !form.checkValidity()) { form.reportValidity(); return; }
+		submitting = true;
+		form.setAttribute('aria-busy', 'true');
+		form.querySelectorAll('button').forEach((button) => { button.disabled = true; });
+		if (draftStatus) draftStatus.textContent = ` ${window.smcPolicy.messages?.uploading || 'Uploading authenticated evidence…'}`;
+		const request = new XMLHttpRequest();
+		request.open('POST', form.action, true);
+		request.withCredentials = true;
+		request.upload.addEventListener('progress', (event) => {
+			if (event.lengthComputable && uploadProgress) uploadProgress.value = Math.round((event.loaded / event.total) * 100);
+		});
+		request.addEventListener('load', () => {
+			if (request.status >= 200 && request.status < 400) {
+				window.location.assign(request.responseURL || form.action);
+				return;
+			}
+			failedSubmission();
+		});
+		request.addEventListener('error', failedSubmission);
+		request.addEventListener('abort', failedSubmission);
+		request.send(new FormData(form));
+	};
+	const failedSubmission = () => {
+		submitting = false;
+		form.removeAttribute('aria-busy');
+		form.querySelectorAll('button').forEach((button) => { button.disabled = false; });
+		if (retryButton) retryButton.hidden = false;
+		if (draftStatus) draftStatus.textContent = ` ${window.smcPolicy.messages?.networkError || 'Network interrupted. Retry safely.'}`;
+	};
+
+	previous?.addEventListener('click', () => showStep(current - 1));
+	next?.addEventListener('click', () => { if (validateStep()) { if (current === steps.length - 1) updateReview(); showStep(current + 1); } });
+	retryButton?.addEventListener('click', submitViaXHR);
+	form.addEventListener('input', () => { updateEligibility(); scheduleDraftSave(); });
+	form.addEventListener('change', () => { updateEligibility(); scheduleDraftSave(); });
+	form.addEventListener('submit', (event) => { event.preventDefault(); updateReview(); submitViaXHR(); });
+	window.addEventListener('online', () => { if (draftStatus) draftStatus.textContent = ' Connection restored; you may retry.'; });
+	window.addEventListener('offline', () => { if (draftStatus) draftStatus.textContent = ' Offline. No sensitive data is stored in browser storage.'; });
+
+	updateEligibility();
+	showStep(current, false);
 })();

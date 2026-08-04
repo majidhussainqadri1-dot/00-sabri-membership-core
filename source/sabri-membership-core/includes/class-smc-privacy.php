@@ -53,14 +53,20 @@ final class SMC_Privacy {
 		}
 		$dob = SMC_Security::decrypt( $app['date_of_birth_enc'], 'date-of-birth', array( 'user_id' => $user_id ) );
 		$phone = SMC_Security::decrypt( $app['phone_e164_enc'], 'membership-phone', array( 'user_id' => $user_id ) );
+		$address = ! empty( $app['address_enc'] ) ? SMC_Security::decrypt( $app['address_enc'], 'residential-address', array( 'user_id' => $user_id, 'country' => $app['residence_country'] ?? '' ) ) : '';
 		$identity = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}smc_identity_records WHERE user_id=%d", $user_id ), ARRAY_A );
 		$number = $identity ? SMC_Security::decrypt( $identity['document_number_enc'], 'identity-number', array( 'user_id' => $user_id, 'type' => $identity['document_type'], 'country' => $identity['issuing_country'] ) ) : '';
 		$values = array(
 			__( 'Legal name', 'sabri-membership-core' ) => $app['legal_name'],
 			__( 'Date of birth', 'sabri-membership-core' ) => is_wp_error( $dob ) ? __( 'Unavailable', 'sabri-membership-core' ) : $dob,
 			__( 'Gender rule', 'sabri-membership-core' ) => $app['gender'],
+			__( 'Residence country', 'sabri-membership-core' ) => $app['residence_country'] ?? '',
+			__( 'City', 'sabri-membership-core' ) => $app['city'] ?? '',
+			__( 'Private address', 'sabri-membership-core' ) => is_wp_error( $address ) ? __( 'Unavailable', 'sabri-membership-core' ) : $address,
 			__( 'Phone', 'sabri-membership-core' ) => is_wp_error( $phone ) ? __( 'Unavailable', 'sabri-membership-core' ) : $phone,
-			__( 'Membership type', 'sabri-membership-core' ) => $app['membership_type'],
+			__( 'Requested membership roles', 'sabri-membership-core' ) => implode( ', ', SMC_Contracts::requested_types( $user_id ) ),
+			__( 'Approved membership roles', 'sabri-membership-core' ) => implode( ', ', SMC_Contracts::approved_types( $user_id ) ),
+			__( 'Primary compatibility type', 'sabri-membership-core' ) => $app['membership_type'],
 			__( 'Status', 'sabri-membership-core' ) => $app['status'],
 			__( 'Guardian required', 'sabri-membership-core' ) => $app['guardian_required'],
 			__( 'Profile visibility assertion', 'sabri-membership-core' ) => $app['profile_visibility'],
@@ -86,7 +92,7 @@ final class SMC_Privacy {
 	private static function export_workflow( $user_id ) {
 		global $wpdb;
 		$data = array();
-		foreach ( array( 'smc_verification_requests', 'smc_verification_events', 'smc_consents' ) as $table ) {
+		foreach ( array( 'smc_verification_requests', 'smc_verification_events', 'smc_consents', 'smc_role_grants', 'smc_application_repairs' ) as $table ) {
 			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}{$table} WHERE user_id=%d ORDER BY id", $user_id ), ARRAY_A );
 			foreach ( $rows as $index => $row ) {
 				foreach ( array_keys( $row ) as $key ) {
@@ -290,6 +296,8 @@ final class SMC_Privacy {
 			'smc_verification_events'   => 'user_id',
 			'smc_verification_requests' => 'user_id',
 			'smc_consents'              => 'user_id',
+			'smc_role_grants'           => 'user_id',
+			'smc_application_repairs'   => 'user_id',
 			'smc_guardian_consents'     => 'user_id',
 			'smc_identity_records'      => 'user_id',
 			'smc_applications'          => 'user_id',

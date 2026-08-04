@@ -70,44 +70,89 @@ final class SMC_Workflow {
 			return self::message() . smc_notice( __( 'The application is already in a controlled review state. Use Membership Status for the next permitted action.', 'sabri-membership-core' ) );
 		}
 		$user = wp_get_current_user();
+		$draft = SMC_Completion::load_draft( $user_id );
+		$types = ! empty( $draft['membership_types'] ) ? smc_sanitize_membership_types( $draft['membership_types'] ) : SMC_Contracts::requested_types( $user_id );
+		$current_step = max( 1, min( 7, absint( $draft['current_step'] ?? 1 ) ) );
+		$idempotency = wp_generate_uuid4();
 		ob_start();
 		?>
 		<main class="smc-panel" aria-labelledby="smc-application-title">
 			<?php echo self::message(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 			<h1 id="smc-application-title"><?php esc_html_e( 'Membership Application', 'sabri-membership-core' ); ?></h1>
-			<p><?php esc_html_e( 'Sabri Authentication owns sign-in. This form records only membership eligibility, identity assurance, and guardian consent.', 'sabri-membership-core' ); ?></p>
-			<p class="screen-reader-text" aria-live="polite"><?php esc_html_e( 'Age and guardian eligibility guidance will be announced when the relevant fields change.', 'sabri-membership-core' ); ?></p>
-			<form method="post" enctype="multipart/form-data" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="smc-form">
+			<p><?php esc_html_e( 'Sabri Authentication owns sign-in. File 00 records membership eligibility, identity assurance, guardian consent and approved role grants.', 'sabri-membership-core' ); ?></p>
+			<div class="smc-progress-summary" aria-live="polite">
+				<strong><?php esc_html_e( 'Application progress', 'sabri-membership-core' ); ?></strong>
+				<progress id="smc-application-progress" max="7" value="<?php echo absint( $current_step ); ?>"><?php echo absint( $current_step ); ?>/7</progress>
+				<span id="smc-step-label"></span><span id="smc-draft-status"></span>
+			</div>
+			<form id="smc-membership-application" method="post" enctype="multipart/form-data" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="smc-form" data-current-step="<?php echo absint( $current_step ); ?>" novalidate>
 				<input type="hidden" name="action" value="smc_submit_application">
+				<input type="hidden" name="submission_key" value="<?php echo esc_attr( $idempotency ); ?>">
 				<?php wp_nonce_field( 'smc_submit_application', 'smc_nonce' ); ?>
-				<label><?php esc_html_e( 'Legal name', 'sabri-membership-core' ); ?><input name="legal_name" value="<?php echo esc_attr( $row['legal_name'] ?? $user->display_name ); ?>" required maxlength="190"></label>
-				<label><?php esc_html_e( 'Date of birth', 'sabri-membership-core' ); ?><input name="date_of_birth" type="date" required></label>
-				<label><?php esc_html_e( 'Gender for the approved minimum-age rule', 'sabri-membership-core' ); ?><select name="gender" required><option value=""><?php esc_html_e( 'Select', 'sabri-membership-core' ); ?></option><?php foreach ( smc_allowed_genders() as $value => $label ) : ?><option value="<?php echo esc_attr( $value ); ?>"><?php echo esc_html( $label ); ?></option><?php endforeach; ?></select></label>
-				<label><?php esc_html_e( 'International phone number', 'sabri-membership-core' ); ?><input name="phone" type="tel" placeholder="+923001234567" required></label>
-				<label><?php esc_html_e( 'Membership type', 'sabri-membership-core' ); ?><select name="membership_type" required><?php foreach ( smc_account_types() as $value => $label ) : ?><option value="<?php echo esc_attr( $value ); ?>" <?php selected( $row['membership_type'] ?? 'member', $value ); ?>><?php echo esc_html( $label ); ?></option><?php endforeach; ?></select></label>
-				<fieldset><legend><?php esc_html_e( 'Government identity', 'sabri-membership-core' ); ?></legend>
-					<label><?php esc_html_e( 'Document type', 'sabri-membership-core' ); ?><select name="identity_type"><option value="national_id"><?php esc_html_e( 'National identity card', 'sabri-membership-core' ); ?></option><option value="passport"><?php esc_html_e( 'Passport', 'sabri-membership-core' ); ?></option></select></label>
-					<label><?php esc_html_e( 'Issuing country (ISO two-letter code)', 'sabri-membership-core' ); ?><input name="issuing_country" pattern="[A-Za-z]{2}" maxlength="2" required></label>
-					<label><?php esc_html_e( 'Document number', 'sabri-membership-core' ); ?><input name="identity_number" autocomplete="off" minlength="5" maxlength="24" required></label>
+
+				<fieldset class="smc-step" data-smc-step="1"><legend><?php esc_html_e( 'Step 1 of 7 — Account classes', 'sabri-membership-core' ); ?></legend>
+					<p><?php esc_html_e( 'Choose every membership role you are applying for. Each role is approved independently and each protected action is revalidated by domain.', 'sabri-membership-core' ); ?></p>
+					<div class="smc-role-grid">
+					<?php foreach ( smc_account_types() as $value => $label ) : ?>
+						<label class="smc-check"><input type="checkbox" name="membership_types[]" value="<?php echo esc_attr( $value ); ?>" <?php checked( in_array( $value, $types, true ) ); ?>> <?php echo esc_html( $label ); ?></label>
+					<?php endforeach; ?>
+					</div>
 				</fieldset>
-				<fieldset><legend><?php esc_html_e( 'Private identity evidence', 'sabri-membership-core' ); ?></legend>
+
+				<fieldset class="smc-step" data-smc-step="2"><legend><?php esc_html_e( 'Step 2 of 7 — Personal and eligibility data', 'sabri-membership-core' ); ?></legend>
+					<label><?php esc_html_e( 'Legal name', 'sabri-membership-core' ); ?><input name="legal_name" value="<?php echo esc_attr( $draft['legal_name'] ?? ( $row['legal_name'] ?? $user->display_name ) ); ?>" required maxlength="190" autocomplete="name"></label>
+					<label><?php esc_html_e( 'Date of birth', 'sabri-membership-core' ); ?><input name="date_of_birth" value="<?php echo esc_attr( $draft['date_of_birth'] ?? '' ); ?>" type="date" required autocomplete="bday"></label>
+					<label><?php esc_html_e( 'Gender for the approved minimum-age rule', 'sabri-membership-core' ); ?><select name="gender" required><option value=""><?php esc_html_e( 'Select', 'sabri-membership-core' ); ?></option><?php foreach ( smc_allowed_genders() as $value => $label ) : ?><option value="<?php echo esc_attr( $value ); ?>" <?php selected( $draft['gender'] ?? '', $value ); ?>><?php echo esc_html( $label ); ?></option><?php endforeach; ?></select></label>
+					<label><?php esc_html_e( 'Country of residence (ISO two-letter code)', 'sabri-membership-core' ); ?><input name="residence_country" value="<?php echo esc_attr( $draft['residence_country'] ?? '' ); ?>" pattern="[A-Za-z]{2}" maxlength="2" required autocomplete="country"></label>
+					<label><?php esc_html_e( 'City', 'sabri-membership-core' ); ?><input name="city" value="<?php echo esc_attr( $draft['city'] ?? '' ); ?>" maxlength="120" required autocomplete="address-level2"></label>
+					<label><?php esc_html_e( 'Private residential address', 'sabri-membership-core' ); ?><textarea name="address" maxlength="500" required autocomplete="street-address"><?php echo esc_textarea( $draft['address'] ?? '' ); ?></textarea></label>
+					<p class="smc-age-status" role="status" aria-live="polite"></p>
+				</fieldset>
+
+				<fieldset class="smc-step" data-smc-step="3"><legend><?php esc_html_e( 'Step 3 of 7 — Contact ownership', 'sabri-membership-core' ); ?></legend>
+					<label><?php esc_html_e( 'Account email', 'sabri-membership-core' ); ?><input value="<?php echo esc_attr( $user->user_email ); ?>" type="email" readonly aria-describedby="smc-email-owner-note"></label>
+					<p id="smc-email-owner-note"><?php esc_html_e( 'Email/password and Google sign-in remain owned by File 02. File 00 separately verifies ownership before protected membership actions.', 'sabri-membership-core' ); ?></p>
+					<label><?php esc_html_e( 'International phone number', 'sabri-membership-core' ); ?><input name="phone" value="<?php echo esc_attr( $draft['phone'] ?? '' ); ?>" type="tel" placeholder="+923001234567" required autocomplete="tel"></label>
+				</fieldset>
+
+				<fieldset class="smc-step smc-guardian-step" data-smc-step="4"><legend><?php esc_html_e( 'Step 4 of 7 — Guardian, when legally required', 'sabri-membership-core' ); ?></legend>
+					<p><?php esc_html_e( 'These fields are used only when the applicant is under 18. Guardian contact remains private and is retained only for the governed consent purpose.', 'sabri-membership-core' ); ?></p>
+					<label><?php esc_html_e( 'Guardian legal name', 'sabri-membership-core' ); ?><input name="guardian_name" value="<?php echo esc_attr( $draft['guardian_name'] ?? '' ); ?>" maxlength="190"></label>
+					<label><?php esc_html_e( 'Guardian relationship', 'sabri-membership-core' ); ?><select name="guardian_relationship"><option value=""><?php esc_html_e( 'Select', 'sabri-membership-core' ); ?></option><option value="parent" <?php selected( $draft['guardian_relationship'] ?? '', 'parent' ); ?>><?php esc_html_e( 'Parent', 'sabri-membership-core' ); ?></option><option value="legal_guardian" <?php selected( $draft['guardian_relationship'] ?? '', 'legal_guardian' ); ?>><?php esc_html_e( 'Court-appointed legal guardian', 'sabri-membership-core' ); ?></option></select></label>
+					<label><?php esc_html_e( 'Guardian email', 'sabri-membership-core' ); ?><input name="guardian_email" value="<?php echo esc_attr( $draft['guardian_email'] ?? '' ); ?>" type="email" autocomplete="email"></label>
+					<label><?php esc_html_e( 'Guardian international phone', 'sabri-membership-core' ); ?><input name="guardian_phone" value="<?php echo esc_attr( $draft['guardian_phone'] ?? '' ); ?>" type="tel" placeholder="+923001234567" autocomplete="tel"></label>
+					<label class="smc-check"><input type="checkbox" name="guardian_authority" value="1"> <?php esc_html_e( 'The named adult has legal authority to consent for this applicant.', 'sabri-membership-core' ); ?></label>
+				</fieldset>
+
+				<fieldset class="smc-step" data-smc-step="5"><legend><?php esc_html_e( 'Step 5 of 7 — Government identity and private evidence', 'sabri-membership-core' ); ?></legend>
+					<p><?php esc_html_e( 'Document numbers and files are encrypted and private. They are not included in public profiles, search indexes, ordinary logs or event payloads.', 'sabri-membership-core' ); ?></p>
+					<label><?php esc_html_e( 'Document type', 'sabri-membership-core' ); ?><select name="identity_type"><option value="national_id" <?php selected( $draft['identity_type'] ?? 'national_id', 'national_id' ); ?>><?php esc_html_e( 'National identity card', 'sabri-membership-core' ); ?></option><option value="passport" <?php selected( $draft['identity_type'] ?? '', 'passport' ); ?>><?php esc_html_e( 'Passport', 'sabri-membership-core' ); ?></option></select></label>
+					<label><?php esc_html_e( 'Issuing country (ISO two-letter code)', 'sabri-membership-core' ); ?><input name="issuing_country" value="<?php echo esc_attr( $draft['issuing_country'] ?? '' ); ?>" pattern="[A-Za-z]{2}" maxlength="2" required autocomplete="country"></label>
+					<label><?php esc_html_e( 'Document number', 'sabri-membership-core' ); ?><input name="identity_number" autocomplete="off" minlength="5" maxlength="24" required></label>
 					<?php foreach ( smc_required_identity_documents() as $key => $label ) : ?>
 						<label><?php echo esc_html( $label ); ?><input type="file" name="<?php echo esc_attr( $key ); ?>" accept="<?php echo 'identity_selfie' === $key ? 'image/jpeg,image/png,image/webp' : 'image/jpeg,image/png,image/webp,application/pdf'; ?>" required></label>
 					<?php endforeach; ?>
-					<p><?php esc_html_e( 'Evidence is malware-scanned, authenticated, encrypted, and stored outside the public web root. PDF evidence is download-only for reviewers.', 'sabri-membership-core' ); ?></p>
+					<label><?php esc_html_e( 'Upload progress', 'sabri-membership-core' ); ?><progress id="smc-upload-progress" max="100" value="0">0%</progress></label>
 				</fieldset>
-				<fieldset><legend><?php esc_html_e( 'Guardian details — required only when the applicant is under 18', 'sabri-membership-core' ); ?></legend>
-					<label><?php esc_html_e( 'Guardian legal name', 'sabri-membership-core' ); ?><input name="guardian_name" maxlength="190"></label>
-					<label><?php esc_html_e( 'Guardian relationship', 'sabri-membership-core' ); ?><select name="guardian_relationship"><option value=""><?php esc_html_e( 'Select', 'sabri-membership-core' ); ?></option><option value="parent"><?php esc_html_e( 'Parent', 'sabri-membership-core' ); ?></option><option value="legal_guardian"><?php esc_html_e( 'Court-appointed legal guardian', 'sabri-membership-core' ); ?></option></select></label>
-					<label><?php esc_html_e( 'Guardian email', 'sabri-membership-core' ); ?><input name="guardian_email" type="email"></label>
-					<label><?php esc_html_e( 'Guardian international phone', 'sabri-membership-core' ); ?><input name="guardian_phone" type="tel" placeholder="+923001234567"></label>
-					<label class="smc-check"><input type="checkbox" name="guardian_authority" value="1"> <?php esc_html_e( 'The named adult has legal authority to consent for this applicant.', 'sabri-membership-core' ); ?></label>
+
+				<fieldset class="smc-step" data-smc-step="6"><legend><?php esc_html_e( 'Step 6 of 7 — Consents', 'sabri-membership-core' ); ?></legend>
+					<p><?php esc_html_e( 'Identity evidence is processed for membership assurance, reviewer decision, fraud prevention, audit and the published retention/erasure process. Donation is optional and never affects approval, visibility or service access.', 'sabri-membership-core' ); ?></p>
+					<label class="smc-check"><input type="checkbox" name="truth" value="1" required> <?php esc_html_e( 'I declare that the submitted identity information is true and belongs to me.', 'sabri-membership-core' ); ?></label>
+					<label class="smc-check"><input type="checkbox" name="privacy" value="1" required> <?php esc_html_e( 'I consent to the stated identity-verification processing and retention policy.', 'sabri-membership-core' ); ?></label>
+					<label class="smc-check"><input type="checkbox" name="terms" value="1" required> <?php esc_html_e( 'I accept the platform membership terms and governed account rules.', 'sabri-membership-core' ); ?></label>
+					<label class="smc-check"><input type="checkbox" name="ethical" value="1" required> <?php esc_html_e( 'I accept the ethical-use duties, truthful conduct and prohibition of impersonation or misuse.', 'sabri-membership-core' ); ?></label>
 				</fieldset>
-				<label class="smc-check"><input type="checkbox" name="truth" value="1" required> <?php esc_html_e( 'I declare that the submitted identity information is true and belongs to me.', 'sabri-membership-core' ); ?></label>
-				<label class="smc-check"><input type="checkbox" name="privacy" value="1" required> <?php esc_html_e( 'I consent to the stated identity-verification processing and retention policy.', 'sabri-membership-core' ); ?></label>
-				<button class="smc-button" type="submit"><?php esc_html_e( 'Submit Membership Application', 'sabri-membership-core' ); ?></button>
+
+				<fieldset class="smc-step" data-smc-step="7"><legend><?php esc_html_e( 'Step 7 of 7 — Review and submit', 'sabri-membership-core' ); ?></legend>
+					<div id="smc-review-summary" class="smc-review-summary"></div>
+					<p><?php esc_html_e( 'Submission is idempotency-protected. The server revalidates age, guardian, roles, files, identity uniqueness, consent, current row version and security health.', 'sabri-membership-core' ); ?></p>
+					<button class="smc-button" type="submit"><?php esc_html_e( 'Submit Membership Application', 'sabri-membership-core' ); ?></button>
+					<button class="button" type="button" id="smc-retry-submit" hidden><?php esc_html_e( 'Retry submission', 'sabri-membership-core' ); ?></button>
+				</fieldset>
+
+				<div class="smc-step-controls"><button type="button" class="button" data-smc-prev><?php esc_html_e( 'Previous', 'sabri-membership-core' ); ?></button><button type="button" class="button button-primary" data-smc-next><?php esc_html_e( 'Next', 'sabri-membership-core' ); ?></button></div>
 			</form>
-			<noscript><p class="smc-notice smc-notice--info"><?php esc_html_e( 'JavaScript is not required; this complete server-rendered form remains usable.', 'sabri-membership-core' ); ?></p></noscript>
+			<noscript><p class="smc-notice smc-notice--info"><?php esc_html_e( 'JavaScript is optional. All steps remain visible and the server validates the complete application.', 'sabri-membership-core' ); ?></p></noscript>
 		</main>
 		<?php
 		return ob_get_clean();
@@ -116,60 +161,94 @@ final class SMC_Workflow {
 	public static function handle_submit_application() {
 		self::guard_user_action( 'smc_submit_application' );
 		$user_id = get_current_user_id();
-		if ( SMC_Security::rate_limited( 'application|' . $user_id, 5, HOUR_IN_SECONDS ) || ! SMC_Security::key_ready() ) {
+		$submission_key = sanitize_text_field( wp_unslash( $_POST['submission_key'] ?? '' ) );
+		if ( ! preg_match( '/^[0-9a-f-]{36}$/i', $submission_key ) ) {
+			self::redirect( 'application', 'invalid' );
+		}
+		if ( hash_equals( (string) get_user_meta( $user_id, '_smc_last_submission_key', true ), $submission_key ) ) {
+			self::redirect( 'status', 'saved' );
+		}
+		$submission_receipt_key = '_smc_submission_' . substr( hash( 'sha256', $submission_key ), 0, 32 );
+		if ( ! add_user_meta( $user_id, $submission_receipt_key, array( 'status' => 'processing', 'started_at' => time() ), true ) ) {
+			$receipt = get_user_meta( $user_id, $submission_receipt_key, true );
+			if ( is_array( $receipt ) && 'completed' === ( $receipt['status'] ?? '' ) ) {
+				self::redirect( 'status', 'saved' );
+			}
+			self::redirect( 'application', 'invalid', array( 'duplicate' => 1 ) );
+		}
+		if ( SMC_Security::rate_limited( 'application|' . $user_id, 5, HOUR_IN_SECONDS ) || ! SMC_Security::key_ready() || SMC_Completion::safe_mode() ) {
+			delete_user_meta( $user_id, $submission_receipt_key );
 			self::redirect( 'application', 'invalid' );
 		}
 		$legal_name = sanitize_text_field( wp_unslash( $_POST['legal_name'] ?? '' ) );
 		$dob = sanitize_text_field( wp_unslash( $_POST['date_of_birth'] ?? '' ) );
 		$gender = sanitize_key( wp_unslash( $_POST['gender'] ?? '' ) );
-		$type = sanitize_key( wp_unslash( $_POST['membership_type'] ?? '' ) );
+		$types = smc_sanitize_membership_types( isset( $_POST['membership_types'] ) ? (array) wp_unslash( $_POST['membership_types'] ) : array() );
+		$residence_country = strtoupper( sanitize_text_field( wp_unslash( $_POST['residence_country'] ?? '' ) ) );
+		$city = sanitize_text_field( wp_unslash( $_POST['city'] ?? '' ) );
+		$address = sanitize_textarea_field( wp_unslash( $_POST['address'] ?? '' ) );
 		$phone = smc_normalize_phone( wp_unslash( $_POST['phone'] ?? '' ) );
 		$id_type = sanitize_key( wp_unslash( $_POST['identity_type'] ?? '' ) );
 		$id_number = strtoupper( sanitize_text_field( wp_unslash( $_POST['identity_number'] ?? '' ) ) );
 		$country = strtoupper( sanitize_text_field( wp_unslash( $_POST['issuing_country'] ?? '' ) ) );
 		$age = smc_age_from_dob( $dob );
+		$has_professional = (bool) array_intersect( $types, smc_professional_types() );
 		if (
 			'' === $legal_name || false === $age || ! isset( smc_allowed_genders()[ $gender ] ) ||
-			! isset( smc_account_types()[ $type ] ) || is_wp_error( $phone ) ||
+			! $types || is_wp_error( $phone ) ||
+			! preg_match( '/^[A-Z]{2}$/', $residence_country ) || '' === $city || '' === $address ||
 			! in_array( $id_type, array( 'national_id', 'passport' ), true ) ||
 			! preg_match( '/^[A-Z]{2}$/', $country ) ||
 			! preg_match( '/^[A-Z0-9][A-Z0-9 -]{4,23}$/', $id_number ) ||
-			$age < smc_minimum_age_for_gender( $gender ) ||
-			( $age < 18 && smc_is_professional_type( $type ) ) ||
-			empty( $_POST['truth'] ) || empty( $_POST['privacy'] )
+			$age < smc_effective_minimum_age( $gender, $residence_country ) ||
+			( $age < 18 && $has_professional ) ||
+			empty( $_POST['truth'] ) || empty( $_POST['privacy'] ) || empty( $_POST['terms'] ) || empty( $_POST['ethical'] )
 		) {
+			delete_user_meta( $user_id, $submission_receipt_key );
 			self::redirect( 'application', 'invalid' );
 		}
+		$type = $types[0]; // Backward-compatible primary class; role grants retain every selected class.
 		$id_number = apply_filters( 'smc_validate_identity_number', $id_number, $id_type, $country );
 		if ( is_wp_error( $id_number ) ) {
+			delete_user_meta( $user_id, $submission_receipt_key );
 			self::redirect( 'application', 'invalid' );
 		}
 		$phone_hash = SMC_Security::blind_index( $phone, 'phone' );
 		$id_hash = SMC_Security::blind_index( $country . '|' . $id_type . '|' . $id_number, 'identity-number' );
 		if ( is_wp_error( $phone_hash ) || is_wp_error( $id_hash ) ) {
+			delete_user_meta( $user_id, $submission_receipt_key );
 			self::redirect( 'application', 'invalid' );
 		}
 		global $wpdb;
 		$duplicate_phone = $wpdb->get_var( $wpdb->prepare( "SELECT user_id FROM {$wpdb->prefix}smc_applications WHERE phone_hash=%s AND user_id<>%d", $phone_hash, $user_id ) );
 		$duplicate_id = $wpdb->get_var( $wpdb->prepare( "SELECT user_id FROM {$wpdb->prefix}smc_identity_records WHERE document_number_hash=%s AND user_id<>%d", $id_hash, $user_id ) );
 		if ( $duplicate_phone || $duplicate_id ) {
+			delete_user_meta( $user_id, $submission_receipt_key );
 			self::redirect( 'application', 'invalid' );
 		}
 		$dob_enc = SMC_Security::encrypt( $dob, 'date-of-birth', array( 'user_id' => $user_id ) );
 		$phone_enc = SMC_Security::encrypt( $phone, 'membership-phone', array( 'user_id' => $user_id ) );
+		$address_enc = SMC_Security::encrypt( $address, 'residential-address', array( 'user_id' => $user_id, 'country' => $residence_country ) );
 		$id_enc = SMC_Security::encrypt( $id_number, 'identity-number', array( 'user_id' => $user_id, 'type' => $id_type, 'country' => $country ) );
-		if ( is_wp_error( $dob_enc ) || is_wp_error( $phone_enc ) || is_wp_error( $id_enc ) ) {
+		if ( is_wp_error( $dob_enc ) || is_wp_error( $phone_enc ) || is_wp_error( $address_enc ) || is_wp_error( $id_enc ) ) {
+			delete_user_meta( $user_id, $submission_receipt_key );
 			self::redirect( 'application', 'invalid' );
 		}
 		$guardian_required = $age < 18 ? 1 : 0;
+		$trace_id = wp_generate_uuid4();
 		$now = current_time( 'mysql', true );
+		$application_version = 1;
 		$wpdb->query( 'START TRANSACTION' );
 		try {
-			$current = smc_application( $user_id );
+			$current = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}smc_applications WHERE user_id=%d LIMIT 1 FOR UPDATE", $user_id ), ARRAY_A );
+			$application_version = $current ? (int) $current['row_version'] + 1 : 1;
 			$app_data = array(
 				'legal_name'         => $legal_name,
 				'date_of_birth_enc'  => $dob_enc,
 				'gender'             => $gender,
+				'residence_country'  => $residence_country,
+				'city'               => $city,
+				'address_enc'        => $address_enc,
 				'phone_e164_enc'     => $phone_enc,
 				'phone_hash'         => $phone_hash,
 				'membership_type'    => $type,
@@ -177,7 +256,7 @@ final class SMC_Workflow {
 				'guardian_required'  => $guardian_required,
 				'profile_visibility' => 'private',
 				'policy_version'     => smc_policy()['version'],
-				'row_version'        => $current ? (int) $current['row_version'] + 1 : 1,
+				'row_version'        => $application_version,
 				'updated_at'         => $now,
 			);
 			if ( $current ) {
@@ -190,7 +269,7 @@ final class SMC_Workflow {
 			if ( 1 !== $ok ) {
 				throw new RuntimeException( 'Membership application concurrency or database failure.' );
 			}
-			$identity = $wpdb->get_row( $wpdb->prepare( "SELECT id FROM {$wpdb->prefix}smc_identity_records WHERE user_id=%d", $user_id ), ARRAY_A );
+			$identity = $wpdb->get_row( $wpdb->prepare( "SELECT id FROM {$wpdb->prefix}smc_identity_records WHERE user_id=%d LIMIT 1 FOR UPDATE", $user_id ), ARRAY_A );
 			$id_data = array(
 				'document_type'       => $id_type,
 				'document_number_enc' => $id_enc,
@@ -209,31 +288,46 @@ final class SMC_Workflow {
 				$id_data['created_at'] = $now;
 				$ok = $wpdb->insert( $wpdb->prefix . 'smc_identity_records', $id_data );
 			}
-			if ( false === $ok ) {
-				throw new RuntimeException( 'Identity record database failure.' );
+			if ( false === $ok || ! SMC_Contracts::replace_requested_types( $user_id, $types, $application_version ) ) {
+				throw new RuntimeException( 'Identity or role-grant database failure.' );
 			}
 			self::record_consent( $user_id, 'identity_verification', __( 'I consent to identity verification, protected evidence review, documented retention, and the published privacy process.', 'sabri-membership-core' ), 'self' );
+			self::record_consent( $user_id, 'membership_terms', __( 'I accept the platform membership terms and governed account rules.', 'sabri-membership-core' ), 'self' );
+			self::record_consent( $user_id, 'ethical_use', __( 'I accept truthful conduct, ethical use, and the prohibition of impersonation or misuse.', 'sabri-membership-core' ), 'self' );
 			$wpdb->query( 'COMMIT' );
 		} catch ( Throwable $error ) {
 			$wpdb->query( 'ROLLBACK' );
-			SMC_Security::audit( 'application_transaction_failed', $user_id, array( 'reason' => $error->getMessage() ) );
-			self::redirect( 'application', 'invalid' );
+			delete_user_meta( $user_id, $submission_receipt_key );
+			SMC_Security::audit( 'application_transaction_failed', $user_id, array( 'reason' => $error->getMessage(), 'trace_id' => $trace_id ) );
+			self::redirect( 'application', 'invalid', array( 'trace_id' => $trace_id ) );
 		}
+		$stored_documents = array();
 		foreach ( smc_required_identity_documents() as $key => $label ) {
 			$result = SMC_Security::store_uploaded_document( $key, $label, $user_id, $key );
 			if ( is_wp_error( $result ) ) {
-				SMC_Security::audit( 'application_document_incomplete', $user_id, array( 'document_key' => $key, 'reason' => $result->get_error_message() ) );
-				self::redirect( 'application', 'invalid' );
+				$repair_trace = SMC_Completion::record_repair( $user_id, 'application_document_incomplete', array( 'document_key' => $key, 'stored_documents' => $stored_documents, 'reason' => $result->get_error_message(), 'application_version' => $application_version ), $trace_id );
+				SMC_Contracts::set_all_roles_pending( $user_id, $application_version );
+				delete_user_meta( $user_id, $submission_receipt_key );
+				SMC_Security::audit( 'application_document_incomplete', $user_id, array( 'document_key' => $key, 'reason' => $result->get_error_message(), 'trace_id' => $repair_trace ?: $trace_id ) );
+				self::redirect( 'application', 'invalid', array( 'trace_id' => $repair_trace ?: $trace_id ) );
 			}
+			$stored_documents[] = $key;
 		}
 		if ( $guardian_required && ! self::create_guardian_invitation( $user_id ) ) {
-			self::redirect( 'application', 'provider' );
+			delete_user_meta( $user_id, $submission_receipt_key );
+			$repair_trace = SMC_Completion::record_repair( $user_id, 'guardian_delivery_pending', array( 'application_version' => $application_version ), $trace_id );
+			self::redirect( 'application', 'provider', array( 'trace_id' => $repair_trace ?: $trace_id ) );
 		}
 		$status = $guardian_required ? 'guardian_pending' : 'submitted';
-		if ( ! self::submit_request( $user_id, $status, array( 'age' => $age, 'type' => $type, 'guardian_required' => $guardian_required ) ) ) {
-			self::redirect( 'application', 'invalid' );
+		if ( ! self::submit_request( $user_id, $status, array( 'age' => $age, 'type' => $type, 'role_types' => $types, 'guardian_required' => $guardian_required, 'trace_id' => $trace_id ) ) ) {
+			delete_user_meta( $user_id, $submission_receipt_key );
+			SMC_Completion::record_repair( $user_id, 'application_submission_reconciliation', array( 'application_version' => $application_version, 'status' => $status ), $trace_id );
+			self::redirect( 'application', 'invalid', array( 'trace_id' => $trace_id ) );
 		}
-		self::redirect( 'status', 'saved' );
+		update_user_meta( $user_id, '_smc_last_submission_key', $submission_key );
+		update_user_meta( $user_id, $submission_receipt_key, array( 'status' => 'completed', 'completed_at' => time(), 'trace_id' => $trace_id ) );
+		SMC_Completion::clear_draft( $user_id );
+		self::redirect( 'status', 'saved', array( 'trace_id' => $trace_id ) );
 	}
 
 	private static function record_consent( $user_id, $purpose, $text, $actor_type ) {
@@ -309,16 +403,25 @@ final class SMC_Workflow {
 		if ( ! $app ) {
 			return false;
 		}
+		$audit_details = is_array( $audit_details ) ? $audit_details : array();
+		$trace_id = ! empty( $audit_details['trace_id'] ) && preg_match( '/^[0-9a-f-]{36}$/i', (string) $audit_details['trace_id'] ) ? strtolower( (string) $audit_details['trace_id'] ) : wp_generate_uuid4();
+		$queue_type = 'guardian_pending' === $status ? 'guardian' : ( 'resubmitted' === $status ? 'resubmitted' : 'new' );
+		$submitted_roles = ! empty( $audit_details['role_types'] ) ? smc_sanitize_membership_types( $audit_details['role_types'] ) : array( $audit_details['type'] ?? 'member' );
+		if ( array_intersect( $submitted_roles, smc_professional_types() ) ) {
+			$queue_type = 'professional';
+		}
 		$now = current_time( 'mysql', true );
+		$sla_hours = max( 1, absint( SMC_Completion::service_levels()['review_queue_target_hours'] ?? 72 ) );
+		$sla_due = gmdate( 'Y-m-d H:i:s', time() + $sla_hours * HOUR_IN_SECONDS );
 		$applicant_version = (int) $app['row_version'] + 1;
 		$wpdb->query( 'START TRANSACTION' );
 		$ok1 = $wpdb->query(
 			$wpdb->prepare(
 				"INSERT INTO {$wpdb->prefix}smc_verification_requests
-				(user_id,status,assigned_reviewer,reviewer_note,applicant_version,row_version,submitted_at,created_at,updated_at)
-				VALUES (%d,%s,0,NULL,%d,1,%s,%s,%s)
-				ON DUPLICATE KEY UPDATE status=VALUES(status),assigned_reviewer=0,reviewer_note=NULL,applicant_version=VALUES(applicant_version),row_version=row_version+1,submitted_at=VALUES(submitted_at),decided_at=NULL,updated_at=VALUES(updated_at)",
-				$user_id, $status, $applicant_version, $now, $now, $now
+				(user_id,status,queue_type,assigned_reviewer,assigned_at,conflict_status,conflict_note,reason_code,trace_id,sla_due_at,reviewer_note,applicant_version,row_version,submitted_at,created_at,updated_at)
+				VALUES (%d,%s,%s,0,NULL,'undeclared',NULL,NULL,%s,%s,NULL,%d,1,%s,%s,%s)
+				ON DUPLICATE KEY UPDATE status=VALUES(status),queue_type=VALUES(queue_type),assigned_reviewer=0,assigned_at=NULL,conflict_status='undeclared',conflict_note=NULL,reason_code=NULL,trace_id=VALUES(trace_id),sla_due_at=VALUES(sla_due_at),reviewer_note=NULL,applicant_version=VALUES(applicant_version),row_version=row_version+1,submitted_at=VALUES(submitted_at),decided_at=NULL,updated_at=VALUES(updated_at)",
+				$user_id, $status, $queue_type, $trace_id, $sla_due, $applicant_version, $now, $now, $now
 			)
 		);
 		$ok2 = $wpdb->query(
@@ -327,9 +430,12 @@ final class SMC_Workflow {
 				$status, $now, $now, $user_id, (int) $app['row_version']
 			)
 		);
-		$role_ok = false !== $ok1 && 1 === $ok2 && SMC_Contracts::set_exact_role( $user_id, smc_role_for_type( $app['membership_type'], false ) );
+		$role_ok = false !== $ok1 && 1 === $ok2 && SMC_Contracts::set_all_roles_pending( $user_id, $applicant_version );
 		$sessions_ok = $role_ok && SMC_Security::revoke_all_sessions( $user_id, 'membership_application_submitted' );
-		$audit_ok = $sessions_ok && SMC_Security::audit( 'membership_application_submitted', $user_id, is_array( $audit_details ) ? $audit_details : array() );
+		$audit_details['queue_type'] = $queue_type;
+		$audit_details['trace_id'] = $trace_id;
+		$audit_details['applicant_version'] = $applicant_version;
+		$audit_ok = $sessions_ok && SMC_Security::audit( 'membership_application_submitted', $user_id, $audit_details );
 		if ( false === $ok1 || 1 !== $ok2 || ! $role_ok || ! $sessions_ok || ! $audit_ok ) {
 			$wpdb->query( 'ROLLBACK' );
 			clean_user_cache( $user_id );
@@ -770,6 +876,7 @@ final class SMC_Workflow {
 			$wpdb->query( 'COMMIT' );
 		} catch ( Throwable $error ) {
 			$wpdb->query( 'ROLLBACK' );
+			delete_user_meta( $user_id, $submission_receipt_key );
 			SMC_Security::audit( 'guardian_consent_transaction_failed', (int) $row['user_id'], array( 'reason' => $error->getMessage() ) );
 			self::redirect( 'guardian', 'invalid' );
 		}
@@ -870,7 +977,7 @@ final class SMC_Workflow {
 		$ok1 = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_guardian_consents SET status='withdrawn',withdrawn_at=%s WHERE user_id=%d AND status='verified'", $now, $user_id ) );
 		$ok2 = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_applications SET status='suspended',row_version=%d,updated_at=%s WHERE user_id=%d AND guardian_required=1 AND row_version=%d", $next_applicant_version, $now, $user_id, (int) $app['row_version'] ) );
 		$ok3 = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_verification_requests SET status='suspended',reviewer_note=%s,applicant_version=%d,row_version=row_version+1,decided_at=%s,updated_at=%s WHERE user_id=%d", __( 'Guardian consent was withdrawn.', 'sabri-membership-core' ), $next_applicant_version, $now, $now, $user_id ) );
-		$role_ok = 1 === $ok1 && 1 === $ok2 && 1 === $ok3 && SMC_Contracts::set_exact_role( $user_id, smc_role_for_type( $app['membership_type'], false ) );
+		$role_ok = 1 === $ok1 && 1 === $ok2 && 1 === $ok3 && SMC_Contracts::set_all_roles_pending( $user_id, $next_applicant_version );
 		$sessions_ok = $role_ok && SMC_Security::revoke_all_sessions( $user_id, 'guardian_consent_withdrawn' );
 		$audit_ok = $sessions_ok && SMC_Security::audit( 'guardian_consent_withdrawn', $user_id, array( 'applicant_version' => $next_applicant_version ) );
 		if ( 1 !== $ok1 || 1 !== $ok2 || 1 !== $ok3 || ! $role_ok || ! $sessions_ok || ! $audit_ok ) {

@@ -52,7 +52,8 @@ final class SMC_Contracts {
 			),
 			array( '%d', '%s', '%s', '%s', '%s', '%d', '%s', '%s' )
 		);
-		$role_ok = 1 === $ok && self::set_exact_role( $user_id, smc_role_for_type( $type, false ) );
+		$grant_ok = 1 === $ok && self::upsert_role_grant( $user_id, $type, 'pending', 1, 0 );
+		$role_ok = $grant_ok && self::sync_wordpress_roles( $user_id );
 		$audit_ok = $role_ok && SMC_Security::audit( 'account_imported', $user_id, array( 'source' => 'wordpress' ) );
 		if ( 1 !== $ok || ! $role_ok || ! $audit_ok ) {
 			$wpdb->query( 'ROLLBACK' );
@@ -73,7 +74,15 @@ final class SMC_Contracts {
 		$two_factor_ready = SMC_Security::two_factor_ready( $user_id );
 		$session_verified = SMC_Security::session_is_verified( $user_id );
 		$approved = (bool) $state['approved'];
-		$professional_verified = ! smc_is_professional_type( $type ) || self::professional_verified( $user_id, $type );
+		$requested_types = self::requested_types( $user_id );
+		$approved_types  = self::approved_types( $user_id );
+		$professional_verified = true;
+		foreach ( $requested_types as $requested_type ) {
+			if ( smc_is_professional_type( $requested_type ) && ! self::professional_verified( $user_id, $requested_type ) ) {
+				$professional_verified = false;
+				break;
+			}
+		}
 		$phone_verified = self::contact_verified( $user_id, 'mobile' );
 		$email_verified = self::contact_verified( $user_id, 'email' );
 		$guardian_verified = ! $row || empty( $row['guardian_required'] ) || self::guardian_verified( $user_id );
@@ -89,6 +98,8 @@ final class SMC_Contracts {
 			'institutional_account'  => (bool) $state['institutional_account'],
 			'account_class'          => $state['account_class'],
 			'membership_type'        => $type,
+			'requested_membership_types' => $requested_types,
+			'approved_membership_types'  => $approved_types,
 			'status'                 => $status,
 			'approved'               => $approved,
 			'suspended'              => in_array( $status, array( 'suspended', 'rejected', 'expired', 'appeal_review', 'erasure_pending', 'invalid_application' ), true ),
@@ -103,8 +114,8 @@ final class SMC_Contracts {
 			'can_message'            => $eligible && $session_verified,
 			'can_comment'            => $eligible && $session_verified,
 			'can_book_appointment'   => $eligible && $session_verified,
-			'can_publish'            => $eligible && $session_verified && ( smc_is_founder( $user_id ) || in_array( 'sabri_doctor_verified', $roles, true ) ),
-			'can_practice'           => $eligible && 'doctor' === $type && in_array( 'sabri_doctor_verified', $roles, true ),
+			'can_publish'            => $eligible && $session_verified && ( smc_is_founder( $user_id ) || in_array( 'doctor', $approved_types, true ) ),
+			'can_practice'           => $eligible && in_array( 'doctor', $approved_types, true ),
 			'public_profile_allowed' => $eligible && $row && ( 'public' === $row['profile_visibility'] || (bool) apply_filters( 'smc_public_profile_opt_in', false, $user_id, $row ) ),
 		);
 	}
@@ -201,24 +212,148 @@ final class SMC_Contracts {
 		return ! array_diff( $required, $approved );
 	}
 
-	public static function set_exact_role( $user_id, $role ) {
-		$user = get_userdata( absint( $user_id ) );
+	private static function role_type( $role ) {
 		$role = sanitize_key( $role );
-		$allowed = array();
 		foreach ( array_keys( smc_account_types() ) as $type ) {
-			$allowed[] = smc_role_for_type( $type, false );
-			$allowed[] = smc_role_for_type( $type, true );
+			if ( $role === smc_role_for_type( $type, false ) ) {
+				return array( $type, 'pending' );
+			}
+			if ( $role === smc_role_for_type( $type, true ) ) {
+				return array( $type, 'approved' );
+			}
 		}
-		$allowed = array_values( array_unique( array_filter( $allowed ) ) );
-		if ( ! $user || smc_privacy_erasure_lock( $user_id ) || user_can( $user, 'manage_options' ) || ! in_array( $role, $allowed, true ) ) {
+		return false;
+	}
+
+	private static function grants_table_exists() {
+		global $wpdb;
+		$table = $wpdb->prefix . 'smc_role_grants';
+		return $table === $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) );
+	}
+
+	public static function role_grants( $user_id ) {
+		global $wpdb;
+		if ( ! self::grants_table_exists() ) {
+			$app = smc_application( $user_id );
+			return $app ? array( array( 'membership_type' => sanitize_key( $app['membership_type'] ), 'status' => 'approved' === $app['status'] ? 'approved' : 'pending' ) ) : array();
+		}
+		return (array) $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}smc_role_grants WHERE user_id=%d ORDER BY membership_type", absint( $user_id ) ), ARRAY_A );
+	}
+
+	public static function requested_types( $user_id ) {
+		$types = array();
+		foreach ( self::role_grants( $user_id ) as $grant ) {
+			if ( in_array( $grant['status'], array( 'pending', 'approved', 'suspended' ), true ) ) {
+				$types[] = sanitize_key( $grant['membership_type'] );
+			}
+		}
+		return smc_sanitize_membership_types( $types );
+	}
+
+	public static function approved_types( $user_id ) {
+		$types = array();
+		foreach ( self::role_grants( $user_id ) as $grant ) {
+			if ( 'approved' === $grant['status'] && ( empty( $grant['expires_at'] ) || strtotime( $grant['expires_at'] . ' UTC' ) >= time() ) ) {
+				$types[] = sanitize_key( $grant['membership_type'] );
+			}
+		}
+		return array_values( array_unique( array_intersect( array_keys( smc_account_types() ), $types ) ) );
+	}
+
+	public static function upsert_role_grant( $user_id, $type, $status, $application_version = 1, $actor_id = 0 ) {
+		global $wpdb;
+		$type = sanitize_key( $type );
+		$status = sanitize_key( $status );
+		if ( ! isset( smc_account_types()[ $type ] ) || ! in_array( $status, array( 'pending', 'approved', 'suspended', 'rejected' ), true ) || ! self::grants_table_exists() ) {
 			return false;
 		}
-		foreach ( smc_managed_roles() as $managed ) {
-			$user->remove_role( $managed );
+		$now = current_time( 'mysql', true );
+		$sql = $wpdb->prepare(
+			"INSERT INTO {$wpdb->prefix}smc_role_grants (user_id,membership_type,status,source_application_version,approved_by,approved_at,created_at,updated_at)
+			VALUES (%d,%s,%s,%d,%d,NULLIF(%s,''),%s,%s)
+			ON DUPLICATE KEY UPDATE status=VALUES(status),source_application_version=VALUES(source_application_version),approved_by=VALUES(approved_by),approved_at=VALUES(approved_at),updated_at=VALUES(updated_at)",
+			absint( $user_id ), $type, $status, max( 1, absint( $application_version ) ), absint( $actor_id ), 'approved' === $status ? $now : '', $now, $now
+		);
+		return false !== $wpdb->query( $sql );
+	}
+
+	public static function replace_requested_types( $user_id, $types, $application_version ) {
+		global $wpdb;
+		$types = smc_sanitize_membership_types( $types );
+		if ( ! self::grants_table_exists() ) {
+			return false;
 		}
-		$user->add_role( $role );
-		$roles = (array) get_userdata( absint( $user_id ) )->roles;
-		return in_array( $role, $roles, true ) && 1 === count( array_intersect( $roles, $allowed ) );
+		$current = self::role_grants( $user_id );
+		foreach ( $current as $grant ) {
+			if ( ! in_array( $grant['membership_type'], $types, true ) ) {
+				$wpdb->delete( $wpdb->prefix . 'smc_role_grants', array( 'id' => (int) $grant['id'] ), array( '%d' ) );
+			}
+		}
+		foreach ( $types as $type ) {
+			if ( ! self::upsert_role_grant( $user_id, $type, 'pending', $application_version, 0 ) ) {
+				return false;
+			}
+		}
+		return self::sync_wordpress_roles( $user_id );
+	}
+
+	public static function sync_wordpress_roles( $user_id ) {
+		$user = get_userdata( absint( $user_id ) );
+		if ( ! $user || smc_privacy_erasure_lock( $user_id ) || user_can( $user, 'manage_options' ) ) {
+			return false;
+		}
+		$desired = array();
+		foreach ( self::role_grants( $user_id ) as $grant ) {
+			if ( ! in_array( $grant['status'], array( 'pending', 'approved' ), true ) ) {
+				continue;
+			}
+			$desired[] = smc_role_for_type( $grant['membership_type'], 'approved' === $grant['status'] );
+		}
+		$desired = array_values( array_unique( array_filter( $desired ) ) );
+		foreach ( smc_membership_roles() as $managed ) {
+			if ( ! in_array( $managed, $desired, true ) ) {
+				$user->remove_role( $managed );
+			}
+		}
+		foreach ( $desired as $role ) {
+			$user->add_role( $role );
+		}
+		$actual = (array) get_userdata( absint( $user_id ) )->roles;
+		return ! array_diff( $desired, $actual ) && ! array_diff( array_intersect( $actual, smc_membership_roles() ), $desired );
+	}
+
+	public static function approve_requested_roles( $user_id, $application_version, $actor_id ) {
+		$types = self::requested_types( $user_id );
+		foreach ( $types as $type ) {
+			if ( ! self::upsert_role_grant( $user_id, $type, 'approved', $application_version, $actor_id ) ) {
+				return false;
+			}
+		}
+		return self::sync_wordpress_roles( $user_id );
+	}
+
+	public static function set_all_roles_pending( $user_id, $application_version = 1 ) {
+		$types = self::requested_types( $user_id );
+		foreach ( $types as $type ) {
+			if ( ! self::upsert_role_grant( $user_id, $type, 'pending', $application_version, 0 ) ) {
+				return false;
+			}
+		}
+		return self::sync_wordpress_roles( $user_id );
+	}
+
+	/** Backward-compatible single-role mutation that preserves all other grants. */
+	public static function set_exact_role( $user_id, $role ) {
+		$parsed = self::role_type( $role );
+		if ( ! $parsed ) {
+			return false;
+		}
+		$app = smc_application( $user_id );
+		$version = $app ? (int) $app['row_version'] : 1;
+		if ( ! self::upsert_role_grant( $user_id, $parsed[0], $parsed[1], $version, get_current_user_id() ) ) {
+			return false;
+		}
+		return self::sync_wordpress_roles( $user_id );
 	}
 
 	public static function record_session( $logged_in_cookie, $expire, $expiration, $user_id, $scheme, $token ) {
