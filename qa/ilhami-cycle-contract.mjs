@@ -30,7 +30,8 @@ assert(contracts.includes("$wpdb->prefix . 'smc_contact_otps'"), 'Contact change
 assert(contracts.includes("policy_version=%s AND withdrawn_at IS NULL"), 'Guardian assertion requires current unwithdrawn policy consent');
 assert(contracts.includes("'phone_e164_enc' => $phone_enc"), 'Canonical phone follows the authentication phone change');
 assert(workflow.includes("$applicant_version = (int) $app['row_version'] + 1;"), 'Initial submission advances applicant generation');
-assert(workflow.includes('$user_id, $status, $applicant_version, $now, $now, $now'), 'Request binds to the resulting applicant generation');
+assert(workflow.includes('$user_id, $status, $queue_type, $trace_id, $sla_due, $applicant_version, $now, $now, $now'), 'Request binds queue, trace, SLA and resulting applicant generation');
+assert(workflow.includes('SET status=%s,submitted_at=%s,updated_at=%s,row_version=row_version+1 WHERE user_id=%d AND row_version=%d'), 'Application submission advances the exact locked generation');
 assert(workflow.indexOf("INSERT INTO {$wpdb->prefix}smc_contact_otps") < workflow.indexOf("apply_filters( 'smc_send_contact_otp'"), 'OTP verifier row is persisted before delivery and removed on delivery failure');
 assert(workflow.indexOf("apply_filters( 'smc_send_guardian_invitation'") < workflow.indexOf("INSERT INTO {$wpdb->prefix}smc_guardian_consents"), 'Guardian secret is delivered before a usable invitation row is committed');
 assert(workflow.includes('write_user_meta_verified'), '2FA pending/enabled metadata is read-after-write verified');
