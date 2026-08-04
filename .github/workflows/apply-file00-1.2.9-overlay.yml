@@ -30,8 +30,9 @@ jobs:
           test "$(sha256sum /tmp/file00-overlay.tgz | awk '{print $1}')" = "f35642fcdcbcccdb3edb9a087fa4b276fb07f0e560d1eb1d0056c159d924ac3b"
           mkdir -p /tmp/file00-overlay
           tar -xzf /tmp/file00-overlay.tgz -C /tmp/file00-overlay
-          git apply --check /tmp/file00-overlay/source-1.2.9.patch
-          git apply /tmp/file00-overlay/source-1.2.9.patch
+          awk 'BEGIN{skip=1} /^diff -ruN a\/source\/sabri-membership-core\/README.txt /{skip=0} !skip{print}' /tmp/file00-overlay/source-1.2.9.patch > /tmp/file00-overlay/source-1.2.9.repo.patch
+          git apply --check /tmp/file00-overlay/source-1.2.9.repo.patch
+          git apply /tmp/file00-overlay/source-1.2.9.repo.patch
           cp -a /tmp/file00-overlay/files/. .
           rm -f dist/00-sabri-membership-core-1.2.8.zip
           rm -f .github/file00-1.2.9-overlay.part*
