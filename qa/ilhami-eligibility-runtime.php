@@ -20,6 +20,13 @@ function smc_is_professional_type($type){ return in_array($type,['doctor','teach
 function smc_is_founder($uid){ return false; }
 function smc_policy(){ return ['version'=>'2026.1']; }
 function smc_required_identity_documents(){ return ['government_id'=>'Government identity']; }
+function smc_account_types(){ return ['member'=>'Member','doctor'=>'Doctor','teacher'=>'Teacher','researcher'=>'Researcher']; }
+function smc_sanitize_membership_types($types){
+  $allowed=array_keys(smc_account_types());
+  $clean=[];
+  foreach((array)$types as $type){ $type=sanitize_key($type); if(in_array($type,$allowed,true)) $clean[]=$type; }
+  return array_values(array_unique($clean));
+}
 function get_userdata($uid){ return $GLOBALS['users'][(int)$uid] ?? false; }
 function get_user_meta($uid,$key,$single=true){ return ''; }
 function user_can($user,$cap){ return false; }
