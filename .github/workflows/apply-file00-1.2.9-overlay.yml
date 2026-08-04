@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - codex/file00-dual-plan-completion-1.2.9
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -11,7 +14,7 @@ permissions:
 
 jobs:
   apply:
-    if: github.ref == 'refs/heads/codex/file00-dual-plan-completion-1.2.9'
+    if: github.head_ref == 'codex/file00-dual-plan-completion-1.2.9' || github.ref == 'refs/heads/codex/file00-dual-plan-completion-1.2.9'
     runs-on: ubuntu-latest
     steps:
       - name: Check out corrective branch
@@ -23,7 +26,6 @@ jobs:
       - name: Decode, verify and apply the reviewed overlay
         run: |
           set -euo pipefail
-          # Concatenate only the immutable reviewed payload parts in lexical order.
           cat .github/file00-1.2.9-overlay.part* | base64 -d > /tmp/file00-overlay.tgz
           test "$(sha256sum /tmp/file00-overlay.tgz | awk '{print $1}')" = "f35642fcdcbcccdb3edb9a087fa4b276fb07f0e560d1eb1d0056c159d924ac3b"
           mkdir -p /tmp/file00-overlay
