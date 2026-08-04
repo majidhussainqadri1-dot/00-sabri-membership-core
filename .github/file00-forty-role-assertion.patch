@@ -1,0 +1,7 @@
+--- a/qa/forty-round-contract.mjs
++++ b/qa/forty-round-contract.mjs
+@@ -35,7 +35,7 @@
+ assert(!installer.includes("if ( ! $locked ) {\n\t\t\tdelete_option( 'smc_schema_owner_lock' )"), 'Lock acquisition failure does not delete another owner lock');
+-assert(contracts.includes('$allowed = array_values( array_unique( array_filter( $allowed ) ) );') && contracts.includes('! in_array( $role, $allowed, true )'), 'Role mutation has an explicit managed-role allowlist');
++assert(contracts.includes('smc_sanitize_membership_types') && contracts.includes('isset( smc_account_types()[ $type ] )') && contracts.includes('smc_membership_roles()'), 'Role grants and synchronization use canonical managed-role allowlists');
+ assert(contracts.includes("user_can( $user, 'manage_options' )"), 'WordPress administrator exclusion is preserved');
