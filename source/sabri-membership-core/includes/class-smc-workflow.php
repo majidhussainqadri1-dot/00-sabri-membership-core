@@ -192,7 +192,9 @@ final class SMC_Workflow {
 		$id_number = strtoupper( sanitize_text_field( wp_unslash( $_POST['identity_number'] ?? '' ) ) );
 		$country = strtoupper( sanitize_text_field( wp_unslash( $_POST['issuing_country'] ?? '' ) ) );
 		$age = smc_age_from_dob( $dob );
-		$has_professional = (bool) array_intersect( $types, smc_professional_types() );
+		$has_professional = (bool) array_filter( $types, 'smc_is_professional_type' );
+		$baseline_minimum = smc_minimum_age_for_gender( $gender );
+		$effective_minimum = smc_effective_minimum_age( $gender, $residence_country );
 		if (
 			'' === $legal_name || false === $age || ! isset( smc_allowed_genders()[ $gender ] ) ||
 			! $types || is_wp_error( $phone ) ||
@@ -200,7 +202,8 @@ final class SMC_Workflow {
 			! in_array( $id_type, array( 'national_id', 'passport' ), true ) ||
 			! preg_match( '/^[A-Z]{2}$/', $country ) ||
 			! preg_match( '/^[A-Z0-9][A-Z0-9 -]{4,23}$/', $id_number ) ||
-			$age < smc_effective_minimum_age( $gender, $residence_country ) ||
+			false === $baseline_minimum || false === $effective_minimum ||
+			$age < $effective_minimum ||
 			( $age < 18 && $has_professional ) ||
 			empty( $_POST['truth'] ) || empty( $_POST['privacy'] ) || empty( $_POST['terms'] ) || empty( $_POST['ethical'] )
 		) {

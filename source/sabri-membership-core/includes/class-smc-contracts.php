@@ -2,6 +2,7 @@
 defined( 'ABSPATH' ) || exit;
 
 final class SMC_Contracts {
+	private const DOCTOR_APPROVED_ROLE = 'sabri_doctor_verified';
 	private static $restricted_caps = array(
 		'upload_files',
 		'edit_posts',
