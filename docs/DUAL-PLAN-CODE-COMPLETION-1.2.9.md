@@ -44,3 +44,7 @@ This release can complete repository-correctable source, migrations, contracts, 
 ## Review rule
 
 Two fresh review-and-fix rounds and exact-head PHP 7.4/8.3 workflows have passed. Any future failure or new evidence reopens correction; repository completion remains distinct from external staging and production acceptance.
+
+## Main merge evidence
+
+PR #17 merged successfully to `main` at `1e76d4de96005d994da6ffe93939362442111cee`. This post-merge reconciliation changes evidence only and does not alter runtime, schema, contract or package source.

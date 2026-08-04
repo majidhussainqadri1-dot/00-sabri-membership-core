@@ -16,6 +16,7 @@ Canonical membership eligibility, identity assurance, guardian consent, multiple
 - Package SHA-256: `4113dc77688eb9ee6052eabd2ab20817f69ed8cf5a2899a98276d4b8b1d8750f`
 - Repository-correctable code completion: **100%**
 - Known unresolved repository defects: **0**
+- Runtime merge to `main`: `1e76d4de96005d994da6ffe93939362442111cee` — **completed**
 - Staging accepted: **No**
 - Production/live approval: **No**
 
