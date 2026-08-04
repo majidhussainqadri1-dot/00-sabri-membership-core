@@ -2,7 +2,7 @@
 
 ## Current state
 
-**File 00 1.2.9 dual-plan corrective candidate — repository-correctable gaps implemented; exact-head automated verification pending.**
+**File 00 1.2.9 executable dual-plan repository completion verified on PHP 7.4 and PHP 8.3; deterministic package and 100-requirement evidence passed.**
 
 ## Implemented in 1.2.9
 
@@ -19,9 +19,14 @@
 
 ## Authorization
 
-- Repository code candidate: **1.2.9 / schema 1.3.0**
-- Known unresolved repository defects before exact-head CI: **0 known after local fresh review**
-- Exact-head CI: **Pending**
+- Repository code release: **1.2.9 / schema 1.3.0**
+- Verified source head: `f67a67ec027b2a01fe1646c64f3d882f898f83dd`
+- Dual-Plan QA: `30886140689` — **success**
+- PHP 7.4/8.3 Contract Integrity: `30886140688` — **success**
+- Artifact: `8883145342`
+- Package SHA-256: `4113dc77688eb9ee6052eabd2ab20817f69ed8cf5a2899a98276d4b8b1d8750f`
+- Repository-correctable code completion: **100%**
+- Known unresolved repository defects: **0**
 - Merge to main: **Pending**
 - Staging accepted: **No**
 - Production/live authorized: **No**

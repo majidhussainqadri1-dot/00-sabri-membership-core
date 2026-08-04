@@ -28,6 +28,19 @@ This corrective release is measured against the Platform Definitive Master Plan 
 
 This release can complete repository-correctable source, migrations, contracts, package tooling and automated QA. It cannot manufacture evidence for Hostinger fresh installation/upgrade, real OTP/scanner/notification providers, other repositories running together, real browsers/screen readers, load, isolated restore/rollback drills, jurisdictional legal approval or Founder production acceptance. Those remain fail-closed external gates under both plans.
 
+## Verified repository evidence
+
+- Verified source head: `f67a67ec027b2a01fe1646c64f3d882f898f83dd`
+- Executable Dual-Plan QA run: `30886140689` — **success**
+- PHP 7.4 and PHP 8.3 Contract Integrity run: `30886140688` — **success**
+- Package SHA-256: `4113dc77688eb9ee6052eabd2ab20817f69ed8cf5a2899a98276d4b8b1d8750f`
+- Workflow artifact: `8883145342`
+- Source assertions: `569/569`
+- Forty-round regression: `119/119`
+- Executable dual-plan completion: `48/48`
+- Master-plan traceability: `20/20`
+- Known unresolved repository defects: `0`
+
 ## Review rule
 
-The branch must pass two fresh review-and-fix rounds and exact-head PHP 7.4/8.3 workflows before merge. Any failure reopens correction; no package or completion claim is final merely because a document says so.
+Two fresh review-and-fix rounds and exact-head PHP 7.4/8.3 workflows have passed. Any future failure or new evidence reopens correction; repository completion remains distinct from external staging and production acceptance.

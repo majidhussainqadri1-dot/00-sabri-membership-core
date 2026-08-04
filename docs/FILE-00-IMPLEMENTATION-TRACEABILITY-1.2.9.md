@@ -1,13 +1,14 @@
 # File 00 — Implementation Traceability 1.2.9
 
-> Release 1.2.9 closes the repository-correctable gaps discovered by direct source review. Automated exact-head evidence is pending until this branch CI succeeds. External acceptance is deliberately separate.
+> Release 1.2.9 closes the repository-correctable gaps discovered by direct source review. Source head `f67a67ec027b2a01fe1646c64f3d882f898f83dd` passed executable Dual-Plan QA `30886140689` and PHP 7.4/8.3 Contract Integrity `30886140688`. External acceptance remains deliberately separate.
 
 ## Governing artifacts
 
 - Platform Definitive Master Plan v3.0 SHA-256: `bd171fe39da8c10294d7cf1a92bc9ce917b082905b978280a25e1e3c9ec617e0`
 - File 00 Four-Round Reviewed Final Master Plan SHA-256: `3b1f81aa8aed39c76be9e6e2da3eef4e6671a581c13c359f52d163c9bbc6bc9d`
 - Runtime `1.2.9`; contract `1.1.2`; schema `1.3.0`
-- Repository-correctable code completion: **100% candidate, subject to exact-head CI**
+- Repository-correctable code completion: **100% verified**
+- Package SHA-256: `4113dc77688eb9ee6052eabd2ab20817f69ed8cf5a2899a98276d4b8b1d8750f`; artifact: `8883145342`
 - Staging accepted: **No**; production approved: **No**; live authorized: **No**
 
 ## Requirement matrix
