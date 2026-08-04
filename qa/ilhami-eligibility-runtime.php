@@ -34,15 +34,18 @@ class SMC_Security {
 }
 class FakeWpdb {
   public string $prefix='wp_';
+  public function esc_like($value){ return addcslashes((string)$value, '_%\\'); }
   public function prepare($q,...$args){ return ['q'=>$q,'args'=>$args]; }
   public function get_var($prepared){
     $q=$prepared['q']; $a=$prepared['args'];
+    if (false !== strpos($q,'SHOW TABLES LIKE')) return $this->prefix.'smc_role_grants';
     if (false !== strpos($q,'smc_guardian_consents')) return $GLOBALS['guardians'][(int)$a[0]] ?? '';
     if (false !== strpos($q,'smc_contact_otps')) return !empty($GLOBALS['contacts'][(int)$a[0]][(string)$a[1]]) ? 1 : 0;
     return null;
   }
   public function get_results($prepared,$format=null){
     $q=$prepared['q']; $a=$prepared['args'];
+    if (false !== strpos($q,'smc_role_grants')) return [];
     if (false === strpos($q,'smc_identity_documents')) return [];
     $uid=(int)$a[0];
     return array_map(static fn($key)=>['document_key'=>$key],array_keys($GLOBALS['documents'][$uid] ?? []));
