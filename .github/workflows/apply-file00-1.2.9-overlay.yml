@@ -1,0 +1,41 @@
+name: Apply File 00 1.2.9 corrective overlay
+
+on:
+  push:
+    branches:
+      - codex/file00-dual-plan-completion-1.2.9
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.ref == 'refs/heads/codex/file00-dual-plan-completion-1.2.9'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out corrective branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: codex/file00-dual-plan-completion-1.2.9
+          fetch-depth: 0
+
+      - name: Decode, verify and apply the reviewed overlay
+        run: |
+          set -euo pipefail
+          cat .github/file00-1.2.9-overlay.part* | base64 -d > /tmp/file00-overlay.tgz
+          test "$(sha256sum /tmp/file00-overlay.tgz | awk '{print $1}')" = "f35642fcdcbcccdb3edb9a087fa4b276fb07f0e560d1eb1d0056c159d924ac3b"
+          mkdir -p /tmp/file00-overlay
+          tar -xzf /tmp/file00-overlay.tgz -C /tmp/file00-overlay
+          git apply --check /tmp/file00-overlay/source-1.2.9.patch
+          git apply /tmp/file00-overlay/source-1.2.9.patch
+          cp -a /tmp/file00-overlay/files/. .
+          rm -f dist/00-sabri-membership-core-1.2.8.zip
+          rm -f .github/file00-1.2.9-overlay.part*
+          rm -f .github/workflows/apply-file00-1.2.9-overlay.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "File 00 1.2.9: complete executable dual-plan code gaps"
+          git push origin HEAD:codex/file00-dual-plan-completion-1.2.9
