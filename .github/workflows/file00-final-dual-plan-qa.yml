@@ -1,13 +1,10 @@
-name: File 00 Version 1.2.8 Forty-Round Dual-Plan QA
+name: File 00 Version 1.2.9 Executable Dual-Plan QA
 
 on:
   pull_request:
-    branches:
-      - main
+    branches: [main]
   push:
-    branches:
-      - main
-      - codex/**
+    branches: [main, 'codex/**']
   workflow_dispatch:
 
 permissions:
@@ -15,69 +12,53 @@ permissions:
 
 jobs:
   verify:
-    name: Build, test, verify package, 100 requirements and 40 review rounds
+    name: Build, test, verify 100 requirements and executable gap closure
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - name: Check out exact immutable source
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           fetch-depth: 0
           persist-credentials: false
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-
-      - name: Set up Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
           cache: npm
-
-      - name: Set up Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: '3.12'
-
-      - name: Set up PHP
-        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240
         with:
           php-version: '8.3'
           coverage: none
           tools: none
-
       - name: Install locked QA dependencies
         run: npm ci --ignore-scripts
-
       - name: Build and verify deterministic package
         run: npm run verify
-
-      - name: Verify final release identity and forty-round evidence
+      - name: Verify final candidate identity and evidence
         run: |
           set -euo pipefail
-          grep -Fq 'Version: 1.2.8' source/sabri-membership-core/sabri-membership-core.php
-          grep -Fq "define( 'SMC_VERSION', '1.2.8' )" source/sabri-membership-core/sabri-membership-core.php
-          grep -Fq "define( 'SMC_DB_VERSION', '1.2.0' )" source/sabri-membership-core/sabri-membership-core.php
-          grep -Fq "define( 'SMC_CONTRACT_VERSION', '1.1.2' )" source/sabri-membership-core/sabri-membership-core.php
-          test -f qa/forty-round-contract.mjs
-          test -f docs/FORTY-ROUND-REVIEW-1.2.8.md
-          test -f docs/FILE-00-IMPLEMENTATION-TRACEABILITY-1.2.8.md
-          test -f docs/FINAL-PLAN-COMPLETION-1.2.8.md
-          test -f dist/00-sabri-membership-core-1.2.8.zip
-          test -f dist/CHECKSUMS.sha256
-          test "$(grep -Ec '^## Review Round [0-9]{2} —' docs/FORTY-ROUND-REVIEW-1.2.8.md)" -eq 40
-          test "$(grep -Ec '^\| F00-R[0-9]{3} \|' docs/FILE-00-IMPLEMENTATION-TRACEABILITY-1.2.8.md)" -eq 100
-          node qa/forty-round-contract.mjs
-
-      - name: Upload verified 1.2.8 package and review evidence
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+          grep -Fq 'Version: 1.2.9' source/sabri-membership-core/sabri-membership-core.php
+          grep -Fq "define( 'SMC_DB_VERSION', '1.3.0' )" source/sabri-membership-core/sabri-membership-core.php
+          test -f qa/dual-plan-runtime-completion-contract.mjs
+          test -f docs/DUAL-PLAN-CODE-COMPLETION-1.2.9.md
+          test -f docs/FILE-00-IMPLEMENTATION-TRACEABILITY-1.2.9.md
+          test -f dist/00-sabri-membership-core-1.2.9.zip
+          test "$(grep -Ec '^\| F00-R[0-9]{3} \|' docs/FILE-00-IMPLEMENTATION-TRACEABILITY-1.2.9.md)" -eq 100
+          node qa/dual-plan-runtime-completion-contract.mjs
+      - name: Upload verified package and evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: 00-sabri-membership-core-1.2.8-${{ github.sha }}
+          name: 00-sabri-membership-core-1.2.9-${{ github.sha }}
           path: |
-            dist/00-sabri-membership-core-1.2.8.zip
+            dist/00-sabri-membership-core-1.2.9.zip
             dist/CHECKSUMS.sha256
             docs/FILE-00-MASTER-PLAN-2026.md
-            docs/FILE-00-IMPLEMENTATION-TRACEABILITY-1.2.8.md
-            docs/FORTY-ROUND-REVIEW-1.2.8.md
-            docs/FINAL-PLAN-COMPLETION-1.2.8.md
+            docs/FILE-00-IMPLEMENTATION-TRACEABILITY-1.2.9.md
+            docs/DUAL-PLAN-CODE-COMPLETION-1.2.9.md
             qa/requirements-traceability.json
           if-no-files-found: error
           retention-days: 30
