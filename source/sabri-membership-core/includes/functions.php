@@ -59,15 +59,55 @@ function smc_role_for_type( $type, $approved = false ) {
 	return isset( $map[ $type ] ) ? $map[ $type ] : $map['member'];
 }
 
-function smc_managed_roles() {
+function smc_membership_roles() {
 	$roles = array();
 	foreach ( array_keys( smc_account_types() ) as $type ) {
 		$roles[] = smc_role_for_type( $type, false );
 		$roles[] = smc_role_for_type( $type, true );
 	}
-	$roles[] = 'sabri_membership_reviewer';
-	$roles[] = 'sabri_membership_senior_reviewer';
 	return array_values( array_unique( $roles ) );
+}
+
+function smc_managed_roles() {
+	return array_merge( smc_membership_roles(), array( 'sabri_membership_reviewer', 'sabri_membership_senior_reviewer' ) );
+}
+
+function smc_sanitize_membership_types( $types ) {
+	$types = is_array( $types ) ? $types : array( $types );
+	$types = array_values( array_unique( array_map( 'sanitize_key', $types ) ) );
+	$types = array_values( array_intersect( array_keys( smc_account_types() ), $types ) );
+	return $types ? $types : array( 'member' );
+}
+
+function smc_review_queue_types() {
+	return array(
+		'new'          => __( 'New applications', 'sabri-membership-core' ),
+		'resubmitted'  => __( 'Resubmitted applications', 'sabri-membership-core' ),
+		'guardian'     => __( 'Guardian verification', 'sabri-membership-core' ),
+		'identity'     => __( 'Identity evidence', 'sabri-membership-core' ),
+		'professional' => __( 'Professional verification', 'sabri-membership-core' ),
+		'expiry'       => __( 'Expiring or expired evidence', 'sabri-membership-core' ),
+		'appeal'       => __( 'Appeals and restoration', 'sabri-membership-core' ),
+		'erasure'      => __( 'Erasure and retention', 'sabri-membership-core' ),
+	);
+}
+
+function smc_review_reason_codes() {
+	return array(
+		'identity_match'          => __( 'Identity evidence matched', 'sabri-membership-core' ),
+		'identity_mismatch'       => __( 'Identity evidence mismatch', 'sabri-membership-core' ),
+		'missing_evidence'        => __( 'Required evidence is missing', 'sabri-membership-core' ),
+		'guardian_verified'       => __( 'Guardian authority verified', 'sabri-membership-core' ),
+		'guardian_invalid'        => __( 'Guardian authority is insufficient', 'sabri-membership-core' ),
+		'professional_verified'   => __( 'Professional owner verification satisfied', 'sabri-membership-core' ),
+		'professional_pending'    => __( 'Professional owner verification pending', 'sabri-membership-core' ),
+		'policy_ineligible'       => __( 'Current policy eligibility not satisfied', 'sabri-membership-core' ),
+		'appeal_upheld'           => __( 'Appeal upheld and membership restored', 'sabri-membership-core' ),
+		'appeal_denied'           => __( 'Appeal denied on current evidence', 'sabri-membership-core' ),
+		'security_restriction'    => __( 'Security restriction required', 'sabri-membership-core' ),
+		'privacy_erasure'         => __( 'Privacy erasure or retention workflow', 'sabri-membership-core' ),
+		'more_information'        => __( 'More information required', 'sabri-membership-core' ),
+	);
 }
 
 function smc_professional_types() {
@@ -124,6 +164,21 @@ function smc_minimum_age_for_gender( $gender ) {
 	}
 	$policy = smc_policy();
 	return 'female' === $gender ? (int) $policy['female_minimum_age'] : (int) $policy['male_minimum_age'];
+}
+
+/**
+ * Return the stricter approved jurisdictional minimum without weakening the
+ * Founder-approved sex-specific baseline. Jurisdiction policy is supplied by
+ * an approved legal/child-safety adapter and may only raise the minimum.
+ */
+function smc_effective_minimum_age( $gender, $country = '' ) {
+	$baseline = smc_minimum_age_for_gender( $gender );
+	if ( false === $baseline ) {
+		return false;
+	}
+	$country = strtoupper( sanitize_text_field( $country ) );
+	$jurisdiction = (int) apply_filters( 'smc_jurisdiction_minimum_age', $baseline, $country, sanitize_key( $gender ) );
+	return max( (int) $baseline, $jurisdiction );
 }
 
 function smc_normalize_phone( $value ) {

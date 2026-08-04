@@ -2,35 +2,31 @@
 
 ## Current state
 
-**File 00 1.2.8 forty-review repository release — forty review/fix rounds, exact-head automated QA and runtime merge to main completed.**
+**File 00 1.2.9 executable dual-plan repository completion verified on PHP 7.4 and PHP 8.3; deterministic package and 100-requirement evidence passed.**
 
-## Completed and verified
+## Implemented in 1.2.9
 
-- Forty consecutive, separately recorded review-and-correction rounds.
-- Runtime version `1.2.8`; contract `1.1.2`; schema `1.2.0`.
-- Approval request/application/identity/guardian/document row locking and exact evidence snapshots.
-- Current document evidence included in effective eligibility.
-- Absolute/canonical private storage and strict UUID-v4 file identities.
-- Verified plaintext cleanup, audit-coupled document commit and safe deferred deletion.
-- Lifecycle and worker overlap/claim controls.
-- Contact OTP persist-before-delivery.
-- TOTP replay protection, revoked-session non-resurrection, exact revoke-one/revoke-all, inactivity and atomic recovery codes.
-- Streaming audit-chain verification.
-- CF-01 session-MFA, bounded timing, DB rate limiting and atomic recovery/TOTP audit behavior.
-- Forty-round anti-regression contract.
+- progressive seven-step application, encrypted server-side autosave/resume, upload progress and duplicate-submit containment;
+- multiple independent role grants and least-privilege projection;
+- country/city/encrypted address and distinct privacy/terms/ethical consents;
+- jurisdiction adapter that can only raise the approved age baseline;
+- persistent application repair/reconciliation and dead-letter visibility;
+- assignment/SLA/conflict/reason-code/appeal-restoration reviewer governance;
+- private-route noindex/noarchive/no-store;
+- durable versioned outbox/inbox with dedupe and replay safety;
+- Safe Mode, health/repair, backup manifest, post-restore reconciliation, named owners and SLOs;
+- executable dual-plan runtime completion contract.
 
-## Current authorization
+## Authorization
 
-- Repository source review cycles: **40/40 complete**
+- Repository code release: **1.2.9 / schema 1.3.0**
+- Verified source head: `f67a67ec027b2a01fe1646c64f3d882f898f83dd`
+- Dual-Plan QA: `30886140689` — **success**
+- PHP 7.4/8.3 Contract Integrity: `30886140688` — **success**
+- Artifact: `8883145342`
+- Package SHA-256: `4113dc77688eb9ee6052eabd2ab20817f69ed8cf5a2899a98276d4b8b1d8750f`
+- Repository-correctable code completion: **100%**
 - Known unresolved repository defects: **0**
-- Exact-head GitHub Actions: **Passed**
-- Final verified PR head: `e8ff52477f61a6cf446390afb337201338dabab2`
-- Final Dual-Plan QA: `30853368958` — **success**
-- CF-01 Contract Integrity: `30853369022` — **success**
-- Deterministic package SHA-256: `544395db2bb4d798dd9bcc44c14ae61b56d844568086859ecb11679413905adc`
-- Workflow artifact: `8871478716`
-- Runtime merge to main: `ca6d73e76b904512863617cd441eb85150a03b4a`
-- Staging installation candidate: **Yes**
-- Merge to main: **Completed**
+- Merge to main: **Pending**
 - Staging accepted: **No**
 - Production/live authorized: **No**

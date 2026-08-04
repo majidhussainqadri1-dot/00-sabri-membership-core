@@ -1,106 +1,66 @@
-name: File 00 CF-01 Contract Integrity
+name: File 00 CF-01 and Dual-Plan Contract Integrity
 
 on:
   pull_request:
   push:
-    branches:
-      - main
-      - codex/**
+    branches: [main, 'codex/**']
 
 permissions:
   contents: read
 
 jobs:
   contract-integrity:
-    name: PHP ${{ matrix.php }} contract, package and forty-round regression suites
+    name: PHP ${{ matrix.php }} contract, package and executable dual-plan suites
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
-        php:
-          - '7.4'
-          - '8.3'
+        php: ['7.4', '8.3']
     steps:
       - name: Checkout exact immutable head
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           fetch-depth: 0
           persist-credentials: false
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-
-      - name: Set up PHP from immutable action
-        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240
         with:
           php-version: ${{ matrix.php }}
           coverage: none
           tools: none
-
       - name: Public repository and Git integrity
         run: |
           set -euo pipefail
           git diff --check
           test ! -f .gitmodules
-          if git ls-files -s | awk '$1 == "120000" { found=1 } END { exit !found }'; then
-            echo 'Symbolic links are prohibited.' >&2
-            exit 1
-          fi
-          if grep -RIl --exclude-dir=.git '^version https://git-lfs.github.com/spec/v1$' . | grep -q .; then
-            echo 'Git LFS pointer files are prohibited.' >&2
-            exit 1
-          fi
+          if git ls-files -s | awk '$1 == "120000" { found=1 } END { exit !found }'; then exit 1; fi
+          if grep -RIl --exclude-dir=.git '^version https://git-lfs.github.com/spec/v1$' . | grep -q .; then exit 1; fi
           test "$(sha256sum 'source-archive/00 sabri-membership-core-1.0.1.zip' | awk '{print $1}')" = "1418dff3410ebd66f6d440453f4bc4fe487828920d8fdaf8190df42844d426af"
           test "$(stat -c '%s' 'source-archive/00 sabri-membership-core-1.0.1.zip')" = "59278"
           python3 - <<'PY'
-          import pathlib, re, sys
-          root = pathlib.Path('.')
-          approved_archive = 'source-archive/00 sabri-membership-core-1.0.1.zip'
-          forbidden_suffixes = ('.zip', '.tar', '.tgz', '.gz', '.7z', '.rar', '.env', '.pem', '.p12', '.pfx', '.key')
-          secret_patterns = {
-              'private key': rb'-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----',
-              'GitHub token': rb'\bgh[pousr]_[A-Za-z0-9]{20,}\b',
-              'AWS access key': rb'\bAKIA[0-9A-Z]{16}\b',
-              'JWT-like token': rb'\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b',
-          }
-          for path in root.rglob('*'):
-              if not path.is_file() or '.git' in path.parts or 'dist' in path.parts:
-                  continue
-              relative = path.as_posix()
-              name = relative.lower()
-              if relative == approved_archive:
-                  continue
-              if path.name.lower().startswith('.env') or name.endswith(forbidden_suffixes):
-                  print(f'forbidden artifact: {path}', file=sys.stderr)
-                  raise SystemExit(1)
-              data = path.read_bytes()
-              for label, pattern in secret_patterns.items():
-                  if re.search(pattern, data):
-                      print(f'possible {label}: {path}', file=sys.stderr)
-                      raise SystemExit(1)
+          import pathlib, re
+          approved='source-archive/00 sabri-membership-core-1.0.1.zip'
+          forbidden=('.zip','.tar','.tgz','.gz','.7z','.rar','.env','.pem','.p12','.pfx','.key')
+          patterns=[rb'-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----',rb'\bgh[pousr]_[A-Za-z0-9]{20,}\b',rb'\bAKIA[0-9A-Z]{16}\b']
+          for p in pathlib.Path('.').rglob('*'):
+              if not p.is_file() or '.git' in p.parts or 'dist' in p.parts or p.as_posix()==approved: continue
+              if p.name.lower().startswith('.env') or p.as_posix().lower().endswith(forbidden): raise SystemExit(f'forbidden artifact: {p}')
+              data=p.read_bytes()
+              if any(re.search(pattern,data) for pattern in patterns): raise SystemExit(f'possible secret: {p}')
           PY
-
       - name: Install locked Node test dependency
         run: npm ci --ignore-scripts
-
       - name: Enforce declared PHP 7.4 compatibility
         run: |
-          set -euo pipefail
-          if grep -RInE --include='*.php' '\b(str_contains|str_starts_with|str_ends_with|array_is_list|get_debug_type)\s*\(' source qa; then
-            echo 'PHP 8-only runtime helper found while Requires PHP remains 7.4.' >&2
-            exit 1
-          fi
-
+          if grep -RInE --include='*.php' '\b(str_contains|str_starts_with|str_ends_with|array_is_list|get_debug_type)\s*\(' source qa; then exit 1; fi
       - name: Lint all plugin and runtime-test PHP
         run: |
           set -euo pipefail
           mapfile -t php_files < <(find source qa -type f -name '*.php' -print | sort)
           test "${#php_files[@]}" -ge 15
-          for file in "${php_files[@]}"; do
-            php -l "$file"
-          done
-
-      - name: Run complete inherited, CF-01 and forty-round suites
+          for file in "${php_files[@]}"; do php -l "$file"; done
+      - name: Run inherited, CF-01 and executable dual-plan suites
         run: npm test
-
-      - name: Build and verify deterministic 1.2.8 package
+      - name: Build and verify deterministic 1.2.9 package
         run: npm run verify

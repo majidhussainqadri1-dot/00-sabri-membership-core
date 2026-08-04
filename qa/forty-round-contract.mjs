@@ -19,11 +19,11 @@ const failures = [];
 let passed = 0;
 function assert(condition, label) { if (condition) passed += 1; else failures.push(label); }
 
-assert(plugin.includes('Version: 1.2.8'), 'Plugin header is 1.2.8');
-assert(plugin.includes("define( 'SMC_VERSION', '1.2.8' )"), 'Runtime version is 1.2.8');
-assert(plugin.includes("define( 'SMC_DB_VERSION', '1.2.0' )"), 'Schema remains 1.2.0');
+assert(plugin.includes('Version: 1.2.9'), 'Plugin header is 1.2.9');
+assert(plugin.includes("define( 'SMC_VERSION', '1.2.9' )"), 'Runtime version is 1.2.9');
+assert(plugin.includes("define( 'SMC_DB_VERSION', '1.3.0' )"), 'Schema is 1.3.0');
 assert(plugin.includes("define( 'SMC_CONTRACT_VERSION', '1.1.2' )"), 'Contract remains 1.1.2');
-assert(readme.includes('Stable tag: 1.2.8'), 'Plugin readme stable tag is 1.2.8');
+assert(readme.includes('Stable tag: 1.2.9'), 'Plugin readme stable tag is 1.2.9');
 assert(plugin.includes("register_deactivation_hook( SMC_FILE, array( 'SMC_Installer', 'deactivate' ) )"), 'Deactivation hook is registered');
 assert(installer.includes('public static function deactivate()'), 'Installer exposes deactivation cleanup');
 for (const hook of ['smc_lifecycle_daily','smc_process_file_jobs','smc_continue_migration']) {
@@ -32,7 +32,7 @@ for (const hook of ['smc_lifecycle_daily','smc_process_file_jobs','smc_continue_
 }
 assert(installer.includes("hash_equals( (string) ( $stored['token'] ?? '' ), $token )"), 'Schema owner lock is owner-checked');
 assert(!installer.includes("if ( ! $locked ) {\n\t\t\tdelete_option( 'smc_schema_owner_lock' )"), 'Lock acquisition failure does not delete another owner lock');
-assert(contracts.includes('$allowed = array_values( array_unique( array_filter( $allowed ) ) );') && contracts.includes('! in_array( $role, $allowed, true )'), 'Role mutation has an explicit managed-role allowlist');
+assert(contracts.includes('smc_sanitize_membership_types') && contracts.includes('isset( smc_account_types()[ $type ] )') && contracts.includes('smc_membership_roles()'), 'Role grants and synchronization use canonical managed-role allowlists');
 assert(contracts.includes("user_can( $user, 'manage_options' )"), 'WordPress administrator exclusion is preserved');
 assert(contracts.includes('smc_privacy_erasure_lock'), 'Privacy-erasure role mutation block is preserved');
 assert(contracts.includes('identity_documents_current'), 'Identity evidence freshness predicate exists');

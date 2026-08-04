@@ -19,6 +19,10 @@ final class SMC_Installer {
 		'smc_retention_holds',
 		'smc_audit_log',
 		'smc_migrations',
+		'smc_role_grants',
+		'smc_event_outbox',
+		'smc_event_inbox',
+		'smc_application_repairs',
 	);
 
 	public static function activate() {
@@ -41,7 +45,7 @@ final class SMC_Installer {
 	}
 
 	public static function deactivate() {
-		foreach ( array( 'smc_lifecycle_daily', 'smc_process_file_jobs', 'smc_continue_migration' ) as $hook ) {
+		foreach ( array( 'smc_lifecycle_daily', 'smc_process_file_jobs', 'smc_process_event_outbox', 'smc_reconcile_applications', 'smc_continue_migration' ) as $hook ) {
 			wp_clear_scheduled_hook( $hook );
 		}
 		delete_transient( 'smc_activation_notice' );
@@ -57,6 +61,9 @@ final class SMC_Installer {
 			self::create_tables();
 			self::create_roles();
 			self::create_pages();
+			if ( ! self::backfill_role_grants() ) {
+				return;
+			}
 			self::run_legacy_batch();
 		} catch ( Throwable $error ) {
 			self::record_failure( 'upgrade', $error );
@@ -122,6 +129,9 @@ final class SMC_Installer {
 			legal_name varchar(190) NOT NULL DEFAULT '',
 			date_of_birth_enc longtext NULL,
 			gender varchar(12) NOT NULL DEFAULT '',
+			residence_country char(2) NOT NULL DEFAULT '',
+			city varchar(120) NOT NULL DEFAULT '',
+			address_enc longtext NULL,
 			phone_e164_enc longtext NULL,
 			phone_hash char(64) NULL,
 			membership_type varchar(32) NOT NULL DEFAULT 'member',
@@ -219,7 +229,14 @@ final class SMC_Installer {
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 			user_id bigint(20) unsigned NOT NULL,
 			status varchar(32) NOT NULL DEFAULT 'submitted',
+			queue_type varchar(32) NOT NULL DEFAULT 'new',
 			assigned_reviewer bigint(20) unsigned NOT NULL DEFAULT 0,
+			assigned_at datetime NULL,
+			conflict_status varchar(20) NOT NULL DEFAULT 'undeclared',
+			conflict_note text NULL,
+			reason_code varchar(64) NULL,
+			trace_id char(36) NULL,
+			sla_due_at datetime NULL,
 			reviewer_note longtext NULL,
 			applicant_version bigint(20) unsigned NOT NULL DEFAULT 1,
 			row_version bigint(20) unsigned NOT NULL DEFAULT 1,
@@ -229,7 +246,9 @@ final class SMC_Installer {
 			updated_at datetime NOT NULL,
 			PRIMARY KEY  (id),
 			UNIQUE KEY user_id (user_id),
-			KEY queue (status,assigned_reviewer)
+			KEY queue (status,queue_type,assigned_reviewer),
+			KEY sla_due_at (sla_due_at),
+			KEY trace_id (trace_id)
 		) {$c};";
 
 		$sql[] = "CREATE TABLE {$p}smc_approval_votes (
@@ -385,6 +404,79 @@ final class SMC_Installer {
 			PRIMARY KEY  (migration_key)
 		) {$c};";
 
+		$sql[] = "CREATE TABLE {$p}smc_role_grants (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			user_id bigint(20) unsigned NOT NULL,
+			membership_type varchar(32) NOT NULL,
+			status varchar(20) NOT NULL DEFAULT 'pending',
+			source_application_version bigint(20) unsigned NOT NULL DEFAULT 1,
+			approved_by bigint(20) unsigned NOT NULL DEFAULT 0,
+			approved_at datetime NULL,
+			expires_at datetime NULL,
+			created_at datetime NOT NULL,
+			updated_at datetime NOT NULL,
+			PRIMARY KEY  (id),
+			UNIQUE KEY user_type (user_id,membership_type),
+			KEY status_type (status,membership_type)
+		) {$c};";
+
+		$sql[] = "CREATE TABLE {$p}smc_event_outbox (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			event_id char(36) NOT NULL,
+			event_type varchar(80) NOT NULL,
+			event_version varchar(20) NOT NULL,
+			correlation_id char(36) NOT NULL,
+			dedupe_hash char(64) NOT NULL,
+			subject_hash char(64) NULL,
+			payload longtext NOT NULL,
+			status varchar(20) NOT NULL DEFAULT 'pending',
+			attempts smallint unsigned NOT NULL DEFAULT 0,
+			next_attempt_at datetime NOT NULL,
+			last_error text NULL,
+			delivered_at datetime NULL,
+			created_at datetime NOT NULL,
+			updated_at datetime NOT NULL,
+			PRIMARY KEY  (id),
+			UNIQUE KEY event_id (event_id),
+			UNIQUE KEY dedupe_hash (dedupe_hash),
+			KEY queue (status,next_attempt_at),
+			KEY correlation_id (correlation_id)
+		) {$c};";
+
+		$sql[] = "CREATE TABLE {$p}smc_event_inbox (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			consumer varchar(80) NOT NULL,
+			event_id char(36) NOT NULL,
+			status varchar(20) NOT NULL DEFAULT 'processing',
+			attempts smallint unsigned NOT NULL DEFAULT 0,
+			last_error text NULL,
+			received_at datetime NOT NULL,
+			processed_at datetime NULL,
+			updated_at datetime NOT NULL,
+			PRIMARY KEY  (id),
+			UNIQUE KEY consumer_event (consumer,event_id),
+			KEY status (status)
+		) {$c};";
+
+		$sql[] = "CREATE TABLE {$p}smc_application_repairs (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			trace_id char(36) NOT NULL,
+			user_id bigint(20) unsigned NOT NULL,
+			repair_type varchar(64) NOT NULL,
+			status varchar(20) NOT NULL DEFAULT 'pending',
+			details longtext NULL,
+			attempts smallint unsigned NOT NULL DEFAULT 0,
+			next_attempt_at datetime NOT NULL,
+			last_error text NULL,
+			resolved_at datetime NULL,
+			created_at datetime NOT NULL,
+			updated_at datetime NOT NULL,
+			PRIMARY KEY  (id),
+			UNIQUE KEY trace_id (trace_id),
+			KEY queue (status,next_attempt_at),
+			KEY user_id (user_id)
+		) {$c};";
+
 		foreach ( $sql as $statement ) {
 			$wpdb->last_error = '';
 			dbDelta( $statement );
@@ -424,11 +516,11 @@ final class SMC_Installer {
 		self::reconcile_role(
 			'sabri_membership_senior_reviewer',
 			__( 'Senior Membership Reviewer', 'sabri-membership-core' ),
-			array( 'read' => true, 'smc_review_verification' => true, 'smc_view_private_documents' => true, 'smc_finalize_verification' => true )
+			array( 'read' => true, 'smc_review_verification' => true, 'smc_view_private_documents' => true, 'smc_finalize_verification' => true, 'smc_restore_membership' => true )
 		);
 		$admin = get_role( 'administrator' );
 		if ( $admin ) {
-			foreach ( array( 'smc_review_verification', 'smc_view_private_documents', 'smc_finalize_verification', 'smc_manage_membership', 'smc_manage_retention_holds' ) as $cap ) {
+			foreach ( array( 'smc_review_verification', 'smc_view_private_documents', 'smc_finalize_verification', 'smc_manage_membership', 'smc_manage_retention_holds', 'smc_restore_membership', 'smc_manage_repairs' ) as $cap ) {
 				$admin->add_cap( $cap );
 			}
 		}
@@ -506,7 +598,39 @@ final class SMC_Installer {
 			update_option( 'smc_release_version', SMC_VERSION, false );
 			return;
 		}
+		if ( ! self::backfill_role_grants() ) {
+			return;
+		}
 		self::run_legacy_batch();
+	}
+
+	private static function backfill_role_grants() {
+		global $wpdb;
+		$key = 'role-grants-to-1.3.0';
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}smc_migrations WHERE migration_key=%s", $key ), ARRAY_A );
+		if ( $row && 'complete' === $row['status'] ) {
+			return true;
+		}
+		$cursor = $row ? absint( $row['cursor_value'] ) : 0;
+		$apps = $wpdb->get_results( $wpdb->prepare( "SELECT id,user_id,membership_type,status,row_version FROM {$wpdb->prefix}smc_applications WHERE id>%d ORDER BY id ASC LIMIT 200", $cursor ), ARRAY_A );
+		foreach ( (array) $apps as $app ) {
+			$type = isset( smc_account_types()[ $app['membership_type'] ] ) ? $app['membership_type'] : 'member';
+			$status = 'approved' === $app['status'] ? 'approved' : 'pending';
+			if ( ! SMC_Contracts::upsert_role_grant( (int) $app['user_id'], $type, $status, max( 1, (int) $app['row_version'] ), 0 ) || ! SMC_Contracts::sync_wordpress_roles( (int) $app['user_id'] ) ) {
+				throw new RuntimeException( 'Role-grant backfill failed.' );
+			}
+			$cursor = (int) $app['id'];
+		}
+		$status = count( (array) $apps ) < 200 ? 'complete' : 'running';
+		$now = current_time( 'mysql', true );
+		$ok = $wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->prefix}smc_migrations (migration_key,status,cursor_value,last_error,updated_at) VALUES (%s,%s,%d,NULL,%s) ON DUPLICATE KEY UPDATE status=VALUES(status),cursor_value=VALUES(cursor_value),last_error=NULL,updated_at=VALUES(updated_at)", $key, $status, $cursor, $now ) );
+		if ( false === $ok ) {
+			throw new RuntimeException( 'Role-grant migration checkpoint failed.' );
+		}
+		if ( 'running' === $status && ! wp_next_scheduled( 'smc_continue_migration' ) ) {
+			wp_schedule_single_event( time() + 30, 'smc_continue_migration' );
+		}
+		return 'complete' === $status;
 	}
 
 	private static function run_legacy_batch() {
@@ -615,6 +739,9 @@ final class SMC_Installer {
 		);
 		if ( false === $updated ) {
 			throw new RuntimeException( 'Legacy membership profile database migration failed.' );
+		}
+		if ( ! SMC_Contracts::upsert_role_grant( $user_id, $type, 'pending', 1, 0 ) ) {
+			throw new RuntimeException( 'Legacy membership role grant migration failed.' );
 		}
 		$identity = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}smc_identity_records WHERE user_id=%d LIMIT 1", $user_id ), ARRAY_A );
 		if ( $identity && 0 !== strpos( (string) $identity['document_number_enc'], SMC_Security::ENVELOPE . '.' ) ) {
