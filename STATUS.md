@@ -2,7 +2,7 @@
 
 ## Current state
 
-**File 00 1.2.10 second forty-round corrective candidate; exact-head GitHub Actions pending.**
+**File 00 1.2.10 second forty-round corrective candidate is repository-verified on PHP 7.4 and PHP 8.3; Hostinger staging and production approval remain pending.**
 
 ## Newly corrected in 1.2.10
 
@@ -17,10 +17,14 @@
 - corrupt encrypted drafts are cleared with privacy-safe audit evidence;
 - forty fresh review scopes and a dedicated regression contract are recorded.
 
-## Authorization boundary
+## Verified repository evidence
 
 - Repository candidate: **1.2.10 / schema 1.3.0 / contract 1.1.2**
-- Exact-head QA: **Pending**
-- Known unresolved repository defects: **0 pending exact-head confirmation**
+- Verified implementation head: `b952d9419e462e10d6c36b43556360e245357ee1`
+- Executable Dual-Plan QA: `30988696403` — **success**
+- PHP 7.4/8.3 Contract Integrity: `30988696372` — **success**
+- Artifact: `8923164358`
+- Package SHA-256: `6237e1e0458a1f240bb196e98b132e7f1049d43d70fbb67ce4e724719509fed2`
+- Known unresolved repository defects: **0**
 - Hostinger staging accepted: **No**
 - Production/live authorized: **No**
