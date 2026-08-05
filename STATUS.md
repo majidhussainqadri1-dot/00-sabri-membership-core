@@ -1,32 +1,10 @@
-# Status
+# File 00 Status — 1.2.11
 
-## Current state
-
-**File 00 1.2.9 executable dual-plan repository completion verified on PHP 7.4 and PHP 8.3; deterministic package and 100-requirement evidence passed.**
-
-## Implemented in 1.2.9
-
-- progressive seven-step application, encrypted server-side autosave/resume, upload progress and duplicate-submit containment;
-- multiple independent role grants and least-privilege projection;
-- country/city/encrypted address and distinct privacy/terms/ethical consents;
-- jurisdiction adapter that can only raise the approved age baseline;
-- persistent application repair/reconciliation and dead-letter visibility;
-- assignment/SLA/conflict/reason-code/appeal-restoration reviewer governance;
-- private-route noindex/noarchive/no-store;
-- durable versioned outbox/inbox with dedupe and replay safety;
-- Safe Mode, health/repair, backup manifest, post-restore reconciliation, named owners and SLOs;
-- executable dual-plan runtime completion contract.
-
-## Authorization
-
-- Repository code release: **1.2.9 / schema 1.3.0**
-- Verified source head: `f67a67ec027b2a01fe1646c64f3d882f898f83dd`
-- Dual-Plan QA: `30886140689` — **success**
-- PHP 7.4/8.3 Contract Integrity: `30886140688` — **success**
-- Artifact: `8883145342`
-- Package SHA-256: `4113dc77688eb9ee6052eabd2ab20817f69ed8cf5a2899a98276d4b8b1d8750f`
-- Repository-correctable code completion: **100%**
-- Known unresolved repository defects: **0**
-- Runtime merge to `main`: `1e76d4de96005d994da6ffe93939362442111cee` — **completed**
-- Staging accepted: **No**
-- Production/live authorized: **No**
+- Three-plan repository coding: **100% verified** at `2618d9d75896ae3881c5404511103c23ffca8d04`.
+- Three-Plan QA `31002935962`: **success**.
+- Contract Integrity `31002938897`: **success**.
+- Package SHA-256: `0dca9b3fa9995736332c40d6a44f5dc36e2ff62d771c9cbea637d022cad9c715`.
+- Repository-correctable known defects: **0**.
+- Staging accepted: **No**.
+- Live deployed: **No**.
+- Operational: **No**.

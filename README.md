@@ -1,32 +1,14 @@
 # File 00 — Sabri Membership Core
 
-Canonical membership eligibility, identity assurance, guardian consent, multiple role grants, security assertions, privacy lifecycle and verification governance for the Sabri Social Homeopathy Platform.
+Three-plan corrective candidate: plugin `1.2.11`, contract `1.2.0`, schema `1.3.0`.
 
-## Current verified repository release
+Governing sources: Definitive Master Plan v3.0; All-Chats Directives v2.1; File 00 Final Plan.
 
-- Version: `1.2.9`
-- Contract: `1.1.2`
-- Database schema: `1.3.0`
-- Governing requirements: `F00-R001` through `F00-R100`
-- Corrective scope: progressive application UX, multiple roles, application repair, reviewer governance, private-route controls, durable events and operational recovery controls
-- Verified source head: `f67a67ec027b2a01fe1646c64f3d882f898f83dd`
-- Executable Dual-Plan QA: `30886140689` — **success**
-- PHP 7.4/8.3 Contract Integrity: `30886140688` — **success**
-- Workflow artifact: `8883145342`
-- Package SHA-256: `4113dc77688eb9ee6052eabd2ab20817f69ed8cf5a2899a98276d4b8b1d8750f`
-- Repository-correctable code completion: **100%**
-- Known unresolved repository defects: **0**
-- Runtime merge to `main`: `1e76d4de96005d994da6ffe93939362442111cee` — **completed**
-- Staging accepted: **No**
-- Production/live approval: **No**
-
-## Verification
+Repository-correctable coding is 100% verified at `2618d9d75896ae3881c5404511103c23ffca8d04` by Three-Plan QA `31002935962` and Contract Integrity `31002938897`. Staging, live and operational acceptance remain pending.
 
 ```bash
 npm ci --ignore-scripts
 npm run verify
 ```
 
-See `docs/DUAL-PLAN-CODE-COMPLETION-1.2.9.md` and `docs/FILE-00-IMPLEMENTATION-TRACEABILITY-1.2.9.md`.
-
-Repository code completion never substitutes for Hostinger staging, real providers, cross-module runtime acceptance, browser/accessibility, load/recovery, legal approval or Founder production acceptance.
+Package SHA-256: `0dca9b3fa9995736332c40d6a44f5dc36e2ff62d771c9cbea637d022cad9c715`.

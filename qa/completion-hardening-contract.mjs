@@ -14,11 +14,11 @@ const failures = [];
 let passed = 0;
 function check(c, n) { if (c) passed++; else failures.push(n); }
 
-check(main.includes('Version: 1.2.9'), 'plugin header 1.2.9');
-check(main.includes("define( 'SMC_VERSION', '1.2.9' )"), 'runtime version 1.2.9');
+check(main.includes('Version: 1.2.11'), 'plugin header 1.2.11');
+check(main.includes("define( 'SMC_VERSION', '1.2.11' )"), 'runtime version 1.2.11');
 check(main.includes("define( 'SMC_DB_VERSION', '1.3.0' )"), 'schema is 1.3.0');
-check(main.includes("define( 'SMC_CONTRACT_VERSION', '1.1.2' )"), 'contract stays 1.1.2');
-check(readme.includes('Stable tag: 1.2.9'), 'readme stable tag');
+check(main.includes("define( 'SMC_CONTRACT_VERSION', '1.2.0' )"), 'contract stays 1.1.2');
+check(readme.includes('Stable tag: 1.2.11'), 'readme stable tag');
 
 check(admin.includes('private static function approval_gate'), 'approval gate helper exists');
 check(admin.includes("'pending_senior'"), 'senior pending state exists');

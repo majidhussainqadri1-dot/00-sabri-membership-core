@@ -1,8 +1,8 @@
 <?php
 declare(strict_types=1);
 define('ABSPATH', __DIR__ . '/');
-define('SMC_VERSION', '1.2.9');
-define('SMC_CONTRACT_VERSION', '1.1.2');
+define('SMC_VERSION', '1.2.11');
+define('SMC_CONTRACT_VERSION', '1.2.0');
 define('ARRAY_A', 'ARRAY_A');
 
 $GLOBALS['meta'] = [];

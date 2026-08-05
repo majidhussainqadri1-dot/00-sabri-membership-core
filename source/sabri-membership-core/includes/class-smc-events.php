@@ -123,12 +123,13 @@ final class SMC_Events {
 		return true;
 	}
 
-	public static function process_outbox( $limit = 25 ) {
+	public static function process_outbox( $limit = 25, $only_id = 0 ) {
 		global $wpdb;
 		if ( ! self::table_exists( 'smc_event_outbox' ) ) {
 			return 0;
 		}
 		$limit = max( 1, min( 100, absint( $limit ) ) );
+		$only_id = absint( $only_id );
 		$lock_name = 'smc_outbox_' . substr( hash( 'sha256', DB_NAME . '|' . $wpdb->prefix ), 0, 28 );
 		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s,0)', $lock_name ) ) ) {
 			return 0;
@@ -138,15 +139,19 @@ final class SMC_Events {
 			$wpdb->query(
 				"UPDATE {$wpdb->prefix}smc_event_outbox SET status='retry',next_attempt_at=UTC_TIMESTAMP(),last_error='Recovered stale processing claim.',updated_at=UTC_TIMESTAMP() WHERE status='processing' AND updated_at<DATE_SUB(UTC_TIMESTAMP(), INTERVAL 15 MINUTE)"
 			);
-			$rows = $wpdb->get_results(
-				$wpdb->prepare(
-					"SELECT * FROM {$wpdb->prefix}smc_event_outbox
-					WHERE status IN ('pending','retry') AND next_attempt_at<=UTC_TIMESTAMP()
-					ORDER BY id ASC LIMIT %d",
-					$limit
-				),
-				ARRAY_A
-			);
+			if ( $only_id ) {
+				$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}smc_event_outbox WHERE id=%d AND status IN ('pending','retry') AND next_attempt_at<=UTC_TIMESTAMP() LIMIT 1", $only_id ), ARRAY_A );
+			} else {
+				$rows = $wpdb->get_results(
+					$wpdb->prepare(
+						"SELECT * FROM {$wpdb->prefix}smc_event_outbox
+						WHERE status IN ('pending','retry') AND next_attempt_at<=UTC_TIMESTAMP()
+						ORDER BY id ASC LIMIT %d",
+						$limit
+					),
+					ARRAY_A
+				);
+			}
 			foreach ( (array) $rows as $row ) {
 				$claimed = $wpdb->query(
 					$wpdb->prepare(

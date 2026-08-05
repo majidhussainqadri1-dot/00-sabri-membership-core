@@ -87,23 +87,24 @@ final class SMC_Contracts {
 		$phone_verified = self::contact_verified( $user_id, 'mobile' );
 		$email_verified = self::contact_verified( $user_id, 'email' );
 		$guardian_verified = ! $row || empty( $row['guardian_required'] ) || self::guardian_verified( $user_id );
-		$contacts_verified = (bool) $state['institutional_account'] || ( $phone_verified && $email_verified );
-		$identity_documents_current = (bool) $state['institutional_account'] || self::identity_documents_current( $user_id );
+		$institutional = (bool) $state['institutional_account'];
+		$contacts_verified = $institutional || ( $phone_verified && $email_verified );
+		$identity_documents_current = $institutional || self::identity_documents_current( $user_id );
 		$eligible = $approved && $professional_verified && $two_factor_ready && $guardian_verified && $contacts_verified && $identity_documents_current;
-		$user = get_userdata( $user_id );
-		$roles = $user ? (array) $user->roles : array();
-		return array(
+		$suspended = in_array( $status, array( 'suspended', 'rejected', 'expired', 'appeal_review', 'erasure_pending', 'invalid_application' ), true );
+		$base = array(
 			'contract_version'       => SMC_CONTRACT_VERSION,
 			'user_id'                => $user_id,
 			'application_exists'     => (bool) $state['application_exists'],
-			'institutional_account'  => (bool) $state['institutional_account'],
+			'institutional_account'  => $institutional,
+			'institutional_ai'       => smc_is_institutional_ai( $user_id ),
 			'account_class'          => $state['account_class'],
 			'membership_type'        => $type,
 			'requested_membership_types' => $requested_types,
 			'approved_membership_types'  => $approved_types,
 			'status'                 => $status,
 			'approved'               => $approved,
-			'suspended'              => in_array( $status, array( 'suspended', 'rejected', 'expired', 'appeal_review', 'erasure_pending', 'invalid_application' ), true ),
+			'suspended'              => $suspended,
 			'eligible'               => $eligible,
 			'two_factor_ready'       => $two_factor_ready,
 			'session_two_factor'     => $session_verified,
@@ -115,9 +116,86 @@ final class SMC_Contracts {
 			'can_message'            => $eligible && $session_verified,
 			'can_comment'            => $eligible && $session_verified,
 			'can_book_appointment'   => $eligible && $session_verified,
-			'can_publish'            => $eligible && $session_verified && ( smc_is_founder( $user_id ) || in_array( 'doctor', $approved_types, true ) ),
 			'can_practice'           => $eligible && in_array( 'doctor', $approved_types, true ),
-			'public_profile_allowed' => $eligible && $row && ( 'public' === $row['profile_visibility'] || (bool) apply_filters( 'smc_public_profile_opt_in', false, $user_id, $row ) ),
+			'public_profile_allowed' => $eligible && ( smc_is_institutional_ai( $user_id ) || ( $row && ( 'public' === $row['profile_visibility'] || (bool) apply_filters( 'smc_public_profile_opt_in', false, $user_id, $row ) ) ) ),
+		);
+		$base['entitlements'] = self::entitlement_assertions( $user_id, $base );
+		$base['publishing']   = self::publishing_assertions( $user_id, $base );
+		$base['transfer']     = self::transfer_assertions( $user_id, 0, array(), $base );
+		$base['can_publish']  = (bool) $base['publishing']['can_open_composer'];
+		$base['can_direct_publish'] = (bool) $base['publishing']['can_direct_publish'];
+		$base['can_transfer_files'] = (bool) $base['transfer']['can_initiate'];
+		if ( $base['institutional_ai'] ) {
+			$base['ai_identity'] = smc_institutional_ai_policy();
+		}
+		return $base;
+	}
+
+	public static function entitlement_assertions( $user_id, $base = null ) {
+		$policy = smc_policy();
+		return array(
+			'policy_version'        => (string) $policy['version'],
+			'financial_baseline'    => 'free',
+			'single_free_tier'      => true,
+			'paid_unlocks_enabled'  => false,
+			'legacy_pricing_enabled'=> false,
+			'base_services'         => array_fill_keys( (array) $policy['base_services'], true ),
+			'donation_optional'     => true,
+			'donation_affects_entitlement' => false,
+			'donation_affects_capability'  => false,
+			'donation_affects_visibility'  => false,
+			'donation_affects_support'     => false,
+			'commission_percent'    => 0,
+		);
+	}
+
+	public static function publishing_assertions( $user_id, $base = null ) {
+		$base = is_array( $base ) ? $base : self::assertions( $user_id );
+		$approved_types = (array) ( $base['approved_membership_types'] ?? array() );
+		$is_founder = smc_is_founder( $user_id );
+		$user = get_userdata( absint( $user_id ) );
+		$is_admin = $user && user_can( $user, 'manage_options' );
+		$is_ai = smc_is_institutional_ai( $user_id );
+		$is_doctor = in_array( 'doctor', $approved_types, true ) && ! empty( $base['professional_verified'] );
+		$trusted = (array) apply_filters( 'smc_external_publishing_claims', array(), absint( $user_id ) );
+		$is_trusted = ! empty( $trusted['trusted_publisher'] );
+		$ai_policy = $is_ai ? smc_institutional_ai_policy() : array();
+		$can_submit = ! empty( $base['eligible'] ) && ! empty( $base['session_two_factor'] ) && ( $is_founder || $is_admin || $is_doctor || $is_trusted || $is_ai || array_intersect( array( 'teacher', 'researcher', 'publisher' ), $approved_types ) );
+		$direct = $can_submit && ( $is_founder || $is_admin || ( $is_trusted && ! empty( $trusted['direct_publish'] ) ) || ( $is_doctor && (bool) apply_filters( 'smc_doctor_direct_publish_allowed', false, $user_id ) ) || ( $is_ai && ! empty( $ai_policy['low_risk_auto_publish'] ) ) );
+		$authority = $is_founder ? 'founder' : ( $is_admin ? 'administrator' : ( $is_ai ? 'institutional_ai_publisher' : ( $is_trusted ? 'trusted_publisher' : ( $is_doctor ? 'verified_doctor' : 'submission_only' ) ) ) );
+		return array(
+			'policy_version'       => 'CHAT-AI-001/RCD-020-v2.1',
+			'authority_class'      => $authority,
+			'can_open_composer'    => (bool) $can_submit,
+			'can_submit_for_review'=> (bool) $can_submit,
+			'can_direct_publish'   => (bool) $direct,
+			'requires_human_review'=> (bool) ( $is_ai && empty( $ai_policy['low_risk_auto_publish'] ) ),
+			'doctor_verification_claim' => $is_ai ? false : (bool) $is_doctor,
+			'ai_generated_disclosure_required' => (bool) $is_ai,
+			'donation_or_payment_advantage' => false,
+		);
+	}
+
+	public static function transfer_assertions( $user_id, $recipient_id = 0, $context = array(), $base = null ) {
+		$base = is_array( $base ) ? $base : self::assertions( $user_id );
+		$recipient_id = absint( $recipient_id );
+		$relationship = 0 === $recipient_id ? true : (bool) apply_filters( 'smc_transfer_relationship_authorized', false, absint( $user_id ), $recipient_id, $context );
+		$consent = 0 === $recipient_id ? true : (bool) apply_filters( 'smc_transfer_consent_authorized', false, absint( $user_id ), $recipient_id, $context );
+		$content_policy = (bool) apply_filters( 'smc_transfer_content_policy_authorized', true, absint( $user_id ), $recipient_id, $context );
+		$can = ! empty( $base['eligible'] ) && ! empty( $base['session_two_factor'] ) && empty( $base['suspended'] ) && $relationship && $consent && $content_policy;
+		return array(
+			'policy_version'       => 'CHAT-XFER-001-v2.1',
+			'can_initiate'         => (bool) $can,
+			'max_file_bytes'       => 1073741824,
+			'recipient_authorization_required' => true,
+			'relationship_authorized' => (bool) $relationship,
+			'consent_authorized'   => (bool) $consent,
+			'content_policy_authorized' => (bool) $content_policy,
+			'copyright_recheck_required' => true,
+			'clinical_confidentiality_recheck_required' => true,
+			'abuse_fair_use_recheck_required' => true,
+			'signed_expiring_delivery_required' => true,
+			'public_url_allowed'   => false,
 		);
 	}
 
@@ -164,6 +242,8 @@ final class SMC_Contracts {
 			'phone_verified'   => $a['phone_verified'],
 			'can_message'      => $a['can_message'],
 			'can_call'         => $a['can_message'],
+			'can_transfer_files'=> $a['can_transfer_files'],
+			'max_file_bytes'   => $a['transfer']['max_file_bytes'],
 			'suspended'        => $a['suspended'],
 		);
 	}
@@ -501,3 +581,7 @@ function smc_membership_assertions( $user_id ) {
 function smc_communication_assertions( $user_id ) {
 	return SMC_Contracts::communication_assertions( $user_id );
 }
+
+function smc_entitlement_assertions( $user_id ) { return SMC_Contracts::entitlement_assertions( $user_id ); }
+function smc_publishing_assertions( $user_id ) { return SMC_Contracts::publishing_assertions( $user_id ); }
+function smc_transfer_assertions( $user_id, $recipient_id = 0, $context = array() ) { return SMC_Contracts::transfer_assertions( $user_id, $recipient_id, $context ); }

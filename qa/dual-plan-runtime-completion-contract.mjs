@@ -21,7 +21,7 @@ const js = read('source/sabri-membership-core/assets/membership.js');
 const css = read('source/sabri-membership-core/assets/membership.css');
 const registry = JSON.parse(read('qa/requirements-traceability.json'));
 
-assert(plugin.includes('Version: 1.2.9') && plugin.includes("define( 'SMC_VERSION', '1.2.9' )"), 'Runtime version 1.2.9');
+assert(plugin.includes('Version: 1.2.11') && plugin.includes("define( 'SMC_VERSION', '1.2.11' )"), 'Runtime version 1.2.11');
 assert(plugin.includes("define( 'SMC_DB_VERSION', '1.3.0' )"), 'Schema version 1.3.0');
 assert(plugin.includes("require_once SMC_PATH . 'includes/class-smc-events.php'") && plugin.includes("require_once SMC_PATH . 'includes/class-smc-completion.php'"), 'Completion and events services load');
 assert(plugin.includes('SMC_Events::init()') && plugin.includes('SMC_Completion::init()'), 'Completion and events services initialize');
@@ -73,7 +73,7 @@ assert(completion.includes('backup_manifest') && completion.includes('post_resto
 assert(completion.includes('operational_owners') && completion.includes('service_levels'), 'Named operational owners and measurable SLO defaults');
 assert(css.includes('.smc-step') && css.includes(':focus-visible') && css.includes('@media'), 'Progressive responsive accessible styling');
 
-assert(registry.plugin_version === '1.2.9' && registry.database_version === '1.3.0', 'Traceability release identity');
+assert(registry.plugin_version === '1.2.11' && registry.database_version === '1.3.0', 'Traceability release identity');
 assert(registry.dual_plan_completion?.runtime_contract === 'qa/dual-plan-runtime-completion-contract.mjs', 'Registry points to executable runtime contract');
 assert(registry.requirements.length === 100 && registry.requirements.every((r) => r.code_status === 'complete'), 'All 100 repository obligations mapped after runtime checks');
 assert(registry.staging_accepted === false && registry.production_approved === false && registry.live_installation_authorized === false, 'External gates not overclaimed');
