@@ -17,8 +17,11 @@ define( 'SMC_VERSION', '1.2.11' );
 define( 'SMC_DB_VERSION', '1.3.0' );
 define( 'SMC_CONTRACT_VERSION', '1.2.0' );
 define( 'SMC_CF01_CONTRACT_VERSION', '1.0.0' );
+define( 'SMC_AUTHENTICATION_CONTRACT_VERSION', '1.1.0' );
+define( 'SMC_AUTHENTICATION_CONTRACT_V11_VERSION', '1.1.0' );
 define( 'SMC_FILE', __FILE__ );
 define( 'SMC_PATH', plugin_dir_path( __FILE__ ) );
+define( 'SMC_DIR', SMC_PATH );
 define( 'SMC_URL', plugin_dir_url( __FILE__ ) );
 
 require_once SMC_PATH . 'includes/functions.php';
@@ -28,12 +31,27 @@ require_once SMC_PATH . 'includes/class-smc-events.php';
 require_once SMC_PATH . 'includes/class-smc-completion.php';
 require_once SMC_PATH . 'includes/class-smc-contracts.php';
 require_once SMC_PATH . 'includes/class-smc-cf01-contract.php';
+require_once SMC_PATH . 'includes/class-smc-authentication-contract.php';
+require_once SMC_PATH . 'includes/class-smc-authentication-contract-v11.php';
 require_once SMC_PATH . 'includes/class-smc-authorization.php';
 require_once SMC_PATH . 'includes/class-smc-workflow.php';
 require_once SMC_PATH . 'includes/class-smc-admin.php';
 require_once SMC_PATH . 'includes/class-smc-privacy.php';
 require_once SMC_PATH . 'includes/class-smc-lifecycle.php';
 require_once SMC_PATH . 'includes/class-smc-three-plan.php';
+
+/**
+ * Compatibility helper used only by the v1.1 registration quarantine path.
+ * WordPress core owns the session-token store.
+ */
+if ( ! function_exists( 'wp_destroy_all_sessions' ) ) {
+	function wp_destroy_all_sessions( $user_id ) {
+		$user_id = absint( $user_id );
+		if ( $user_id && class_exists( 'WP_Session_Tokens' ) ) {
+			WP_Session_Tokens::get_instance( $user_id )->destroy_all();
+		}
+	}
+}
 
 register_activation_hook( SMC_FILE, array( 'SMC_Installer', 'activate' ) );
 register_deactivation_hook( SMC_FILE, array( 'SMC_Installer', 'deactivate' ) );
@@ -47,6 +65,8 @@ add_action(
 		SMC_Completion::init();
 		SMC_Contracts::init();
 		SMC_CF01_Contract::init();
+		SMC_Authentication_Contract::init();
+		SMC_Authentication_Contract_V11::init();
 		SMC_Authorization::init();
 		SMC_Workflow::init();
 		SMC_Admin::init();
@@ -78,6 +98,7 @@ add_action(
 		}
 	}
 );
+
 add_action(
 	'wp_enqueue_scripts',
 	static function () {
@@ -99,10 +120,10 @@ add_action(
 				'ajaxUrl'          => admin_url( 'admin-ajax.php' ),
 				'draftNonce'       => wp_create_nonce( 'smc_application_draft' ),
 				'messages'         => array(
-					'draftSaved'    => __( 'Draft saved securely.', 'sabri-membership-core' ),
-					'draftFailed'   => __( 'Draft could not be saved. Your current form remains on this device until you leave the page.', 'sabri-membership-core' ),
-					'uploading'     => __( 'Uploading authenticated evidence…', 'sabri-membership-core' ),
-					'networkError'  => __( 'Network interrupted. Review the form and retry; the server remains authoritative.', 'sabri-membership-core' ),
+					'draftSaved'   => __( 'Draft saved securely.', 'sabri-membership-core' ),
+					'draftFailed'  => __( 'Draft could not be saved. Your current form remains on this device until you leave the page.', 'sabri-membership-core' ),
+					'uploading'    => __( 'Uploading authenticated evidence…', 'sabri-membership-core' ),
+					'networkError' => __( 'Network interrupted. Review the form and retry; the server remains authoritative.', 'sabri-membership-core' ),
 				),
 			)
 		);
