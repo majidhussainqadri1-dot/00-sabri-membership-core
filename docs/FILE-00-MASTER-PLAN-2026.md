@@ -7,7 +7,7 @@
 
 ## Current implementation identity
 
-- Runtime implementation release: `1.2.10`
+- Runtime implementation release: `1.2.11`
 - Contract: `1.1.2`
 - Database schema: `1.3.0`
 - Exact-head CI: pending
