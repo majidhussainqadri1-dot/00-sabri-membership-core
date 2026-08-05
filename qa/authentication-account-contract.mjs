@@ -6,8 +6,8 @@ const main = fs.readFileSync(new URL('source/sabri-membership-core/sabri-members
 const provider = fs.readFileSync(new URL('source/sabri-membership-core/includes/class-smc-authentication-contract.php', root), 'utf8');
 
 for (const marker of [
-  "Version: 1.2.12",
-  "define( 'SMC_VERSION', '1.2.12' );",
+  "Version: 1.2.11",
+  "define( 'SMC_VERSION', '1.2.11' );",
   "define( 'SMC_AUTHENTICATION_CONTRACT_VERSION', '1.0.0' );",
   "class-smc-authentication-contract.php",
   'SMC_Authentication_Contract::init()',
@@ -26,6 +26,7 @@ for (const marker of [
   'SMC_Security::encrypt',
   'SMC_Security::blind_index',
   'guardian_required',
+  'identity_type',
   'identity_collision',
   'phone_collision',
   'idempotent_replay',
