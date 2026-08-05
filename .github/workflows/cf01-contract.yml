@@ -1,4 +1,4 @@
-name: File 00 CF-01 and Dual-Plan Contract Integrity
+name: File 00 CF-01 and Forty-Round Contract Integrity
 
 on:
   pull_request:
@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   contract-integrity:
-    name: PHP ${{ matrix.php }} contract, package and executable dual-plan suites
+    name: PHP ${{ matrix.php }} contract, package and forty-round suites
     runs-on: ubuntu-latest
     timeout-minutes: 25
     strategy:
@@ -60,7 +60,7 @@ jobs:
           mapfile -t php_files < <(find source qa -type f -name '*.php' -print | sort)
           test "${#php_files[@]}" -ge 15
           for file in "${php_files[@]}"; do php -l "$file"; done
-      - name: Run inherited, CF-01 and executable dual-plan suites
+      - name: Run inherited, CF-01 and forty-round suites
         run: npm test
-      - name: Build and verify deterministic 1.2.9 package
+      - name: Build and verify deterministic 1.2.10 package
         run: npm run verify
