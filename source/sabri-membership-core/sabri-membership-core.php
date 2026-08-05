@@ -40,6 +40,19 @@ require_once SMC_PATH . 'includes/class-smc-privacy.php';
 require_once SMC_PATH . 'includes/class-smc-lifecycle.php';
 require_once SMC_PATH . 'includes/class-smc-three-plan.php';
 
+/**
+ * Compatibility helper used only by the v1.1 registration quarantine path.
+ * WordPress core owns the session-token store.
+ */
+if ( ! function_exists( 'wp_destroy_all_sessions' ) ) {
+	function wp_destroy_all_sessions( $user_id ) {
+		$user_id = absint( $user_id );
+		if ( $user_id && class_exists( 'WP_Session_Tokens' ) ) {
+			WP_Session_Tokens::get_instance( $user_id )->destroy_all();
+		}
+	}
+}
+
 register_activation_hook( SMC_FILE, array( 'SMC_Installer', 'activate' ) );
 register_deactivation_hook( SMC_FILE, array( 'SMC_Installer', 'deactivate' ) );
 
