@@ -12,13 +12,14 @@ permissions:
 
 jobs:
   account-contract:
-    name: PHP ${{ matrix.php }} account contract
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    name: PHP ${{ matrix.php }} account contract v1.1.0
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
     strategy:
       fail-fast: false
       matrix:
         php:
+          - '7.4'
           - '8.1'
           - '8.3'
     steps:
@@ -35,15 +36,24 @@ jobs:
           coverage: none
           tools: none
 
-      - name: Lint provider and run no-network policy suite
+      - name: Lint providers and run no-network policy suites
         run: |
           set -euo pipefail
           php -l source/sabri-membership-core/sabri-membership-core.php
           php -l source/sabri-membership-core/includes/class-smc-authentication-contract.php
+          php -l source/sabri-membership-core/includes/class-smc-authentication-contract-v11.php
+          php -l qa/authentication-account-contract-runtime.php
+          php -l qa/authentication-account-contract-v11.php
           php qa/authentication-account-contract-runtime.php
+          php qa/authentication-account-contract-v11.php
           node qa/authentication-account-contract.mjs
           git diff --check
 
-          grep -Fq "define( 'SMC_AUTHENTICATION_CONTRACT_VERSION', '1.0.0' );" source/sabri-membership-core/sabri-membership-core.php
-          grep -Fq "CONTRACT_NAME    = 'smc.authentication-account'" source/sabri-membership-core/includes/class-smc-authentication-contract.php
-          ! grep -E "(access_token|refresh_token|client_secret|BEGIN .*PRIVATE KEY)" source/sabri-membership-core/includes/class-smc-authentication-contract.php
+          grep -Fq "define( 'SMC_AUTHENTICATION_CONTRACT_VERSION', '1.1.0' );" source/sabri-membership-core/sabri-membership-core.php
+          grep -Fq "define( 'SMC_AUTHENTICATION_CONTRACT_V11_VERSION', '1.1.0' );" source/sabri-membership-core/sabri-membership-core.php
+          grep -Fq "class SMC_Authentication_Contract_V11" source/sabri-membership-core/includes/class-smc-authentication-contract-v11.php
+          grep -Fq "CONTRACT_VERSION = '1.1.0'" source/sabri-membership-core/includes/class-smc-authentication-contract-v11.php
+          grep -Fq "ethical_conduct_version" source/sabri-membership-core/includes/class-smc-authentication-contract-v11.php
+          grep -Fq "profile_photo_required" source/sabri-membership-core/includes/class-smc-authentication-contract-v11.php
+          grep -Fq "smc_profile_photo_complete" source/sabri-membership-core/includes/class-smc-authentication-contract-v11.php
+          ! grep -E "(access_token|refresh_token|client_secret|BEGIN .*PRIVATE KEY)" source/sabri-membership-core/includes/class-smc-authentication-contract-v11.php
