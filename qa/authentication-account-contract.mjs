@@ -45,8 +45,8 @@ for (const marker of [
   assert.ok(provider.includes(marker), `base provider missing ${marker}`);
 }
 
+assert.match(providerV11, /const\s+CONTRACT_VERSION\s*=\s*'1\.1\.0';/, 'v1.1 provider contract version is missing');
 for (const marker of [
-  "CONTRACT_VERSION = '1.1.0'",
   'city',
   'account_type',
   'ethical_conduct_version',
@@ -54,6 +54,7 @@ for (const marker of [
   'authentication_method',
   'google_subject',
   'SMC_Security::encrypt',
+  'SMC_Security::decrypt',
   'smc_profile_photo_complete',
   'smc_profile_completion_route',
   'registration_extra_quarantined',
@@ -86,5 +87,6 @@ assert.ok(provider.includes('SMC_Security::revoke_all_sessions'), 'base quaranti
 assert.ok(providerV11.includes('wp_destroy_all_sessions'), 'v1.1 extra-field quarantine does not revoke sessions');
 assert.ok(providerV11.includes("'ethical_conduct'"), 'ethical consent is not recorded separately');
 assert.ok(providerV11.includes("'profile_photo'"), 'profile-photo completion is not represented');
+assert.ok(providerV11.includes("'registration-city'"), 'city is not protected by a dedicated encryption purpose');
 
 console.log('File 00 authentication-account contract v1.1 architecture passed.');
