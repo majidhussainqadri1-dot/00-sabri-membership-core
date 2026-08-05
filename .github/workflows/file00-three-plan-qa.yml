@@ -1,0 +1,57 @@
+name: File 00 1.2.11 Three-Plan QA
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main, 'codex/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Build, test and verify three-plan source
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240
+        with:
+          php-version: '8.3'
+          coverage: none
+          tools: none
+      - run: npm ci --ignore-scripts
+      - run: npm run verify
+      - name: Exact three-plan identity and traceability
+        run: |
+          set -euo pipefail
+          grep -Fq 'Version: 1.2.11' source/sabri-membership-core/sabri-membership-core.php
+          grep -Fq "define( 'SMC_CONTRACT_VERSION', '1.2.0' )" source/sabri-membership-core/sabri-membership-core.php
+          node qa/three-plan-runtime-completion-contract.mjs
+          php qa/three-plan-runtime.php
+          test -f dist/00-sabri-membership-core-1.2.11.zip
+          test "$(grep -Ec '^\| F00-R[0-9]{3} \|' docs/FILE-00-IMPLEMENTATION-TRACEABILITY-1.2.11.md)" -eq 100
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: 00-sabri-membership-core-1.2.11-${{ github.sha }}
+          path: |
+            dist/00-sabri-membership-core-1.2.11.zip
+            dist/CHECKSUMS.sha256
+            docs/THREE-PLAN-CODE-COMPLETION-1.2.11.md
+            docs/FILE-00-IMPLEMENTATION-TRACEABILITY-1.2.11.md
+            qa/requirements-traceability.json
+          if-no-files-found: error
+          retention-days: 30
