@@ -2,7 +2,7 @@
 declare(strict_types=1);
 define('ABSPATH', __DIR__ . '/');
 define('ARRAY_A', 'ARRAY_A');
-define('SMC_CONTRACT_VERSION', '1.1.2');
+define('SMC_CONTRACT_VERSION', '1.2.0');
 $GLOBALS['meta'] = [];
 $GLOBALS['users'] = [];
 $GLOBALS['apps'] = [];

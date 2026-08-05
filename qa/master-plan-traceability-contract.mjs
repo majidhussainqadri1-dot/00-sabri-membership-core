@@ -8,8 +8,8 @@ const assert = (condition, label) => { if (condition) passed += 1; else failures
 const data = JSON.parse(read('qa/requirements-traceability.json'));
 assert(data.platform_master_plan.sha256 === 'bd171fe39da8c10294d7cf1a92bc9ce917b082905b978280a25e1e3c9ec617e0', 'Platform plan checksum');
 assert(data.file00_master_plan.sha256 === '3b1f81aa8aed39c76be9e6e2da3eef4e6671a581c13c359f52d163c9bbc6bc9d', 'File 00 plan checksum');
-assert(data.plugin_version === '1.2.10', 'Registry version 1.2.10');
-assert(data.contract_version === '1.1.2' && data.database_version === '1.3.0', 'Contract/schema identity');
+assert(data.plugin_version === '1.2.11', 'Registry version 1.2.11');
+assert(data.contract_version === '1.2.0' && data.database_version === '1.3.0', 'Contract/schema identity');
 assert(Array.isArray(data.requirements) && data.requirements.length === 100, '100 requirements');
 const expected = Array.from({length:100}, (_,i)=>`F00-R${String(i+1).padStart(3,'0')}`);
 assert(JSON.stringify(data.requirements.map((r)=>r.id)) === JSON.stringify(expected), 'Contiguous stable IDs');
@@ -17,7 +17,7 @@ assert(data.requirements.every((r)=>r.code_status === 'complete'), 'Repository o
 assert(data.requirements.every((r)=>typeof r.acceptance_status === 'string' && r.acceptance_status), 'Acceptance status explicit');
 assert(data.requirements[98].acceptance_status === 'hostinger_staging_acceptance_pending', 'R099 staging pending');
 assert(data.requirements[99].acceptance_status === 'founder_production_approval_pending', 'R100 Founder approval pending');
-assert(data.dual_plan_completion?.release === '1.2.10', 'Dual-plan completion record');
+assert(data.dual_plan_completion?.release === '1.2.11', 'Dual-plan completion record');
 assert(fs.existsSync(path.join(root, data.dual_plan_completion.record)), 'Completion record exists');
 assert(fs.existsSync(path.join(root, data.dual_plan_completion.runtime_contract)), 'Executable runtime contract exists');
 assert(data.staging_accepted === false && data.production_approved === false && data.live_installation_authorized === false, 'External gates not overclaimed');
@@ -31,10 +31,10 @@ if (evidence.conclusion === 'success') {
   assert(evidence.head_sha === '' && evidence.workflow_run_id === 0 && evidence.package_sha256 === '', 'Pending evidence blank');
 }
 const plugin = read('source/sabri-membership-core/sabri-membership-core.php');
-assert(plugin.includes('Version: 1.2.10') && plugin.includes("define( 'SMC_DB_VERSION', '1.3.0' )"), 'Runtime identity');
+assert(plugin.includes('Version: 1.2.11') && plugin.includes("define( 'SMC_DB_VERSION', '1.3.0' )"), 'Runtime identity');
 const master = read('docs/FILE-00-MASTER-PLAN-2026.md');
-assert(master.includes('Runtime implementation release: `1.2.10`'), 'Master index current');
-const human = read('docs/FILE-00-IMPLEMENTATION-TRACEABILITY-1.2.10.md');
+assert(master.includes('Runtime implementation release: `1.2.11`'), 'Master index current');
+const human = read('docs/FILE-00-IMPLEMENTATION-TRACEABILITY-1.2.11.md');
 assert((human.match(/\| F00-R\d{3} \|/g) || []).length === 100, 'Human matrix 100 rows');
 assert(read('package.json').includes('dual-plan-runtime-completion-contract.mjs'), 'Package test includes executable plan contract');
 if (failures.length) {

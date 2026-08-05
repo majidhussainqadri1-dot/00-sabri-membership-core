@@ -19,10 +19,10 @@ function assert(condition, name) {
   else failures.push(name);
 }
 
-assert(main.includes('Version: 1.2.10'), 'Plugin header is 1.2.10');
-assert(main.includes("define( 'SMC_VERSION', '1.2.10' )"), 'Runtime version is 1.2.10');
+assert(main.includes('Version: 1.2.11'), 'Plugin header is 1.2.11');
+assert(main.includes("define( 'SMC_VERSION', '1.2.11' )"), 'Runtime version is 1.2.11');
 assert(main.includes("define( 'SMC_DB_VERSION', '1.3.0' )"), 'Database version is 1.3.0');
-assert(main.includes("define( 'SMC_CONTRACT_VERSION', '1.1.2' )"), 'Contract version is 1.1.2');
+assert(main.includes("define( 'SMC_CONTRACT_VERSION', '1.2.0' )"), 'Contract version is 1.1.2');
 assert(stateFunction.length > 0, 'Explicit membership-state API exists');
 assert(/\$institutional\s*=\s*\$is_founder\s*\|\|\s*\$is_admin/.test(stateFunction), 'Institutional authority is resolved explicitly');
 assert(stateFunction.indexOf('if ( $institutional )') < stateFunction.indexOf('if ( $row && $status )'), 'Institutional authority is evaluated before ordinary application state');
