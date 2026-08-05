@@ -10,13 +10,13 @@ defined( 'ABSPATH' ) || exit;
  * profile-photograph completion and Google-first registration fields.
  */
 final class SMC_Authentication_Contract_V11 {
-	const CONTRACT_NAME    = 'smc.authentication-account';
-	const CONTRACT_VERSION = '1.1.0';
-	const CITY_META        = '_smc_registration_city_v1';
-	const ACCOUNT_TYPE_META= '_smc_declared_account_type_v1';
-	const AUTH_METHOD_META = '_smc_registration_auth_method_v1';
-	const PHOTO_REQUIRED_META = '_smc_profile_photo_required_v1';
-	const GOOGLE_PICTURE_META = '_smc_google_picture_candidate_v1';
+	const CONTRACT_NAME        = 'smc.authentication-account';
+	const CONTRACT_VERSION     = '1.1.0';
+	const CITY_META            = '_smc_registration_city_v1';
+	const ACCOUNT_TYPE_META    = '_smc_declared_account_type_v1';
+	const AUTH_METHOD_META     = '_smc_registration_auth_method_v1';
+	const PHOTO_REQUIRED_META  = '_smc_profile_photo_required_v1';
+	const GOOGLE_PICTURE_META  = '_smc_google_picture_candidate_v1';
 
 	public static function init() {
 		add_filter( 'wp_privacy_personal_data_exporters', array( __CLASS__, 'register_exporter' ), 25 );
@@ -33,6 +33,7 @@ final class SMC_Authentication_Contract_V11 {
 		}
 
 		$delegated = $payload;
+		$generated = '';
 		if ( 'google' === $extra['authentication_method'] ) {
 			try {
 				$generated = bin2hex( random_bytes( 32 ) );
@@ -52,7 +53,7 @@ final class SMC_Authentication_Contract_V11 {
 		}
 
 		$user_id = absint( $result['user_id'] );
-		$stored = self::store_extra_fields( $user_id, $extra );
+		$stored  = self::store_extra_fields( $user_id, $extra );
 		if ( is_wp_error( $stored ) ) {
 			SMC_Security::audit( 'authentication_registration_extra_quarantined', $user_id, array( 'reason' => $stored->get_error_code() ) );
 			wp_destroy_all_sessions( $user_id );
@@ -60,14 +61,15 @@ final class SMC_Authentication_Contract_V11 {
 			return self::response( 'unknown', 'registration_extra_initialization_failed', array( 'user_id' => $user_id ) );
 		}
 
+		delete_user_meta( $user_id, '_smc_registration_quarantine' );
 		SMC_Security::audit(
 			'authentication_account_registration_v11_completed',
 			$user_id,
 			array(
-				'account_type'          => $extra['account_type'],
-				'authentication_method' => $extra['authentication_method'],
-				'profile_photo_required'=> true,
-				'contract_version'      => self::CONTRACT_VERSION,
+				'account_type'           => $extra['account_type'],
+				'authentication_method'  => $extra['authentication_method'],
+				'profile_photo_required' => true,
+				'contract_version'       => self::CONTRACT_VERSION,
 			)
 		);
 		return self::normalize( $result );
@@ -85,7 +87,8 @@ final class SMC_Authentication_Contract_V11 {
 		}
 
 		$missing = isset( $result['missing_steps'] ) && is_array( $result['missing_steps'] ) ? $result['missing_steps'] : array();
-		if ( '' === trim( (string) get_user_meta( $user_id, self::CITY_META, true ) ) ) {
+		$city    = self::city_value( $user_id );
+		if ( is_wp_error( $city ) || '' === trim( (string) $city ) ) {
 			$missing[] = 'city';
 		}
 		if ( '' === trim( (string) get_user_meta( $user_id, self::ACCOUNT_TYPE_META, true ) ) ) {
@@ -126,6 +129,7 @@ final class SMC_Authentication_Contract_V11 {
 			'provider'         => 'File 00 — Sabri Membership Core',
 			'methods'          => array( 'register_account', 'mark_email_verified', 'get_completion_state' ),
 			'fields'           => array( 'city', 'account_type', 'ethical_conduct_version', 'profile_photo_required', 'authentication_method', 'google_subject' ),
+			'privacy'          => array( 'city' => 'encrypted', 'google_picture_candidate' => 'encrypted', 'account_type' => 'private-declaration' ),
 			'fail_closed'      => true,
 			'identity_owner'   => 'File 00',
 		);
@@ -141,8 +145,9 @@ final class SMC_Authentication_Contract_V11 {
 		$google_verified= ! empty( $payload['google_email_verified'] );
 		$picture        = esc_url_raw( (string) ( $payload['google_picture_candidate'] ?? '' ) );
 		$allowed_types  = array( 'member', 'doctor', 'student', 'teacher', 'researcher', 'clinic_staff', 'institution_representative' );
+		$city_length    = function_exists( 'mb_strlen' ) ? mb_strlen( $city, 'UTF-8' ) : strlen( $city );
 
-		if ( strlen( $city ) < 2 || strlen( $city ) > 120 ) {
+		if ( $city_length < 2 || $city_length > 120 ) {
 			return new WP_Error( 'registration_city_invalid' );
 		}
 		if ( ! in_array( $account_type, $allowed_types, true ) ) {
@@ -161,14 +166,14 @@ final class SMC_Authentication_Contract_V11 {
 			return new WP_Error( 'registration_profile_photo_requirement_missing' );
 		}
 		return array(
-			'city'                       => $city,
-			'account_type'               => $account_type,
-			'authentication_method'      => $auth_method,
-			'ethical_conduct_version'    => $ethics_version,
-			'profile_photo_required'     => true,
-			'google_subject'             => $google_subject,
-			'google_email_verified'      => $google_verified,
-			'google_picture_candidate'   => $picture,
+			'city'                     => $city,
+			'account_type'             => $account_type,
+			'authentication_method'    => $auth_method,
+			'ethical_conduct_version'  => $ethics_version,
+			'profile_photo_required'   => true,
+			'google_subject'           => $google_subject,
+			'google_email_verified'    => $google_verified,
+			'google_picture_candidate' => $picture,
 		);
 	}
 
@@ -177,20 +182,42 @@ final class SMC_Authentication_Contract_V11 {
 		if ( ! $user_id ) {
 			return new WP_Error( 'registration_subject_invalid' );
 		}
-		$city_ok    = false !== update_user_meta( $user_id, self::CITY_META, $extra['city'] );
-		$type_ok    = false !== update_user_meta( $user_id, self::ACCOUNT_TYPE_META, $extra['account_type'] );
-		$method_ok  = false !== update_user_meta( $user_id, self::AUTH_METHOD_META, $extra['authentication_method'] );
-		$photo_ok   = false !== update_user_meta( $user_id, self::PHOTO_REQUIRED_META, '1' );
+
+		$city_encrypted = SMC_Security::encrypt( $extra['city'], 'registration-city', array( 'user_id' => $user_id ) );
+		if ( is_wp_error( $city_encrypted ) ) {
+			return $city_encrypted;
+		}
+		$city_ok   = self::store_meta_exact( $user_id, self::CITY_META, $city_encrypted );
+		$type_ok   = self::store_meta_exact( $user_id, self::ACCOUNT_TYPE_META, $extra['account_type'] );
+		$method_ok = self::store_meta_exact( $user_id, self::AUTH_METHOD_META, $extra['authentication_method'] );
+		$photo_ok  = self::store_meta_exact( $user_id, self::PHOTO_REQUIRED_META, '1' );
+		$city_encrypted = '';
+
 		$picture_ok = true;
 		if ( '' !== $extra['google_picture_candidate'] ) {
 			$encrypted = SMC_Security::encrypt( $extra['google_picture_candidate'], 'google-picture-candidate', array( 'user_id' => $user_id ) );
-			$picture_ok = ! is_wp_error( $encrypted ) && false !== update_user_meta( $user_id, self::GOOGLE_PICTURE_META, $encrypted );
+			$picture_ok = ! is_wp_error( $encrypted ) && self::store_meta_exact( $user_id, self::GOOGLE_PICTURE_META, $encrypted );
+			$encrypted = '';
 		}
 		$consent_ok = self::record_ethical_consent( $user_id, $extra['ethical_conduct_version'] );
 		if ( ! $city_ok || ! $type_ok || ! $method_ok || ! $photo_ok || ! $picture_ok || ! $consent_ok ) {
 			return new WP_Error( 'registration_extra_store_failed' );
 		}
 		return true;
+	}
+
+	private static function store_meta_exact( $user_id, $key, $value ) {
+		update_user_meta( absint( $user_id ), (string) $key, $value );
+		$stored = get_user_meta( absint( $user_id ), (string) $key, true );
+		return is_string( $value ) ? hash_equals( (string) $value, (string) $stored ) : $stored === $value;
+	}
+
+	private static function city_value( $user_id ) {
+		$envelope = (string) get_user_meta( absint( $user_id ), self::CITY_META, true );
+		if ( '' === $envelope ) {
+			return '';
+		}
+		return SMC_Security::decrypt( $envelope, 'registration-city', array( 'user_id' => absint( $user_id ) ) );
 	}
 
 	private static function record_ethical_consent( $user_id, $version ) {
@@ -267,14 +294,16 @@ final class SMC_Authentication_Contract_V11 {
 		if ( ! $user ) {
 			return array( 'data' => array(), 'done' => true );
 		}
+		$city = self::city_value( $user->ID );
+		$city = is_wp_error( $city ) ? __( 'Encrypted value unavailable', 'sabri-membership-core' ) : (string) $city;
 		return array(
 			'data' => array(
 				array(
-					'group_id' => 'smc-authentication-contract-v11',
+					'group_id'    => 'smc-authentication-contract-v11',
 					'group_label' => __( 'Account Registration Completion', 'sabri-membership-core' ),
-					'item_id' => 'smc-authentication-contract-v11-' . $user->ID,
-					'data' => array(
-						array( 'name' => __( 'City', 'sabri-membership-core' ), 'value' => (string) get_user_meta( $user->ID, self::CITY_META, true ) ),
+					'item_id'     => 'smc-authentication-contract-v11-' . $user->ID,
+					'data'        => array(
+						array( 'name' => __( 'City', 'sabri-membership-core' ), 'value' => $city ),
 						array( 'name' => __( 'Declared account type', 'sabri-membership-core' ), 'value' => (string) get_user_meta( $user->ID, self::ACCOUNT_TYPE_META, true ) ),
 						array( 'name' => __( 'Authentication method', 'sabri-membership-core' ), 'value' => (string) get_user_meta( $user->ID, self::AUTH_METHOD_META, true ) ),
 					),
