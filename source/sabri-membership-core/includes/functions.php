@@ -6,10 +6,21 @@ defined( 'ABSPATH' ) || exit;
  */
 function smc_policy() {
 	return array(
-		'version'                  => '2026-07-31',
+		'version'                  => '2026-08-05-v2.1',
 		'commission_percent'       => 0,
 		'donation_optional'        => true,
 		'donation_affects_rank'    => false,
+		'donation_affects_entitlement' => false,
+		'donation_affects_capability'  => false,
+		'donation_affects_visibility'  => false,
+		'donation_affects_support'     => false,
+		'free_baseline'           => true,
+		'paid_unlocks_enabled'    => false,
+		'legacy_pricing_enabled'  => false,
+		'base_services'           => array( 'registration', 'membership', 'education', 'ai', 'clinic', 'marketplace' ),
+		'donation_amounts_usd'    => array( 10, 14, 50 ),
+		'donation_preselected'    => false,
+		'donation_recurring_default' => false,
 		'male_minimum_age'         => 15,
 		'female_minimum_age'       => 12,
 		'guardian_required_under'  => 18,
@@ -69,7 +80,43 @@ function smc_membership_roles() {
 }
 
 function smc_managed_roles() {
-	return array_merge( smc_membership_roles(), array( 'sabri_membership_reviewer', 'sabri_membership_senior_reviewer' ) );
+	return array_merge( smc_membership_roles(), array( 'sabri_membership_reviewer', 'sabri_membership_senior_reviewer', 'sabri_institutional_ai_teacher', 'sabri_institutional_ai_publisher' ) );
+}
+
+function smc_institutional_ai_user_id() {
+	$id = defined( 'SMC_INSTITUTIONAL_AI_USER_ID' ) ? absint( SMC_INSTITUTIONAL_AI_USER_ID ) : absint( get_option( 'smc_institutional_ai_user_id', 0 ) );
+	return $id && get_userdata( $id ) ? $id : 0;
+}
+
+function smc_is_institutional_ai( $user_id ) {
+	return $user_id > 0 && absint( $user_id ) === smc_institutional_ai_user_id();
+}
+
+function smc_institutional_ai_policy() {
+	$activated = (string) get_option( 'smc_institutional_ai_activated_at', '' );
+	$probation_complete = $activated && strtotime( $activated . ' UTC' ) <= ( time() - 30 * DAY_IN_SECONDS );
+	$auto_publish = $probation_complete && (bool) get_option( 'smc_institutional_ai_low_risk_auto_publish', false );
+	return array(
+		'policy_version'        => 'CHAT-AI-001-v2.1',
+		'public_name'           => 'AI Homeopathy Teacher',
+		'alternate_name'        => 'Sabri AI Teacher',
+		'provider_disclosure'   => 'Powered by Claude AI',
+		'account_class'         => 'institutional_ai_teacher',
+		'institutional_roles'   => array( 'ai_teacher', 'ai_publisher' ),
+		'doctor_verification'   => false,
+		'daily_post_limit'      => 4,
+		'human_review_days'     => 30,
+		'probation_complete'    => (bool) $probation_complete,
+		'low_risk_auto_publish' => (bool) $auto_publish,
+		'patient_specific_clinical_authority' => false,
+	);
+}
+
+function smc_account_class_for_user( $user_id, $user = null ) {
+	if ( smc_is_founder( $user_id ) ) { return 'founder'; }
+	if ( smc_is_institutional_ai( $user_id ) ) { return 'institutional_ai_teacher'; }
+	$user = $user ?: get_userdata( absint( $user_id ) );
+	return $user && user_can( $user, 'manage_options' ) ? 'administrator' : 'member';
 }
 
 function smc_sanitize_membership_types( $types ) {
@@ -210,21 +257,18 @@ function smc_privacy_erasure_lock( $user_id ) {
 	return is_array( $lock ) && ! empty( $lock['locked_at'] ) ? $lock : false;
 }
 
-
 /**
  * Return the explicit membership state without conflating an absent application
  * with a real draft application.
  *
- * Founder and WordPress Administrator identities are institutional authorities,
- * not ordinary membership applications. A historic draft, pending, review, or
- * expired-evidence row therefore cannot cancel that institutional authority.
- * Explicit disciplinary, erasure, or corrupt application states remain
- * controlling and fail closed.
+ * Founder, Administrator and the explicitly configured Institutional AI Teacher
+ * are institutional authorities, not ordinary membership applications. Historic
+ * draft/pending rows cannot silently cancel that identity; explicit disciplinary,
+ * erasure or corrupt states remain controlling and fail closed.
  *
  * @param int $user_id WordPress user ID.
  * @return array<string,mixed>
  */
-
 function smc_membership_state( $user_id ) {
 	$user_id   = absint( $user_id );
 	$row       = $user_id ? smc_application( $user_id ) : false;
@@ -235,12 +279,12 @@ function smc_membership_state( $user_id ) {
 
 	$is_founder    = $user_id > 0 && smc_is_founder( $user_id );
 	$is_admin      = $user && user_can( $user, 'manage_options' );
-	$institutional = $is_founder || $is_admin;
+	$is_ai         = $user_id > 0 && smc_is_institutional_ai( $user_id );
+	$institutional = $is_founder || $is_admin || $is_ai;
+	$account_class = smc_account_class_for_user( $user_id, $user );
 	$hard_blocks   = array( 'rejected', 'suspended', 'appeal_review', 'erasure_pending' );
 	$erasure_lock = $user_id ? smc_privacy_erasure_lock( $user_id ) : false;
 
-	// A persistent erasure lock outranks institutional identity and application
-	// absence. This prevents deleted application rows from resurrecting access.
 	if ( $erasure_lock ) {
 		return array(
 			'contract_version'      => SMC_CONTRACT_VERSION,
@@ -250,7 +294,7 @@ function smc_membership_state( $user_id ) {
 			'status'                => 'erasure_pending',
 			'membership_type'       => $type,
 			'institutional_account' => (bool) $institutional,
-			'account_class'         => $is_founder ? 'founder' : ( $is_admin ? 'administrator' : 'member' ),
+			'account_class'         => $account_class,
 			'approved'              => false,
 		);
 	}
@@ -264,7 +308,7 @@ function smc_membership_state( $user_id ) {
 			'status'                => 'invalid_application',
 			'membership_type'       => $type,
 			'institutional_account' => (bool) $institutional,
-			'account_class'         => $is_founder ? 'founder' : ( $is_admin ? 'administrator' : 'member' ),
+			'account_class'         => $account_class,
 			'approved'              => false,
 		);
 	}
@@ -279,7 +323,7 @@ function smc_membership_state( $user_id ) {
 				'status'                => $status,
 				'membership_type'       => $type,
 				'institutional_account' => true,
-				'account_class'         => $is_founder ? 'founder' : 'administrator',
+				'account_class'         => $account_class,
 				'approved'              => false,
 			);
 		}
@@ -292,7 +336,7 @@ function smc_membership_state( $user_id ) {
 			'status'                => 'verified',
 			'membership_type'       => $type,
 			'institutional_account' => true,
-			'account_class'         => $is_founder ? 'founder' : 'administrator',
+			'account_class'         => $account_class,
 			'approved'              => true,
 		);
 	}
