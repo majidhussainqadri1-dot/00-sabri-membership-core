@@ -200,5 +200,5 @@
 	}
 }
 
-/* File 00 1.2.9 progressive application and operational UX */
+/* File 00 1.2.10 progressive application and operational UX */
 .smc-progress-summary{display:grid;gap:.5rem;margin:1rem 0;padding:1rem;border:1px solid currentColor;border-radius:.75rem}.smc-progress-summary progress,.smc-form progress{width:100%;min-height:1rem}.smc-step{border:0;padding:0;margin:0}.smc-step[hidden]{display:none!important}.smc-step legend{font-size:1.2rem;font-weight:700;margin-bottom:1rem}.smc-step-controls{display:flex;justify-content:space-between;gap:1rem;margin-top:1.25rem}.smc-role-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(13rem,1fr));gap:.75rem}.smc-review-summary{padding:1rem;border-inline-start:.3rem solid currentColor;background:rgba(0,0,0,.04);overflow-wrap:anywhere}.smc-guardian-step[data-required="false"]{opacity:.82}.smc-form[aria-busy="true"]{cursor:progress}.smc-form :focus-visible{outline:3px solid currentColor;outline-offset:3px}@media (max-width:640px){.smc-step-controls{position:sticky;bottom:0;background:Canvas;padding:.75rem 0;z-index:3}.smc-role-grid{grid-template-columns:1fr}}

@@ -35,7 +35,7 @@ final class SMC_Completion {
 		$action = sanitize_key( wp_unslash( $_REQUEST['action'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$allowed = array(
 			'smc_challenge_2fa', 'smc_revoke_session', 'smc_retry_repair', 'smc_retry_outbox',
-			'smc_post_restore_reconcile', 'smc_download_backup_manifest', 'smc_verify_guardian',
+			'smc_post_restore_reconcile', 'smc_download_backup_manifest',
 		);
 		if ( 0 === strpos( $action, 'smc_' ) && ! in_array( $action, $allowed, true ) ) {
 			wp_die( esc_html__( 'Sabri Membership Safe Mode is active. Risky writes are temporarily blocked while status, recovery and scoped repair remain available.', 'sabri-membership-core' ), '', array( 'response' => 503 ) );
@@ -87,10 +87,17 @@ final class SMC_Completion {
 		}
 		$json = SMC_Security::decrypt( $receipt['envelope'], 'application-draft', self::draft_context( $user_id ) );
 		if ( is_wp_error( $json ) ) {
+			delete_user_meta( absint( $user_id ), self::DRAFT_META );
+			SMC_Security::audit( 'application_draft_decryption_failed', absint( $user_id ) );
 			return array();
 		}
 		$data = json_decode( $json, true );
-		return is_array( $data ) ? $data : array();
+		if ( ! is_array( $data ) ) {
+			delete_user_meta( absint( $user_id ), self::DRAFT_META );
+			SMC_Security::audit( 'application_draft_invalid', absint( $user_id ) );
+			return array();
+		}
+		return $data;
 	}
 
 	private static function sanitize_draft( $raw ) {
@@ -181,9 +188,18 @@ final class SMC_Completion {
 		return 1 === $ok ? $trace_id : false;
 	}
 
-	public static function reconcile_applications( $limit = 25 ) {
+	public static function reconcile_applications( $limit = 25, $only_id = 0 ) {
 		global $wpdb;
-		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}smc_application_repairs WHERE status IN ('pending','retry') AND next_attempt_at<=UTC_TIMESTAMP() ORDER BY id ASC LIMIT %d", max( 1, min( 100, absint( $limit ) ) ) ), ARRAY_A );
+		$limit = max( 1, min( 100, absint( $limit ) ) );
+		$only_id = absint( $only_id );
+		$wpdb->query(
+			"UPDATE {$wpdb->prefix}smc_application_repairs SET status='retry',next_attempt_at=UTC_TIMESTAMP(),last_error='Recovered stale processing claim.',updated_at=UTC_TIMESTAMP() WHERE status='processing' AND updated_at<DATE_SUB(UTC_TIMESTAMP(), INTERVAL 15 MINUTE)"
+		);
+		if ( $only_id ) {
+			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}smc_application_repairs WHERE id=%d AND status IN ('pending','retry') AND next_attempt_at<=UTC_TIMESTAMP() LIMIT 1", $only_id ), ARRAY_A );
+		} else {
+			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}smc_application_repairs WHERE status IN ('pending','retry') AND next_attempt_at<=UTC_TIMESTAMP() ORDER BY id ASC LIMIT %d", $limit ), ARRAY_A );
+		}
 		foreach ( (array) $rows as $row ) {
 			$claimed = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_application_repairs SET status='processing',attempts=attempts+1,updated_at=%s WHERE id=%d AND status IN ('pending','retry')", current_time( 'mysql', true ), (int) $row['id'] ) );
 			if ( 1 !== $claimed ) {
@@ -206,7 +222,7 @@ final class SMC_Completion {
 
 	private static function application_documents_complete( $user_id ) {
 		global $wpdb;
-		$keys = $wpdb->get_col( $wpdb->prepare( "SELECT document_key FROM {$wpdb->prefix}smc_identity_documents WHERE user_id=%d AND scan_status='passed'", absint( $user_id ) ) );
+		$keys = $wpdb->get_col( $wpdb->prepare( "SELECT document_key FROM {$wpdb->prefix}smc_identity_documents WHERE user_id=%d AND scan_status='passed' AND status IN ('submitted','approved') AND (expiry_date IS NULL OR expiry_date>=UTC_DATE())", absint( $user_id ) ) );
 		return ! array_diff( array_keys( smc_required_identity_documents() ), array_map( 'sanitize_key', (array) $keys ) );
 	}
 
@@ -305,8 +321,11 @@ final class SMC_Completion {
 		$id = absint( $_POST['repair_id'] ?? 0 );
 		check_admin_referer( 'smc_retry_repair_' . $id, 'smc_nonce' );
 		global $wpdb;
-		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_application_repairs SET status='pending',next_attempt_at=%s,last_error=NULL,updated_at=%s WHERE id=%d AND status IN ('retry','dead_letter','pending')", current_time( 'mysql', true ), current_time( 'mysql', true ), $id ) );
-		self::reconcile_applications( 1 );
+		$updated = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_application_repairs SET status='pending',next_attempt_at=%s,last_error=NULL,updated_at=%s WHERE id=%d AND status IN ('retry','dead_letter','pending')", current_time( 'mysql', true ), current_time( 'mysql', true ), $id ) );
+		if ( 1 !== $updated ) {
+			wp_die( esc_html__( 'The selected repair item is no longer retryable.', 'sabri-membership-core' ), '', array( 'response' => 409 ) );
+		}
+		self::reconcile_applications( 1, $id );
 		wp_safe_redirect( admin_url( 'admin.php?page=smc-health-repair' ) ); exit;
 	}
 
@@ -315,14 +334,17 @@ final class SMC_Completion {
 		$id = absint( $_POST['event_id'] ?? 0 );
 		check_admin_referer( 'smc_retry_outbox_' . $id, 'smc_nonce' );
 		global $wpdb;
-		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_event_outbox SET status='pending',next_attempt_at=%s,last_error=NULL,updated_at=%s WHERE id=%d AND status IN ('retry','dead_letter')", current_time( 'mysql', true ), current_time( 'mysql', true ), $id ) );
-		SMC_Events::process_outbox( 1 );
+		$updated = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_event_outbox SET status='pending',next_attempt_at=%s,last_error=NULL,updated_at=%s WHERE id=%d AND status IN ('retry','dead_letter')", current_time( 'mysql', true ), current_time( 'mysql', true ), $id ) );
+		if ( 1 !== $updated ) {
+			wp_die( esc_html__( 'The selected event is no longer replayable.', 'sabri-membership-core' ), '', array( 'response' => 409 ) );
+		}
+		SMC_Events::process_outbox( 1, $id );
 		wp_safe_redirect( admin_url( 'admin.php?page=smc-health-repair' ) ); exit;
 	}
 
 	public static function backup_manifest() {
 		global $wpdb;
-		$tables = array( 'smc_applications','smc_identity_records','smc_identity_documents','smc_guardian_consents','smc_verification_requests','smc_approval_votes','smc_verification_events','smc_consents','smc_auth_sessions','smc_recovery_codes','smc_file_jobs','smc_retention_holds','smc_audit_log','smc_migrations','smc_role_grants','smc_event_outbox','smc_event_inbox','smc_application_repairs' );
+		$tables = array( 'smc_applications','smc_identity_records','smc_identity_documents','smc_guardian_consents','smc_verification_requests','smc_approval_votes','smc_verification_events','smc_consents','smc_contact_otps','smc_auth_sessions','smc_recovery_codes','smc_rate_limits','smc_file_jobs','smc_retention_holds','smc_audit_log','smc_migrations','smc_role_grants','smc_event_outbox','smc_event_inbox','smc_application_repairs' );
 		$counts = array();
 		foreach ( $tables as $suffix ) { $counts[ $suffix ] = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}{$suffix}" ); }
 		$dir = SMC_Security::private_dir();
@@ -335,7 +357,7 @@ final class SMC_Completion {
 			'database_version' => SMC_DB_VERSION, 'contract_version' => SMC_CONTRACT_VERSION,
 			'table_counts' => $counts, 'private_file_count' => $files,
 			'audit_tail_hash' => (string) $wpdb->get_var( "SELECT row_hash FROM {$wpdb->prefix}smc_audit_log ORDER BY id DESC LIMIT 1" ),
-			'key_identifier' => defined( 'SMC_MASTER_KEY' ) ? substr( hash( 'sha256', (string) SMC_MASTER_KEY ), 0, 16 ) : '',
+			'key_identifier' => (string) apply_filters( 'smc_backup_key_identifier', defined( 'SMC_MASTER_KEY_ID' ) ? sanitize_key( (string) SMC_MASTER_KEY_ID ) : '' ),
 			'required_components' => array( 'database', 'encrypted_private_evidence', 'key_recovery_metadata', 'retention_holds', 'audit_chain', 'migration_registry' ),
 		);
 	}
@@ -351,6 +373,10 @@ final class SMC_Completion {
 		self::require_high_risk_authority();
 		check_admin_referer( 'smc_post_restore_reconcile', 'smc_nonce' );
 		$reference = sanitize_text_field( wp_unslash( $_POST['evidence_reference'] ?? '' ) );
+		if ( strlen( $reference ) < 8 ) {
+			SMC_Security::audit( 'post_restore_reconciliation_rejected', 0, array( 'reason_code' => 'missing_evidence_reference' ) );
+			wp_die( esc_html__( 'A meaningful restore evidence reference is required.', 'sabri-membership-core' ), '', array( 'response' => 400 ) );
+		}
 		$health = self::health_snapshot();
 		$ok = $health['key_ready'] && $health['private_storage'] && $health['audit_valid'] && SMC_DB_VERSION === $health['database_version'];
 		$record = array( 'evidence_reference' => $reference, 'checked_at' => current_time( 'mysql', true ), 'result' => $ok ? 'passed' : 'failed', 'health' => $health );

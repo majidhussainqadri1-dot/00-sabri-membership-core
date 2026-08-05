@@ -3,7 +3,7 @@ Contributors: sabrihomeopathy
 Tags: membership, identity, guardian consent, two-factor authentication, privacy
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 1.2.9
+Stable tag: 1.2.10
 License: GPL-2.0-or-later
 
 Canonical membership eligibility, identity assurance, guardian consent, security assertions, and verification governance for the Sabri Social Homeopathy Platform.
@@ -66,7 +66,7 @@ Local source and GitHub checks do not authorize production. Test fresh activatio
 
 == Changelog ==
 
-= 1.2.9 =
+= 1.2.10 =
 * Completes the plan-mandated progressive seven-step application with encrypted server-side autosave/resume, upload progress, duplicate-submit protection, network retry and privacy notices.
 * Replaces single-role enforcement with versioned multi-role grants and domain-specific approved-role assertions.
 * Adds persistent application repair items for partial document/provider/submission failures and safe reconciliation.

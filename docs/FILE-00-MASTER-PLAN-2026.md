@@ -7,7 +7,7 @@
 
 ## Current implementation identity
 
-- Runtime implementation release: `1.2.9`
+- Runtime implementation release: `1.2.10`
 - Contract: `1.1.2`
 - Database schema: `1.3.0`
 - Exact-head CI: pending
@@ -18,8 +18,8 @@
 - `qa/requirements-traceability.json`
 - `qa/master-plan-traceability-contract.mjs`
 - `qa/dual-plan-runtime-completion-contract.mjs`
-- `docs/FILE-00-IMPLEMENTATION-TRACEABILITY-1.2.9.md`
-- `docs/DUAL-PLAN-CODE-COMPLETION-1.2.9.md`
+- `docs/FILE-00-IMPLEMENTATION-TRACEABILITY-1.2.10.md`
+- `docs/DUAL-PLAN-CODE-COMPLETION-1.2.10.md`
 
 ## Truthful boundary
 

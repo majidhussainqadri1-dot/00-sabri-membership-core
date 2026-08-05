@@ -169,12 +169,17 @@ final class SMC_Workflow {
 			self::redirect( 'status', 'saved' );
 		}
 		$submission_receipt_key = '_smc_submission_' . substr( hash( 'sha256', $submission_key ), 0, 32 );
-		if ( ! add_user_meta( $user_id, $submission_receipt_key, array( 'status' => 'processing', 'started_at' => time() ), true ) ) {
+		$processing_receipt = array( 'status' => 'processing', 'started_at' => time() );
+		if ( ! add_user_meta( $user_id, $submission_receipt_key, $processing_receipt, true ) ) {
 			$receipt = get_user_meta( $user_id, $submission_receipt_key, true );
 			if ( is_array( $receipt ) && 'completed' === ( $receipt['status'] ?? '' ) ) {
 				self::redirect( 'status', 'saved' );
 			}
-			self::redirect( 'application', 'invalid', array( 'duplicate' => 1 ) );
+			$is_stale = is_array( $receipt ) && 'processing' === ( $receipt['status'] ?? '' ) && absint( $receipt['started_at'] ?? 0 ) <= time() - 15 * MINUTE_IN_SECONDS;
+			if ( ! $is_stale || ! delete_user_meta( $user_id, $submission_receipt_key, $receipt ) || ! add_user_meta( $user_id, $submission_receipt_key, $processing_receipt, true ) ) {
+				self::redirect( 'application', 'invalid', array( 'duplicate' => 1 ) );
+			}
+			SMC_Security::audit( 'stale_application_submission_reclaimed', $user_id, array( 'receipt_key_hash' => hash( 'sha256', $submission_receipt_key ) ) );
 		}
 		if ( SMC_Security::rate_limited( 'application|' . $user_id, 5, HOUR_IN_SECONDS ) || ! SMC_Security::key_ready() || SMC_Completion::safe_mode() ) {
 			delete_user_meta( $user_id, $submission_receipt_key );
@@ -879,7 +884,6 @@ final class SMC_Workflow {
 			$wpdb->query( 'COMMIT' );
 		} catch ( Throwable $error ) {
 			$wpdb->query( 'ROLLBACK' );
-			delete_user_meta( $user_id, $submission_receipt_key );
 			SMC_Security::audit( 'guardian_consent_transaction_failed', (int) $row['user_id'], array( 'reason' => $error->getMessage() ) );
 			self::redirect( 'guardian', 'invalid' );
 		}

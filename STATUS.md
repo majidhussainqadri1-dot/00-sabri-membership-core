@@ -2,31 +2,25 @@
 
 ## Current state
 
-**File 00 1.2.9 executable dual-plan repository completion verified on PHP 7.4 and PHP 8.3; deterministic package and 100-requirement evidence passed.**
+**File 00 1.2.10 second forty-round corrective candidate; exact-head GitHub Actions pending.**
 
-## Implemented in 1.2.9
+## Newly corrected in 1.2.10
 
-- progressive seven-step application, encrypted server-side autosave/resume, upload progress and duplicate-submit containment;
-- multiple independent role grants and least-privilege projection;
-- country/city/encrypted address and distinct privacy/terms/ethical consents;
-- jurisdiction adapter that can only raise the approved age baseline;
-- persistent application repair/reconciliation and dead-letter visibility;
-- assignment/SLA/conflict/reason-code/appeal-restoration reviewer governance;
-- private-route noindex/noarchive/no-store;
-- durable versioned outbox/inbox with dedupe and replay safety;
-- Safe Mode, health/repair, backup manifest, post-restore reconciliation, named owners and SLOs;
-- executable dual-plan runtime completion contract.
+- guardian rollback no longer references undefined application variables;
+- Safe Mode blocks guardian state-changing verification;
+- stale application submission receipts recover without opening duplicate execution;
+- repair claims recover after worker crashes;
+- manual repair and outbox actions target the selected record exactly;
+- restore acceptance requires a meaningful evidence reference;
+- backup manifests expose no master-secret-derived fingerprint and include every owner table;
+- rejected/expired documents cannot satisfy application repair completion;
+- corrupt encrypted drafts are cleared with privacy-safe audit evidence;
+- forty fresh review scopes and a dedicated regression contract are recorded.
 
-## Authorization
+## Authorization boundary
 
-- Repository code release: **1.2.9 / schema 1.3.0**
-- Verified source head: `f67a67ec027b2a01fe1646c64f3d882f898f83dd`
-- Dual-Plan QA: `30886140689` — **success**
-- PHP 7.4/8.3 Contract Integrity: `30886140688` — **success**
-- Artifact: `8883145342`
-- Package SHA-256: `4113dc77688eb9ee6052eabd2ab20817f69ed8cf5a2899a98276d4b8b1d8750f`
-- Repository-correctable code completion: **100%**
-- Known unresolved repository defects: **0**
-- Runtime merge to `main`: `1e76d4de96005d994da6ffe93939362442111cee` — **completed**
-- Staging accepted: **No**
+- Repository candidate: **1.2.10 / schema 1.3.0 / contract 1.1.2**
+- Exact-head QA: **Pending**
+- Known unresolved repository defects: **0 pending exact-head confirmation**
+- Hostinger staging accepted: **No**
 - Production/live authorized: **No**
