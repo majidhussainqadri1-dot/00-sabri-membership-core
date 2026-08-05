@@ -18,7 +18,13 @@ function smc_membership_state($uid){ return $GLOBALS['states'][(int)$uid]; }
 function smc_application($uid){ return $GLOBALS['apps'][(int)$uid] ?? false; }
 function smc_is_professional_type($type){ return in_array($type,['doctor','teacher','researcher'],true); }
 function smc_is_founder($uid){ return false; }
-function smc_policy(){ return ['version'=>'2026.1']; }
+function smc_is_institutional_ai($uid){ return false; }
+function smc_institutional_ai_policy(){ return ['low_risk_auto_publish'=>false]; }
+function smc_policy(){ return [
+  'version'=>'2026-08-05-v2.1','base_services'=>['registration','membership','education','ai','clinic','marketplace'],
+  'commission_percent'=>0,'donation_optional'=>true,'donation_affects_entitlement'=>false,
+  'donation_affects_capability'=>false,'donation_affects_visibility'=>false,'donation_affects_support'=>false
+]; }
 function smc_required_identity_documents(){ return ['government_id'=>'Government identity']; }
 function smc_account_types(){ return ['member'=>'Member','doctor'=>'Doctor','teacher'=>'Teacher','researcher'=>'Researcher']; }
 function smc_sanitize_membership_types($types){
