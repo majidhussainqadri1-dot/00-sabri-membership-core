@@ -1,0 +1,49 @@
+name: File 00 to File 02 Account Contract
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - codex/**
+
+permissions:
+  contents: read
+
+jobs:
+  account-contract:
+    name: PHP ${{ matrix.php }} account contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        php:
+          - '8.1'
+          - '8.3'
+    steps:
+      - name: Checkout exact head
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+          tools: none
+
+      - name: Lint provider and run no-network policy suite
+        run: |
+          set -euo pipefail
+          php -l source/sabri-membership-core/sabri-membership-core.php
+          php -l source/sabri-membership-core/includes/class-smc-authentication-contract.php
+          php qa/authentication-account-contract-runtime.php
+          node qa/authentication-account-contract.mjs
+          git diff --check
+
+          grep -Fq "define( 'SMC_AUTHENTICATION_CONTRACT_VERSION', '1.0.0' );" source/sabri-membership-core/sabri-membership-core.php
+          grep -Fq "CONTRACT_NAME    = 'smc.authentication-account'" source/sabri-membership-core/includes/class-smc-authentication-contract.php
+          ! grep -E "(access_token|refresh_token|client_secret|BEGIN .*PRIVATE KEY)" source/sabri-membership-core/includes/class-smc-authentication-contract.php
