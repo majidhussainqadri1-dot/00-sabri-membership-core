@@ -48,6 +48,11 @@ assert((human.match(/\| F00-R\d{3} \|/g) || []).length === 100, 'Historical huma
 const current = JSON.parse(read('qa/latest-central-traceability.json'));
 assert(current.release === '1.2.12' && current.public_contract_version === '1.2.0' && current.database_version === '1.3.0', 'Current latest-central machine trace identity');
 assert(current.search_discovery_owner === 'file26' && current.commission_percent === 0 && current.paid_unlocks === false && current.donor_advantage === false, 'Current central business/ownership invariants');
+assert(current.two_fresh_reviews_complete === true, 'Two fresh corrective reviews are machine-recorded complete');
+assert(current.review_rounds?.round_1?.defects_found === 4 && current.review_rounds?.round_1?.defects_corrected === 4, 'Round 1 defects fully closed');
+assert(current.review_rounds?.round_2?.defects_found === 5 && current.review_rounds?.round_2?.defects_corrected === 5, 'Round 2 defects fully closed');
+assert(current.repository_known_unresolved_defects === 0 && fs.existsSync(path.join(root, current.review_record)), 'Zero known repository defects and review record exists');
+assert(current.staging_accepted === false && current.live_deployed === false && current.operational === false, 'Current latest-central external gates remain pending');
 assert(read('package.json').includes('latest-central-contract.mjs'), 'Package test includes executable latest-central contract');
 if (failures.length) {
   console.error(`master-plan traceability contract: ${passed} PASS, ${failures.length} FAIL`);
