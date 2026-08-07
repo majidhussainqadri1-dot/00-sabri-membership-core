@@ -17,6 +17,7 @@ final class SMC_Latest_Central_2026 {
 	private static $revalidation_actions = array(
 		'guardian_consent_verified',
 		'guardian_consent_withdrawn',
+		'guardian_requirement_ended_at_adulthood',
 		'contact_verified',
 		'contact_reverification_required',
 		'consent_withdrawn',
