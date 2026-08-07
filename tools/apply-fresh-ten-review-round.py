@@ -1,25 +1,19 @@
 #!/usr/bin/env python3
 from pathlib import Path
 root=Path(__file__).resolve().parents[1]
-contracts=root/'source/sabri-membership-core/includes/class-smc-contracts.php'
-test=root/'qa/file09-professional-claim-runtime.php'
-s=contracts.read_text()
-old="""\t\tif ( 'doctor' === $type ) {\n\t\t\t/* File 09 is canonical. A versioned adapter may provide an explicit current claim. */\n\t\t\t$claim = apply_filters( 'smc_file09_doctor_verification_claim_v1', null, absint( $user_id ) );\n\t\t\tif ( is_array( $claim ) ) {\n\t\t\t\t$status  = sanitize_key( $claim['status'] ?? '' );\n\t\t\t\t$current = ! array_key_exists( 'current', $claim ) || ! empty( $claim['current'] );\n\t\t\t\treturn $current && in_array( $status, array( 'verified', 'active' ), true );\n\t\t\t}\n\t\t\t/* SPD_Helpers is the installed canonical File 09 compatibility adapter. */\n"""
-new="""\t\tif ( 'doctor' === $type ) {\n\t\t\t/* File 09 is canonical. Explicit claims must be typed, current and freshly asserted. */\n\t\t\t$claim = apply_filters( 'smc_file09_doctor_verification_claim_v1', null, absint( $user_id ) );\n\t\t\tif ( is_array( $claim ) ) {\n\t\t\t\t$status = sanitize_key( $claim['status'] ?? '' );\n\t\t\t\t$owner = sanitize_key( $claim['owner'] ?? '' );\n\t\t\t\t$contract = (string) ( $claim['contract_version'] ?? '' );\n\t\t\t\t$asserted_at = absint( $claim['asserted_at'] ?? 0 );\n\t\t\t\t$expires_at = absint( $claim['expires_at'] ?? 0 );\n\t\t\t\t$fresh = $asserted_at > 0 && $asserted_at <= time() + 60 && $asserted_at >= time() - 5 * MINUTE_IN_SECONDS;\n\t\t\t\treturn 'file09' === $owner\n\t\t\t\t\t&& '1.0.0' === $contract\n\t\t\t\t\t&& array_key_exists( 'current', $claim ) && ! empty( $claim['current'] )\n\t\t\t\t\t&& $fresh\n\t\t\t\t\t&& ( 0 === $expires_at || $expires_at > time() )\n\t\t\t\t\t&& in_array( $status, array( 'verified', 'active' ), true );\n\t\t\t}\n\t\t\t/* SPD_Helpers is the installed canonical File 09 compatibility adapter. */\n"""
-if old not in s: raise SystemExit('round6 File09 block not found')
-s=s.replace(old,new,1); contracts.write_text(s)
-test.write_text(r'''<?php
-error_reporting(E_ALL);
-define('ABSPATH',__DIR__.'/'); define('MINUTE_IN_SECONDS',60); define('SMC_CONTRACT_VERSION','1.2.0');
-$claim_filter=null;
-function absint($v){return abs((int)$v);} function sanitize_key($v){return strtolower(preg_replace('/[^a-z0-9_\-]/','',(string)$v));}
-function smc_is_professional_type($t){return 'doctor'===sanitize_key($t);} function apply_filters($tag,$value,...$args){global $claim_filter; if($tag==='smc_file09_doctor_verification_claim_v1' && is_callable($claim_filter)) return $claim_filter($value,...$args); return $value;}
-class SPD_Helpers{public static $status='verified';public static function verification_status($id){return self::$status;}}
-require __DIR__.'/../source/sabri-membership-core/includes/class-smc-contracts.php';
-$T=[];function t($n,$ok){global $T;$T[]=[$n,(bool)$ok];}
-$claim_filter=fn($v,$id)=>['status'=>'verified']; t('malformed explicit File09 claim fails closed',!SMC_Contracts::professional_verified(7,'doctor'));
-$claim_filter=fn($v,$id)=>['owner'=>'file09','contract_version'=>'1.0.0','status'=>'verified','current'=>true,'asserted_at'=>time()-600,'expires_at'=>time()+3600]; t('stale File09 assertion rejected',!SMC_Contracts::professional_verified(7,'doctor'));
-$claim_filter=fn($v,$id)=>['owner'=>'file09','contract_version'=>'1.0.0','status'=>'verified','current'=>true,'asserted_at'=>time(),'expires_at'=>time()+3600]; t('fresh typed File09 claim accepted',SMC_Contracts::professional_verified(7,'doctor'));
-$claim_filter=null; SPD_Helpers::$status='verified'; t('canonical compatibility adapter remains supported',SMC_Contracts::professional_verified(7,'doctor'));
-$f=0;foreach($T as [$n,$ok]){echo ($ok?'PASS ':'FAIL ').$n."\n";if(!$ok)$f++;}echo 'File09 claim runtime: '.(count($T)-$f).' PASS / '.$f." FAIL\n";exit($f?1:0);
-''')
+source=root/'source/sabri-membership-core/includes/class-smc-advanced-trust-2026.php'
+hard=root/'qa/advanced-trust-review-hardening-runtime.php'
+s=source.read_text()
+old="""\tpublic static function daily_reverification_sweep() {\n\t\tglobal $wpdb;\n\t\t$batch = 200;\n\t\t$last_id = max( 0, absint( get_option( self::REVERIFY_CURSOR_OPTION, 0 ) ) );\n\t\tif ( ! isset( $wpdb ) || ! is_object( $wpdb ) || empty( $wpdb->users ) ) {\n\t\t\treturn;\n\t\t}\n\t\t$ids = $wpdb->get_col( $wpdb->prepare( \"SELECT ID FROM {$wpdb->users} WHERE ID > %d ORDER BY ID ASC LIMIT %d\", $last_id, $batch ) );\n\t\tforeach ( (array) $ids as $user_id ) {\n\t\t\t$user_id = absint( $user_id );\n\t\t\t$status = self::reverification_status( $user_id );\n\t\t\tif ( ! empty( $status['overdue'] ) ) {\n\t\t\t\tupdate_user_meta( $user_id, '_smc_reverification_required', 1 );\n\t\t\t}\n\t\t}\n\t\t$next = count( (array) $ids ) < $batch ? 0 : absint( end( $ids ) );\n\t\tupdate_option( self::REVERIFY_CURSOR_OPTION, $next, false );\n\t}\n"""
+new="""\tpublic static function daily_reverification_sweep() {\n\t\tglobal $wpdb;\n\t\t$batch = 200;\n\t\t$last_id = max( 0, absint( get_option( self::REVERIFY_CURSOR_OPTION, 0 ) ) );\n\t\tif ( ! isset( $wpdb ) || ! is_object( $wpdb ) || empty( $wpdb->users ) ) { return; }\n\t\t$ids = $wpdb->get_col( $wpdb->prepare( \"SELECT ID FROM {$wpdb->users} WHERE ID > %d ORDER BY ID ASC LIMIT %d\", $last_id, $batch ) );\n\t\t$cursor = $last_id;\n\t\tforeach ( (array) $ids as $user_id ) {\n\t\t\t$user_id = absint( $user_id );\n\t\t\t$status = self::reverification_status( $user_id );\n\t\t\tif ( ! empty( $status['overdue'] ) && ! get_user_meta( $user_id, '_smc_reverification_required', true ) ) {\n\t\t\t\tif ( ! self::write_user_meta_verified( $user_id, '_smc_reverification_required', 1 )\n\t\t\t\t\t|| ! SMC_Security::audit( 'membership_reverification_overdue', $user_id, array( 'due_at' => absint( $status['due_at'] ?? 0 ) ) )\n\t\t\t\t\t|| false === self::bump_revocation_epoch( $user_id, 'membership_reverification_overdue' ) ) {\n\t\t\t\t\tself::write_option_verified( self::REVERIFY_CURSOR_OPTION, $cursor );\n\t\t\t\t\treturn;\n\t\t\t\t}\n\t\t\t}\n\t\t\t$cursor = $user_id;\n\t\t}\n\t\t$next = count( (array) $ids ) < $batch ? 0 : $cursor;\n\t\tself::write_option_verified( self::REVERIFY_CURSOR_OPTION, $next );\n\t}\n"""
+if old not in s: raise SystemExit('round7 sweep block not found')
+s=s.replace(old,new,1);source.write_text(s)
+h=hard.read_text()
+oldstub="function get_col($q){return [];}"
+newstub="public $ids=[];function get_col($q){return $this->ids;}"
+if oldstub not in h: raise SystemExit('round7 stub get_col not found')
+h=h.replace(oldstub,newstub,1)
+anchor="$wpdb->approved_at=gmdate('Y-m-d H:i:s',time()-2*YEAR_IN_SECONDS);t('expired approval baseline blocks synchronously without waiting for cron',!SMC_Advanced_Trust_2026::protected_actions_allowed(10));$wpdb->approved_at=gmdate('Y-m-d H:i:s');t('recent approval baseline remains current before periodic due date',SMC_Advanced_Trust_2026::protected_actions_allowed(10));\n"
+insert=anchor+"$actions=[];$wpdb->approved_at=gmdate('Y-m-d H:i:s',time()-2*YEAR_IN_SECONDS);$wpdb->ids=[20];SMC_Advanced_Trust_2026::daily_reverification_sweep();$has_revocation=false;foreach($actions as $a){if($a[0]==='smc_trust_revocation_invalidated')$has_revocation=true;}t('overdue sweep persists hold and propagates revocation',get_user_meta(20,'_smc_reverification_required',true)==1&&$has_revocation);$wpdb->ids=[];$wpdb->approved_at=gmdate('Y-m-d H:i:s');\n"
+if anchor not in h: raise SystemExit('round7 test anchor not found')
+h=h.replace(anchor,insert,1);hard.write_text(h)
