@@ -137,9 +137,11 @@ final class SMC_Advanced_Trust_2026 {
 		$owner = sanitize_key( $claim['owner'] ?? '' );
 		$owner_ok = 'file02' === $owner;
 		$contract_ok = '1.0.0' === (string) ( $claim['contract_version'] ?? '' );
+		$required_after = absint( get_user_meta( $user_id, '_smc_revalidation_required_at', true ) );
 		$fresh = $verified_at > 0 && $verified_at <= time() + 60 && $verified_at >= time() - 5 * MINUTE_IN_SECONDS;
+		$fresh_after_revalidation = 0 === $required_after || $verified_at >= $required_after;
 		$elevated = $level > (int) $baseline['level'] || ! empty( $claim['passkey_asserted'] ) || ! empty( $claim['hardware_backed'] );
-		if ( $verified_at > time() + 60 || ( $elevated && ( ! $owner_ok || ! $contract_ok || ! $fresh ) ) ) {
+		if ( $verified_at > time() + 60 || ( $elevated && ( ! $owner_ok || ! $contract_ok || ! $fresh || ! $fresh_after_revalidation ) ) ) {
 			return $baseline;
 		}
 		if ( ! $elevated ) {
@@ -177,7 +179,9 @@ final class SMC_Advanced_Trust_2026 {
 			$required[0] = max( $required[0], 3 );
 			$required[1] = max( $required[1], 2 );
 		}
-		$satisfied = (int) $profile['identity_assurance_level'] >= $required[0]
+		$membership_operational = self::protected_actions_allowed( absint( $user_id ) );
+		$satisfied = $membership_operational
+			&& (int) $profile['identity_assurance_level'] >= $required[0]
 			&& (int) $profile['authentication_assurance_level'] >= $required[1]
 			&& ( ! $required[2] || ! empty( $profile['hardware_backed'] ) );
 		return array(
@@ -187,6 +191,7 @@ final class SMC_Advanced_Trust_2026 {
 			'hardware_backed_required' => (bool) $required[2],
 			'current_identity_level' => (int) $profile['identity_assurance_level'],
 			'current_authentication_level' => (int) $profile['authentication_assurance_level'],
+			'membership_operational' => (bool) $membership_operational,
 			'satisfied' => (bool) $satisfied,
 			'risk_context' => array( 'high_risk' => ! empty( $risk['high_risk'] ) ),
 		);
@@ -816,7 +821,9 @@ final class SMC_Advanced_Trust_2026 {
 	}
 
 	public static function has_delegated_scope( $principal_user_id, $scope ) {
+		$principal_user_id = absint( $principal_user_id );
 		$scope = sanitize_key( $scope );
+		if ( $principal_user_id <= 0 || ! self::protected_actions_allowed( $principal_user_id ) ) { return false; }
 		foreach ( self::delegated_authorities( $principal_user_id ) as $grant ) {
 			if ( in_array( $scope, (array) ( $grant['scopes'] ?? array() ), true ) ) { return true; }
 		}
@@ -967,13 +974,16 @@ final class SMC_Advanced_Trust_2026 {
 		$containment = self::containment_state( $user_id );
 		$continuity = self::continuity_state( $user_id );
 		$reverification_required = (bool) get_user_meta( $user_id, '_smc_reverification_required', true );
+		$required_after = absint( get_user_meta( $user_id, '_smc_revalidation_required_at', true ) );
+		$auth = self::authentication_assurance( $user_id );
+		$revalidation_current = 0 === $required_after || ( (int) ( $auth['level'] ?? 0 ) >= 2 && absint( $auth['verified_at'] ?? 0 ) >= $required_after );
 		$reverification = self::reverification_status( $user_id );
 		$reverification_stale = ! empty( $reverification['applicable'] ) && empty( $reverification['current'] );
 		$critical = get_user_meta( $user_id, self::CRITICAL_IDENTITY_META, true );
 		$critical_pending = is_array( $critical ) && 'reverification_required' === ( $critical['state'] ?? '' );
 		$merge = get_user_meta( $user_id, self::MERGE_META, true );
 		$merge_finalizing = is_array( $merge ) && 'finalizing' === ( $merge['state'] ?? '' );
-		return 'clear' === ( $containment['state'] ?? 'unknown' ) && 'active' === ( $continuity['state'] ?? 'unknown' ) && ! $reverification_required && ! $reverification_stale && ! $critical_pending && ! $merge_finalizing;
+		return 'clear' === ( $containment['state'] ?? 'unknown' ) && 'active' === ( $continuity['state'] ?? 'unknown' ) && $revalidation_current && ! $reverification_required && ! $reverification_stale && ! $critical_pending && ! $merge_finalizing;
 	}
 
 	public static function filter_capabilities( $allcaps, $caps, $args, $user ) {
