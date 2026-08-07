@@ -801,6 +801,15 @@ final class SMC_Security {
 		return ! metadata_exists( 'user', absint( $user_id ), $key );
 	}
 
+	private static function clear_revalidation_requirement( $user_id ) {
+		$user_id = absint( $user_id );
+		if ( ! metadata_exists( 'user', $user_id, '_smc_revalidation_required_at' ) ) {
+			return true;
+		}
+		delete_user_meta( $user_id, '_smc_revalidation_required_at' );
+		return ! metadata_exists( 'user', $user_id, '_smc_revalidation_required_at' );
+	}
+
 	public static function register_session( $user_id, $token, $expiration ) {
 		$user_id = absint( $user_id );
 		$token = (string) $token;
@@ -905,8 +914,9 @@ final class SMC_Security {
 		}
 		$now = current_time( 'mysql', true );
 		$updated = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_auth_sessions SET two_factor_at=%s,last_totp_slice=%d,updated_at=%s WHERE id=%d AND user_id=%d AND token_hash=%s AND revoked_at IS NULL AND (last_totp_slice IS NULL OR last_totp_slice<%d)", $now, $slice, $now, (int) $row['id'], $user_id, $hash, $slice ) );
-		$audit_ok = 1 === $updated && self::audit( 'two_factor_passed', $user_id, array( 'session_id' => (int) $row['id'], 'totp_slice' => (int) $slice ) );
-		if ( 1 !== $updated || ! $audit_ok ) {
+		$revalidation_ok = 1 === $updated && self::clear_revalidation_requirement( $user_id );
+		$audit_ok = $revalidation_ok && self::audit( 'two_factor_passed', $user_id, array( 'session_id' => (int) $row['id'], 'totp_slice' => (int) $slice ) );
+		if ( 1 !== $updated || ! $revalidation_ok || ! $audit_ok ) {
 			$wpdb->query( 'ROLLBACK' );
 			return new WP_Error( 'smc_totp_commit', __( 'The two-factor verification could not be committed atomically.', 'sabri-membership-core' ) );
 		}
@@ -1010,8 +1020,9 @@ final class SMC_Security {
 		}
 		$code_updated = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_recovery_codes SET consumed_at=%s WHERE id=%d AND consumed_at IS NULL", $now, (int) $row['id'] ) );
 		$session_updated = $session_id ? $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_auth_sessions SET two_factor_at=%s,updated_at=%s WHERE id=%d AND user_id=%d AND token_hash=%s AND revoked_at IS NULL", $now, $now, (int) $session_id, $user_id, $token_hash ) ) : 0;
-		$audit_ok = 1 === $code_updated && 1 === $session_updated && self::audit( 'recovery_code_used', $user_id, array( 'session_id' => (int) $session_id ) );
-		if ( 1 !== $code_updated || 1 !== $session_updated || ! $audit_ok ) {
+		$revalidation_ok = 1 === $code_updated && 1 === $session_updated && self::clear_revalidation_requirement( $user_id );
+		$audit_ok = $revalidation_ok && self::audit( 'recovery_code_used', $user_id, array( 'session_id' => (int) $session_id ) );
+		if ( 1 !== $code_updated || 1 !== $session_updated || ! $revalidation_ok || ! $audit_ok ) {
 			$wpdb->query( 'ROLLBACK' );
 			return false;
 		}
