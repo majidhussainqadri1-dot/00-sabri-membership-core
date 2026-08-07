@@ -1,0 +1,43 @@
+name: Apply File 00 Review Round 1 Fixes
+
+on:
+  push:
+    branches: ['codex/file00-latest-central-1.2.12']
+    paths:
+      - 'tools/apply-review-round1-1.2.12.py'
+      - '.github/workflows/apply-review-round1-1.2.12.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: codex/file00-latest-central-1.2.12
+          fetch-depth: 0
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240
+        with:
+          php-version: '8.3'
+          coverage: none
+          tools: none
+      - name: Apply round-1 fixes
+        run: python3 tools/apply-review-round1-1.2.12.py
+      - name: Lint corrected source
+        run: php -l source/sabri-membership-core/includes/class-smc-security.php
+      - name: Commit corrected source
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo 'No round-1 correction delta.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add source/sabri-membership-core/includes/class-smc-security.php
+          git commit -m 'File 00 1.2.12: close round-1 revalidation ordering defect'
+          git push origin HEAD:codex/file00-latest-central-1.2.12
