@@ -105,10 +105,26 @@ The active test chain now covers, among other inherited suites:
 - delegated-scope suspension while protected;
 - deterministic package filename derived from canonical runtime identity.
 
+## Exact green branch evidence
+
+The pre-evidence branch head `2bd99579d6907570faff88103dbb9a01680ce0ee` passed both read-only workflow families:
+
+- File 00 1.2.14 Fresh-Ten-Review QA — run `31211441087` — success.
+- File 00 CF-01 and Forty-Round Contract Integrity — run `31211441109` — success.
+- Core assertions: 575 PASS / 0 FAIL.
+- Advanced Trust static: 31 PASS / 0 FAIL.
+- Advanced Trust runtime: 25 PASS / 0 FAIL.
+- Fresh hardening runtime: 26 PASS / 0 FAIL.
+- File 09 professional claim runtime: 4 PASS / 0 FAIL.
+- Deterministic plugin ZIP SHA-256: `d62aac41ec8b752d151b1846196ed7a6cc43386d3978ed0c74a59789cd088a10`.
+- Archive: 21 entries; 0 unsafe entries; 0 symlinks; 0 manifest mismatches; 0 CRC failures.
+
+This evidence-only documentation commit does not change plugin source or package contents; the final PR and merged-main heads must still rerun exact-head CI.
+
 ## Tooling observations not counted as product/repository defects
 
 During release closure, the expanded QA harness initially lacked a database-advisory-lock stub required by the newly hardened source. The harness was aligned and the complete inherited suite then passed. Separately, GitHub correctly rejected a temporary bot attempt to push protected workflow YAML without workflow permission; workflow metadata was updated through the repository-authorized path instead. The temporary write-mutator script was removed. Because workflow-file deletion was not approved by the repository operation available in this environment, its former workflow file was converted into a manual-only, `contents: read` sentinel with no mutation/push step. These are QA/repository-tooling closure events, not additional product defects.
 
 ## Final acceptance boundary
 
-This review closes repository coding/package/automated-QA only after exact-head read-only CI is green with deterministic package verification. Hostinger staging acceptance, live deployment and operational acceptance remain separate external gates and must not be inferred from repository success.
+This review closes repository coding/package/automated-QA only after PR and merged-main exact-head read-only CI are green with deterministic package verification. Hostinger staging acceptance, live deployment and operational acceptance remain separate external gates and must not be inferred from repository success.
