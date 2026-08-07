@@ -3,7 +3,7 @@ Contributors: sabrihomeopathy
 Tags: membership, identity, guardian consent, two-factor authentication, privacy
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 1.2.12
+Stable tag: 1.2.13
 License: GPL-2.0-or-later
 
 Canonical membership eligibility, identity assurance, guardian consent, security assertions, and verification governance for the Sabri Social Homeopathy Platform.
@@ -18,10 +18,11 @@ File 00 owns:
 * membership state transitions and reviewer governance;
 * two-factor membership challenges and session assertions;
 * versioned membership and communication assertions;
+* advanced identity/trust claims, containment, continuity and revocation epochs;
 * the privacy-minimal CF-01 membership/step-up provider contract;
 * privacy export, erasure, retention holds, and tamper-evident audit records.
 
-File 00 does not own authentication UI, public profiles, doctor credential storage, publishing, encyclopedia content, notifications, routes, the application shell, or clinical records. CF-01 consumes assertions only and remains the future clinical system of record after its activation gates.
+File 00 does not own authentication UI or passkey ceremony, public profiles, doctor credential storage, publishing, encyclopedia content, notifications, routes, the application shell, search/ranking, or clinical records. File 02 remains authentication/passkey owner, File 09 professional verification truth, and File 26 search/discovery/ranking owner. CF-01 consumes assertions only and remains the future clinical system of record after its activation gates.
 
 == CF-01 Provider Contract ==
 
@@ -42,6 +43,8 @@ Contract `smc.cf01.membership-assurance` version `1.0.0` returns a short-lived, 
 
 * Institutional identity never defeats an explicit membership hard block.
 * File 00/platform capabilities and protected mutations require effective eligibility, verified ordinary-account contact ownership, and a current two-factor session challenge.
+* Advanced containment or non-active continuity states remove protected capabilities and are propagated with a monotonic revocation epoch.
+* File 02 passkey/WebAuthn assurance may strengthen a File 00 step-up decision only through the versioned owner/freshness adapter; File 00 does not perform the passkey ceremony.
 * A CF-01 assertion is derivative evidence and must be rechecked at action time; it is not a reusable bearer credential.
 * Recovery actions and routes use exact allowlists; arbitrary smc_* or sa_* prefixes are not authorization.
 * Ordinary Founder reassignment is locked after configuration.
@@ -62,9 +65,18 @@ File 19 receives membership notices through its canonical sabri_notify integrati
 
 == Staging Acceptance ==
 
-Local source and GitHub checks do not authorize production. Test fresh activation, 1.0.1 upgrade, MySQL advisory locks, concurrent reviewers, authorization matrices, filesystem denial and rollback, scanner providers, email/mobile/guardian delivery, File 02 Google sign-in, CF-01 provider/consumer contracts, all named cross-file integrations, privacy erasure, restore, browser accessibility, and mobile layouts on Hostinger staging.
+Local source and GitHub checks do not authorize production. Test fresh activation, 1.0.1 upgrade, MySQL advisory locks, concurrent reviewers, authorization matrices, filesystem denial and rollback, scanner providers, email/mobile/guardian delivery, File 02 Google sign-in and passkey assurance adapter, CF-01 provider/consumer contracts, all named cross-file integrations, advanced trust containment/revocation/selective-disclosure workflows, privacy erasure, restore, browser accessibility, and mobile layouts on Hostinger staging.
 
 == Changelog ==
+
+= 1.2.13 =
+* Adds F00-EXT-001 through F00-EXT-020 Advanced Membership, Identity & Trust Extensions 2026.
+* Adds identity/authentication assurance levels and a versioned File 02 passkey/WebAuthn assurance adapter without duplicating authentication ownership.
+* Adds adaptive step-up, periodic reverification, critical identity-change revalidation, guardian succession and governed duplicate-account resolution.
+* Adds compromised-account containment, monotonic revocation propagation SLA, anti-downgrade contract negotiation and privacy-minimal assertions.
+* Adds short-lived selective-disclosure proofs, external verifiable-credential adapter, scoped delegation and dual-control institutional break-glass.
+* Adds non-human/service identity classes, dormant/deceased/permanently-inactive continuity states, and a privacy-safe trust/security timeline.
+* Preserves the single free tier, zero commission, donor neutrality, File 09 professional truth and File 26 search/ranking ownership.
 
 = 1.2.12 =
 * Reconciles File 00 with the 6–7 August 2026 latest-central addendum and 00–26 ownership map.
