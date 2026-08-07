@@ -1,0 +1,51 @@
+{
+  "release": "1.2.14",
+  "database_schema": "1.3.0",
+  "public_membership_contract": "1.2.0",
+  "advanced_trust_contract": "1.0.0",
+  "review_complete": true,
+  "baseline_main_sha": "5fc291fb4de3ecc03b5e544553503646cb5ae99c",
+  "rounds_with_defects": [1, 2, 3, 4, 5, 6, 7, 8, 9],
+  "rounds_without_defects": [10],
+  "defects_found_total": 15,
+  "defects_corrected_total": 15,
+  "severity": {
+    "critical": 1,
+    "high": 11,
+    "medium": 3,
+    "low": 0
+  },
+  "known_unresolved_repository_defects": 0,
+  "rounds": [
+    {"round":1,"defects":["FR-R1-D01"],"status":"corrected"},
+    {"round":2,"defects":["FR-R2-D01"],"status":"corrected"},
+    {"round":3,"defects":["FR-R3-D01","FR-R3-D02"],"status":"corrected"},
+    {"round":4,"defects":["FR-R4-D01","FR-R4-D02"],"status":"corrected"},
+    {"round":5,"defects":["FR-R5-D01","FR-R5-D02"],"status":"corrected"},
+    {"round":6,"defects":["FR-R6-D01"],"status":"corrected"},
+    {"round":7,"defects":["FR-R7-D01","FR-R7-D02"],"status":"corrected"},
+    {"round":8,"defects":["FR-R8-D01"],"status":"corrected"},
+    {"round":9,"defects":["FR-R9-D01","FR-R9-D02","FR-R9-D03"],"status":"corrected"},
+    {"round":10,"defects":[],"status":"clean"}
+  ],
+  "canonical_boundaries": {
+    "membership_identity_assurance": "file00",
+    "authentication_ceremony": "file02",
+    "professional_verification_truth": "file09",
+    "security_risk_assurance": "file24",
+    "search_discovery_ranking": "file26"
+  },
+  "guardrails": {
+    "single_free_tier": true,
+    "donor_advantage": false,
+    "paid_unlocks": false,
+    "commission_percent": 0,
+    "brand_primary": "#087A4E",
+    "known_unresolved_repository_defects": 0
+  },
+  "external_status": {
+    "staging_accepted": false,
+    "live_deployed": false,
+    "operational": false
+  }
+}
