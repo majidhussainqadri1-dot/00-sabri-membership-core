@@ -5,7 +5,7 @@ defined( 'ABSPATH' ) || exit;
  * 6–7 August 2026 central-plan reconciliation for File 00.
  *
  * This layer deliberately owns no search index, profile, professional-evidence store,
- * donation ledger, authentication UI or ranking engine.  It only publishes File 00's
+ * donation ledger, authentication UI or ranking engine. It only publishes File 00's
  * canonical membership constitution/projections and invalidates derived assurance when
  * membership-security facts change.
  */
@@ -39,7 +39,8 @@ final class SMC_Latest_Central_2026 {
 	public static function init() {
 		add_filter( 'smc_latest_central_constitution_v1', array( __CLASS__, 'filter_constitution' ) );
 		add_filter( 'smc_file26_membership_projection_v1', array( __CLASS__, 'filter_file26_projection' ), 10, 2 );
-		add_action( 'smc_audit_recorded', array( __CLASS__, 'audit_recorded' ), 10, 4 );
+		/* A mandatory audit guard can fail the caller's audit/transaction closed. */
+		add_filter( 'smc_audit_record_guard', array( __CLASS__, 'audit_record_guard' ), 10, 5 );
 	}
 
 	public static function constitution() {
@@ -69,18 +70,13 @@ final class SMC_Latest_Central_2026 {
 		return array_merge( is_array( $value ) ? $value : array(), self::constitution() );
 	}
 
-	/**
-	 * Privacy-minimal File 26 projection. File 26 owns indexing/ranking; File 00 only
-	 * supplies current membership eligibility and public-index permission.
-	 */
-	public static function file26_projection( $user_id ) {
-		$user_id = absint( $user_id );
-		$hidden = array(
+	private static function hidden_file26_projection( $platform_uuid = '' ) {
+		return array(
 			'contract_version'      => self::FILE26_CONTRACT_VERSION,
 			'source_version'        => SMC_VERSION,
 			'owner'                 => 'file00',
 			'consumer'              => 'file26',
-			'user_id'               => $user_id,
+			'platform_uuid'         => (string) $platform_uuid,
 			'indexable'             => false,
 			'search_visibility'     => 'hidden',
 			'membership_status'     => 'unavailable',
@@ -91,12 +87,28 @@ final class SMC_Latest_Central_2026 {
 			'donation_rank_signal'  => false,
 			'paid_rank_signal'      => false,
 		);
-		if ( $user_id <= 0 || ! get_userdata( $user_id ) || smc_privacy_erasure_lock( $user_id ) || ! class_exists( 'SMC_Contracts' ) ) {
-			return $hidden;
+	}
+
+	/**
+	 * Privacy-minimal File 26 projection. File 26 owns indexing/ranking; File 00 only
+	 * supplies current membership eligibility and public-index permission.
+	 *
+	 * The returned contract deliberately uses File 00's opaque platform UUID instead
+	 * of the internal WordPress user ID so a search projection never becomes a public
+	 * identifier leak or a second identity authority.
+	 */
+	public static function file26_projection( $user_id ) {
+		$user_id = absint( $user_id );
+		if ( $user_id <= 0 || ! get_userdata( $user_id ) || smc_privacy_erasure_lock( $user_id ) || ! class_exists( 'SMC_Contracts' ) || ! class_exists( 'SMC_CF01_Contract' ) ) {
+			return self::hidden_file26_projection();
+		}
+		$platform_uuid = SMC_CF01_Contract::ensure_subject_uuid( $user_id );
+		if ( '' === $platform_uuid ) {
+			return self::hidden_file26_projection();
 		}
 		$a = SMC_Contracts::assertions( $user_id );
 		if ( ! is_array( $a ) ) {
-			return $hidden;
+			return self::hidden_file26_projection( $platform_uuid );
 		}
 		$approved = ! empty( $a['approved'] );
 		$eligible = ! empty( $a['eligible'] );
@@ -109,7 +121,7 @@ final class SMC_Latest_Central_2026 {
 			'source_version'        => SMC_VERSION,
 			'owner'                 => 'file00',
 			'consumer'              => 'file26',
-			'user_id'               => $user_id,
+			'platform_uuid'         => $platform_uuid,
 			'source_record_version' => is_array( $app ) ? absint( $app['row_version'] ?? 0 ) : 0,
 			'indexable'             => (bool) $indexable,
 			'search_visibility'     => $indexable ? 'public' : 'hidden',
@@ -129,25 +141,37 @@ final class SMC_Latest_Central_2026 {
 		return self::file26_projection( $user_id );
 	}
 
-	public static function audit_recorded( $action, $user_id, $details = array(), $audit_id = 0 ) {
+	/**
+	 * Mandatory post-audit guard for security-state changes.
+	 *
+	 * The marker is deliberately one second beyond the current wall-clock value.
+	 * Existing second-resolution `two_factor_at` values therefore cannot accidentally
+	 * satisfy the new requirement when an old challenge and the state change occurred
+	 * in the same second. A successful new TOTP/recovery challenge clears this marker
+	 * atomically before its session assurance is committed.
+	 */
+	public static function audit_record_guard( $allowed, $action, $user_id, $details = array(), $audit_id = 0 ) {
+		if ( true !== $allowed ) {
+			return false;
+		}
+		unset( $details, $audit_id );
 		$action = sanitize_key( $action );
 		$user_id = absint( $user_id );
 		if ( $user_id <= 0 ) {
-			return;
+			return true;
 		}
 		$watched = (array) apply_filters( 'smc_revalidation_audit_actions', self::$revalidation_actions );
 		$watched = array_values( array_unique( array_map( 'sanitize_key', $watched ) ) );
 		if ( ! in_array( $action, $watched, true ) ) {
-			return;
+			return true;
 		}
 		$previous = absint( get_user_meta( $user_id, self::REVALIDATION_META, true ) );
-		$stamp = max( time(), $previous + 1 );
+		$stamp = max( time() + 1, $previous + 1 );
 		update_user_meta( $user_id, self::REVALIDATION_META, $stamp );
 		$stored = absint( get_user_meta( $user_id, self::REVALIDATION_META, true ) );
 		if ( $stored < $stamp ) {
-			/* Fail closed: a missing marker is observable to assurance/repair consumers. */
-			do_action( 'smc_revalidation_marker_failed', $user_id, $action, absint( $audit_id ) );
-			return;
+			/* Returning false makes SMC_Security::audit() fail and transactional callers roll back. */
+			return false;
 		}
 		clean_user_cache( $user_id );
 		do_action(
@@ -156,9 +180,9 @@ final class SMC_Latest_Central_2026 {
 			array(
 				'reason'               => $action,
 				'constitution_version' => self::CONSTITUTION_VERSION,
-				'audit_id'             => absint( $audit_id ),
 			)
 		);
+		return true;
 	}
 }
 
