@@ -31,6 +31,18 @@ jobs:
           cache: npm
       - name: Apply exact latest-central reconciliation
         run: python3 tools/apply-latest-central-1.2.12.py
+      - name: Normalize reconciler contract syntax
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          bad = 'latest.includes("add_action( \'smc_audit_recorded\'"))]'
+          good = 'latest.includes("add_action( \'smc_audit_recorded\'")]'
+          for name in ('tools/apply-latest-central-1.2.12.py', 'qa/latest-central-contract.mjs'):
+              p = Path(name)
+              s = p.read_text(encoding='utf-8')
+              if bad in s:
+                  p.write_text(s.replace(bad, good), encoding='utf-8', newline='\n')
+          PY
       - name: Syntax and focused contract checks
         run: |
           set -euo pipefail
