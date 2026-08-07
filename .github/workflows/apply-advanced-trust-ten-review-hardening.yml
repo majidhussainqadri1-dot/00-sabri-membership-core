@@ -1,0 +1,40 @@
+name: Apply File 00 Ten-Review Hardening
+
+on:
+  push:
+    branches: ['codex/file00-advanced-trust-1.2.13']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.ref == 'refs/heads/codex/file00-advanced-trust-1.2.13'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: codex/file00-advanced-trust-1.2.13
+          fetch-depth: 0
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240
+        with:
+          php-version: '8.3'
+          coverage: none
+          tools: none
+      - name: Apply reviewed source
+        run: |
+          set -euo pipefail
+          python3 tools/apply-advanced-trust-ten-review-hardening.py
+          php -l source/sabri-membership-core/includes/class-smc-advanced-trust-2026.php
+          git diff --check
+      - name: Commit source only
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add source/sabri-membership-core/includes/class-smc-advanced-trust-2026.php
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Harden File 00 advanced trust after ten-review audit'
+          git push origin HEAD:codex/file00-advanced-trust-1.2.13
