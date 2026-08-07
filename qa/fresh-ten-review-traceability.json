@@ -5,13 +5,13 @@
   "advanced_trust_contract": "1.0.0",
   "review_complete": true,
   "baseline_main_sha": "5fc291fb4de3ecc03b5e544553503646cb5ae99c",
-  "rounds_with_defects": [1, 2, 3, 4, 5, 6, 7, 8, 9],
-  "rounds_without_defects": [10],
-  "defects_found_total": 15,
-  "defects_corrected_total": 15,
+  "rounds_with_defects": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+  "rounds_without_defects": [],
+  "defects_found_total": 16,
+  "defects_corrected_total": 16,
   "severity": {
     "critical": 1,
-    "high": 11,
+    "high": 12,
     "medium": 3,
     "low": 0
   },
@@ -26,7 +26,7 @@
     {"round":7,"defects":["FR-R7-D01","FR-R7-D02"],"status":"corrected"},
     {"round":8,"defects":["FR-R8-D01"],"status":"corrected"},
     {"round":9,"defects":["FR-R9-D01","FR-R9-D02","FR-R9-D03"],"status":"corrected"},
-    {"round":10,"defects":[],"status":"clean"}
+    {"round":10,"defects":["FR-R10-D01"],"status":"corrected"}
   ],
   "canonical_boundaries": {
     "membership_identity_assurance": "file00",
@@ -41,7 +41,9 @@
     "paid_unlocks": false,
     "commission_percent": 0,
     "brand_primary": "#087A4E",
-    "known_unresolved_repository_defects": 0
+    "known_unresolved_repository_defects": 0,
+    "package_version_derived_from_runtime": true,
+    "self_mutating_ci": false
   },
   "external_status": {
     "staging_accepted": false,
