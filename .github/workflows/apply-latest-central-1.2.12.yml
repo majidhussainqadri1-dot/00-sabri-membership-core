@@ -31,7 +31,7 @@ jobs:
           cache: npm
       - name: Apply exact latest-central reconciliation
         run: python3 tools/apply-latest-central-1.2.12.py
-      - name: Normalize reconciler contract syntax
+      - name: Normalize reconciler contract and trace syntax
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -41,7 +41,16 @@ jobs:
               p = Path(name)
               s = p.read_text(encoding='utf-8')
               if bad in s:
-                  p.write_text(s.replace(bad, good), encoding='utf-8', newline='\n')
+                  s = s.replace(bad, good)
+              p.write_text(s, encoding='utf-8', newline='\n')
+          marker = '- **AJ-35:** export/delete/retention exception'
+          cv280 = '- **CV-280:** two fresh review/fix/retest rounds are mandatory before release; zero known repository defects is the merge gate.\n'
+          for name in ('tools/apply-latest-central-1.2.12.py', 'docs/FILE-00-LATEST-CENTRAL-TRACEABILITY-1.2.12.md'):
+              p = Path(name)
+              s = p.read_text(encoding='utf-8')
+              if 'CV-280:** two fresh review/fix/retest' not in s and marker in s:
+                  s = s.replace(marker, cv280 + marker)
+              p.write_text(s, encoding='utf-8', newline='\n')
           PY
       - name: Syntax and focused contract checks
         run: |
