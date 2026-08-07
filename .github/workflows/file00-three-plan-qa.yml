@@ -70,9 +70,11 @@ jobs:
           assert d['external_status']=={'staging_accepted':False,'live_deployed':False,'operational':False}
           PY
           grep -Fq '#087A4E' source/sabri-membership-core/assets/membership.css
-          test "$(find .github/workflows -maxdepth 1 -type f | wc -l)" -eq 2
+          test "$(find .github/workflows -maxdepth 1 -type f | wc -l)" -eq 3
           ! grep -RInE '^\s*contents:\s*write\s*$' .github/workflows
-          test ! -e .github/workflows/apply-fresh-ten-review.yml
+          grep -Fq 'Retired File 00 Fresh-Review Mutator Sentinel' .github/workflows/apply-fresh-ten-review.yml
+          grep -Fq 'permissions:' .github/workflows/apply-fresh-ten-review.yml
+          grep -Fq 'contents: read' .github/workflows/apply-fresh-ten-review.yml
           test ! -e tools/apply-fresh-ten-review-round.py
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
