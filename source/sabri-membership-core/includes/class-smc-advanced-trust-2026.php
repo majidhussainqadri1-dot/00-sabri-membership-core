@@ -592,8 +592,11 @@ final class SMC_Advanced_Trust_2026 {
 	public static function bump_revocation_epoch( $user_id, $reason ) {
 		$user_id = absint( $user_id );
 		if ( $user_id <= 0 ) { return false; }
+		$lock = self::acquire_revocation_lock( $user_id );
+		if ( false === $lock ) { return false; }
 		$next = max( time(), self::revocation_epoch( $user_id ) + 1 );
 		if ( ! self::write_user_meta_verified( $user_id, self::REVOCATION_META, $next ) ) {
+			self::release_revocation_lock( $lock );
 			return false;
 		}
 		$event = array(
@@ -605,7 +608,24 @@ final class SMC_Advanced_Trust_2026 {
 			'sla_seconds' => self::REVOCATION_PROPAGATION_SLA,
 		);
 		do_action( 'smc_trust_revocation_invalidated', $user_id, $event );
+		self::release_revocation_lock( $lock );
 		return $event;
+	}
+
+	private static function acquire_revocation_lock( $user_id ) {
+		global $wpdb;
+		if ( ! isset( $wpdb ) || ! is_object( $wpdb ) || ! method_exists( $wpdb, 'get_var' ) || ! method_exists( $wpdb, 'prepare' ) ) { return false; }
+		$subject = class_exists( 'SMC_Security' ) ? SMC_Security::subject_hash( absint( $user_id ) ) : (string) absint( $user_id );
+		$lock_name = 'smc_rev_' . substr( hash( 'sha256', (string) $subject ), 0, 40 );
+		$locked = $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s,%d)', $lock_name, 2 ) );
+		return '1' === (string) $locked ? $lock_name : false;
+	}
+
+	private static function release_revocation_lock( $lock_name ) {
+		global $wpdb;
+		if ( isset( $wpdb ) && is_object( $wpdb ) && method_exists( $wpdb, 'get_var' ) && method_exists( $wpdb, 'prepare' ) ) {
+			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', (string) $lock_name ) );
+		}
 	}
 
 	/** F00-EXT-012 — Contract negotiation and anti-downgrade. */
