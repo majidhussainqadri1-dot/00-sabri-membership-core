@@ -38,8 +38,6 @@ final class SMC_Latest_Central_2026 {
 	);
 
 	public static function init() {
-		add_filter( 'smc_latest_central_constitution_v1', array( __CLASS__, 'filter_constitution' ) );
-		add_filter( 'smc_file26_membership_projection_v1', array( __CLASS__, 'filter_file26_projection' ), 10, 2 );
 		/* A mandatory audit guard can fail the caller's audit/transaction closed. */
 		add_filter( 'smc_audit_record_guard', array( __CLASS__, 'audit_record_guard' ), 10, 5 );
 	}
@@ -65,10 +63,6 @@ final class SMC_Latest_Central_2026 {
 			'ranking_payment_signal'     => false,
 			'consumer_default_fail_open' => false,
 		);
-	}
-
-	public static function filter_constitution( $value ) {
-		return array_merge( is_array( $value ) ? $value : array(), self::constitution() );
 	}
 
 	private static function hidden_file26_projection( $platform_uuid = '' ) {
@@ -136,12 +130,6 @@ final class SMC_Latest_Central_2026 {
 		);
 	}
 
-	public static function filter_file26_projection( $projection, $user_id ) {
-		/* File 00 is authoritative for these fields; callers cannot pre-seed a bypass. */
-		unset( $projection );
-		return self::file26_projection( $user_id );
-	}
-
 	/**
 	 * Mandatory post-audit guard for security-state changes.
 	 *
@@ -161,8 +149,21 @@ final class SMC_Latest_Central_2026 {
 		if ( $user_id <= 0 ) {
 			return true;
 		}
-		$watched = (array) apply_filters( 'smc_revalidation_audit_actions', self::$revalidation_actions );
-		$watched = array_values( array_unique( array_map( 'sanitize_key', $watched ) ) );
+
+		/*
+		 * Extensions may add extra revalidation actions, but they cannot delete the
+		 * File 00 constitutional baseline. This prevents a lower-trust filter from
+		 * silently weakening age/guardian/consent/security revalidation.
+		 */
+		$filtered = (array) apply_filters( 'smc_revalidation_audit_actions', self::$revalidation_actions );
+		$watched = array_values(
+			array_unique(
+				array_merge(
+					self::$revalidation_actions,
+					array_map( 'sanitize_key', $filtered )
+				)
+			)
+		);
 		if ( ! in_array( $action, $watched, true ) ) {
 			return true;
 		}
@@ -187,10 +188,18 @@ final class SMC_Latest_Central_2026 {
 	}
 }
 
+/**
+ * Canonical File 00 constitution. Intentionally not filter-mediated: downstream
+ * code may consume it but may not rewrite File 00's free-tier/ownership truth.
+ */
 function smc_latest_central_constitution() {
-	return apply_filters( 'smc_latest_central_constitution_v1', array() );
+	return SMC_Latest_Central_2026::constitution();
 }
 
+/**
+ * Canonical File 26 membership projection. File 26 can use these fields as inputs
+ * to its own index/ranking policy, but cannot mutate File 00's membership verdict.
+ */
 function smc_file26_membership_projection( $user_id ) {
-	return apply_filters( 'smc_file26_membership_projection_v1', array(), absint( $user_id ) );
+	return SMC_Latest_Central_2026::file26_projection( absint( $user_id ) );
 }
