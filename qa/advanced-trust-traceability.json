@@ -49,13 +49,23 @@
     "advanced_trust_static_expected": 31,
     "advanced_trust_runtime_expected": 21,
     "advanced_trust_review_hardening_runtime_expected": 14,
+    "core_assertions_passed": 575,
+    "core_assertions_failed": 0,
     "ten_round_review_complete": true,
     "rounds_with_defects": [2,3,4,5,6,7,8,9,10],
     "rounds_without_defects": [1],
     "defects_found_total": 16,
     "defects_corrected_total": 16,
     "severity": {"critical":1,"high":9,"medium":4,"low":2},
-    "known_unresolved_repository_defects": 0
+    "known_unresolved_repository_defects": 0,
+    "green_branch_evidence": {
+      "head_sha": "eea6fc82d33e2d00d6b2bbfdf2b5b3051f471f6a",
+      "advanced_qa_run": 31205447111,
+      "cf01_forty_round_run": 31205447312,
+      "plugin_zip_sha256": "4edd3fb90c6751a766c66df41414973e659f011f426ef30b872a0f8ec6697ccd",
+      "artifact_id": 9004517440,
+      "artifact_wrapper_sha256": "79b0d391056141890772815c8e31dbb021c688e0f7a85916120bc704a112f3e0"
+    }
   },
   "review_rounds": [
     {"round":1,"focus":"canonical ownership and architecture","defects":0},
@@ -72,8 +82,8 @@
   "status": {
     "specified": true,
     "coded": true,
-    "packaged": false,
-    "automated_qa_green": false,
+    "packaged": true,
+    "automated_qa_green": true,
     "staging_accepted": false,
     "live_deployed": false,
     "operational": false
