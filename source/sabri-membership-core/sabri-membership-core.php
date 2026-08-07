@@ -3,7 +3,7 @@
  * Plugin Name: Sabri Membership Core
  * Plugin URI: https://github.com/majidhussainqadri1-dot/00-sabri-membership-core
  * Description: Canonical membership eligibility, identity assurance, guardian consent, security assertions, and verification governance for the Sabri Social Homeopathy Platform.
- * Version: 1.2.12
+ * Version: 1.2.13
  * Requires at least: 6.4
  * Requires PHP: 7.4
  * Author: Dr. Allamah Majid Hussain Sabri Muhaddith Mursheed
@@ -13,10 +13,11 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'SMC_VERSION', '1.2.12' );
+define( 'SMC_VERSION', '1.2.13' );
 define( 'SMC_DB_VERSION', '1.3.0' );
 define( 'SMC_CONTRACT_VERSION', '1.2.0' );
 define( 'SMC_CF01_CONTRACT_VERSION', '1.0.0' );
+define( 'SMC_ADVANCED_TRUST_CONTRACT_VERSION', '1.0.0' );
 define( 'SMC_FILE', __FILE__ );
 define( 'SMC_PATH', plugin_dir_path( __FILE__ ) );
 define( 'SMC_URL', plugin_dir_url( __FILE__ ) );
@@ -35,6 +36,7 @@ require_once SMC_PATH . 'includes/class-smc-privacy.php';
 require_once SMC_PATH . 'includes/class-smc-lifecycle.php';
 require_once SMC_PATH . 'includes/class-smc-three-plan.php';
 require_once SMC_PATH . 'includes/class-smc-latest-central-2026.php';
+require_once SMC_PATH . 'includes/class-smc-advanced-trust-2026.php';
 
 register_activation_hook( SMC_FILE, array( 'SMC_Installer', 'activate' ) );
 register_deactivation_hook( SMC_FILE, array( 'SMC_Installer', 'deactivate' ) );
@@ -55,6 +57,7 @@ add_action(
 		SMC_Lifecycle::init();
 		SMC_Three_Plan::init();
 		SMC_Latest_Central_2026::init();
+		SMC_Advanced_Trust_2026::init();
 	},
 	20
 );

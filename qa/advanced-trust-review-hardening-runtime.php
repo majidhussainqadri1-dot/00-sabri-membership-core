@@ -1,0 +1,36 @@
+<?php
+error_reporting(E_ALL);
+define('ABSPATH', __DIR__.'/'); define('MINUTE_IN_SECONDS',60); define('DAY_IN_SECONDS',86400); define('YEAR_IN_SECONDS',31536000); define('ARRAY_A','ARRAY_A');
+$meta=[];$options=[];$filters=[];$actions=[];$current_user_id=1;$fail_meta_key='';$fail_audit='';$fail_revoke=false;
+class WP_Error{public $code; function __construct($c,$m=''){$this->code=$c;}}
+function is_wp_error($v){return $v instanceof WP_Error;} function __($s,$d=null){return $s;} function absint($v){return abs((int)$v);} function sanitize_key($v){return strtolower(preg_replace('/[^a-z0-9_\-]/','',(string)$v));} function sanitize_text_field($v){return trim(strip_tags((string)$v));}
+function get_userdata($id){return $id>0?(object)['ID'=>$id]:false;} function get_user_meta($id,$key='',$single=false){global $meta;return $key===''?($meta[$id]??[]):($meta[$id][$key]??($single?'':[]));}
+function update_user_meta($id,$key,$value){global $meta,$fail_meta_key;if($fail_meta_key===$key)return false;$meta[$id][$key]=$value;return true;} function delete_user_meta($id,$key){global $meta;unset($meta[$id][$key]);return true;} function metadata_exists($t,$id,$key){global $meta;return array_key_exists($key,$meta[$id]??[]);}
+function get_current_user_id(){global $current_user_id;return $current_user_id;} function current_user_can($cap){return true;} function add_filter($a,$b,$c=10,$d=1){return true;} function add_action($a,$b,$c=10,$d=1){return true;}
+function apply_filters($tag,$value,...$args){global $filters;return isset($filters[$tag])&&is_callable($filters[$tag])?$filters[$tag]($value,...$args):$value;} function do_action($tag,...$args){global $actions;$actions[]=[$tag,$args];}
+function wp_generate_uuid4(){static $i=0;return sprintf('00000000-0000-4000-8000-%012d',++$i);} function wp_salt($s='auth'){return 'salt';} function wp_json_encode($v,$f=0){return json_encode($v,$f);}
+function get_option($k,$d=false){global $options;return $options[$k]??$d;} function update_option($k,$v,$autoload=false){global $options;$options[$k]=$v;return true;} function add_option($k,$v,$dep='',$autoload='yes'){global $options;if(array_key_exists($k,$options))return false;$options[$k]=$v;return true;} function delete_option($k){global $options;unset($options[$k]);return true;}
+function smc_is_founder($id){return in_array((int)$id,[1,2],true);} function smc_is_institutional_ai($id){return (int)$id===99;}
+class WPDBStub{public $users='wp_users';public $prefix='wp_';function prepare($q,...$a){return $q;}function get_col($q){return [];}function get_var($q){return 2;}function get_results($q,$mode){return [['id'=>1,'action'=>'membership_reverified','created_at'=>'2026-08-07 00:00:00']];}}
+$wpdb=new WPDBStub();
+class SMC_Security{public static $verified=true; static function session_is_verified($id){return self::$verified;} static function revoke_all_sessions($id,$reason=''){global $fail_revoke;return !$fail_revoke;} static function audit($a,$id=0,$d=[]){global $fail_audit;return $fail_audit!==$a;} static function subject_hash($id){return hash('sha256','s'.$id);} static function blind_index($v,$p){return hash_hmac('sha256',$p.'|'.$v,'k');}}
+class SMC_Contracts{static function assertions($id){return ['application_exists'=>false,'status'=>'not_enrolled','approved'=>true,'suspended'=>false,'eligible'=>true,'identity_documents_current'=>true,'phone_verified'=>true,'email_verified'=>true,'guardian_verified'=>true,'professional_verified'=>true,'public_profile_allowed'=>true];} static function guardian_verified($id){return true;}}
+class SMC_CF01_Contract{static function ensure_subject_uuid($id){return 'uuid-'.$id;}}
+require __DIR__.'/../source/sabri-membership-core/includes/class-smc-advanced-trust-2026.php';
+$T=[];function t($n,$ok){global $T;$T[]=[$n,(bool)$ok];}
+$a=SMC_Advanced_Trust_2026::authentication_assurance(7); t('local MFA owner is File00',$a['owner']==='file00');
+$filters['smc_file02_authentication_assurance_v1']=fn($b,$u)=>['owner'=>'file02','contract_version'=>'1.0.0','level'=>3,'method'=>'passkey','passkey_asserted'=>true,'hardware_backed'=>true,'verified_at'=>time()];
+$a=SMC_Advanced_Trust_2026::authentication_assurance(7);t('fresh File02 elevation accepted',$a['owner']==='file02'&&$a['level']===3);unset($filters['smc_file02_authentication_assurance_v1']);
+$fail_meta_key='_smc_security_containment_v1';$r=SMC_Advanced_Trust_2026::set_containment_state(7,'contained',1,'x');t('containment persistence failure fails closed',is_wp_error($r));$fail_meta_key='';
+$fail_revoke=true;$r=SMC_Advanced_Trust_2026::set_containment_state(7,'contained',1,'x');t('containment session revoke failure fails closed',is_wp_error($r));$fail_revoke=false;
+$fail_meta_key='_smc_critical_identity_change_v1';$r=SMC_Advanced_Trust_2026::mark_critical_identity_change(7,'date_of_birth',1,'x');t('critical identity record persistence checked',is_wp_error($r));$fail_meta_key='';
+$filters['smc_external_verifiable_credentials_v1']=fn($v,$u)=>[['issuer'=>'fake','type'=>'license','verified'=>true]]; t('unversioned VC claim rejected',count(SMC_Advanced_Trust_2026::verifiable_credentials(7))===0);
+$filters['smc_external_verifiable_credentials_v1']=fn($v,$u)=>[['contract_version'=>'1.0.0','owner'=>'credential_adapter','subject'=>'uuid-7','issuer'=>'issuer','type'=>'license','verified'=>true,'proof_reference'=>'proof','verified_at'=>time(),'issued_at'=>time(),'expires_at'=>time()+3600]];t('bound fresh VC accepted',count(SMC_Advanced_Trust_2026::verifiable_credentials(7))===1);unset($filters['smc_external_verifiable_credentials_v1']);
+$actions=[];$rev=SMC_Advanced_Trust_2026::bump_revocation_epoch(7,'x');t('revocation payload excludes raw user id',is_array($rev)&&!array_key_exists('user_id',$rev)&&$rev['subject']==='uuid-7');
+$current_user_id=0;t('anonymous trust timeline denied',SMC_Advanced_Trust_2026::trust_timeline(7)===[]);$current_user_id=1;
+$bg=SMC_Advanced_Trust_2026::open_break_glass(7,1,'recovery');$current_user_id=2;$ap=SMC_Advanced_Trust_2026::approve_break_glass($bg['id'],2);$current_user_id=1;$one=SMC_Advanced_Trust_2026::consume_break_glass($bg['id'],1);$two=SMC_Advanced_Trust_2026::consume_break_glass($bg['id'],1);t('break-glass one-time consumption',is_array($one)&&$two===false&&$ap===true);
+$fail_audit='break_glass_opened';$bad=SMC_Advanced_Trust_2026::open_break_glass(7,1,'audit fail');t('break-glass audit failure returns no authority',is_wp_error($bad));$fail_audit='';
+$current_user_id=2;$d=SMC_Advanced_Trust_2026::grant_delegated_authority(7,1,['membership_support'],time()+1000);t('delegation confused deputy rejected',is_wp_error($d));$current_user_id=1;
+$fail_meta_key='_smc_delegated_authority_v1';$d=SMC_Advanced_Trust_2026::grant_delegated_authority(7,1,['membership_support'],time()+1000);t('delegation storage failure rejected',is_wp_error($d));$fail_meta_key='';
+update_user_meta(7,'_smc_reverification_required',1);t('reverification marker blocks protected actions',!SMC_Advanced_Trust_2026::protected_actions_allowed(7));delete_user_meta(7,'_smc_reverification_required');
+$fail=0;foreach($T as [$n,$ok]){echo ($ok?'PASS ':'FAIL ').$n."\n";if(!$ok)$fail++;}echo 'Hardening runtime: '.(count($T)-$fail).' PASS / '.$fail." FAIL\n";exit($fail?1:0);

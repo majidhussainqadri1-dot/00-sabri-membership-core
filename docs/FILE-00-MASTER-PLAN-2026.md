@@ -9,15 +9,22 @@
 
 ## Current implementation identity
 
-- Runtime implementation release: `1.2.12`
+- Runtime implementation release: `1.2.13`
 - Public membership contract: `1.2.0`
 - Database schema: `1.3.0`
 - Latest-central constitution: `2026-08-07-v1.0`
 - File 26 membership projection contract: `1.0.0`
+- Advanced trust contract: `1.0.0`
 - Exact-head CI: pending until the current commit succeeds
 - Main merge: pending until review/PR gates succeed
 
 ## Current evidence
+
+- `docs/FILE-00-ADVANCED-TRUST-EXTENSIONS-1.2.13.md`
+- `docs/RELEASE-1.2.13-ADVANCED-TRUST.md`
+- `qa/advanced-trust-traceability.json`
+- `qa/advanced-trust-contract.mjs`
+- `qa/advanced-trust-runtime.php`
 
 - `docs/FILE-00-LATEST-CENTRAL-TRACEABILITY-1.2.12.md`
 - `docs/RELEASE-1.2.12-LATEST-CENTRAL.md`
