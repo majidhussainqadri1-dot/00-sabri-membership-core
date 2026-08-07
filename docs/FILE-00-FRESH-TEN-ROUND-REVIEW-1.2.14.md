@@ -30,15 +30,15 @@ Release under closure: **1.2.14**. Database schema remains **1.3.0**; public mem
 | 7 | overdue sweep propagation and retry-safe cursor | 2 | FR-R7-D01, FR-R7-D02 | Corrected |
 | 8 | emergency-governance mutex concurrency | 1 | FR-R8-D01 | Corrected |
 | 9 | cross-path protected-action authorization coherence | 3 | FR-R9-D01, FR-R9-D02, FR-R9-D03 | Corrected |
-| 10 | final architecture, privacy, package and supply-chain closure | **0** | — | No new reproducible defect |
+| 10 | final architecture, privacy, package and supply-chain closure | 1 | FR-R10-D01 | Corrected |
 
-**Rounds with defects:** 1, 2, 3, 4, 5, 6, 7, 8, 9.
+**Rounds with defects:** 1, 2, 3, 4, 5, 6, 7, 8, 9, 10.
 
-**Rounds without defects:** 10.
+**Rounds without defects:** none.
 
-**Unique product/source defects found:** 15.  
-**Unique defects corrected:** 15/15.  
-**Severity:** 1 Critical, 11 High, 3 Medium, 0 Low.  
+**Unique product/repository defects found:** 16.  
+**Unique defects corrected:** 16/16.  
+**Severity:** 1 Critical, 12 High, 3 Medium, 0 Low.  
 **Known unresolved repository defects after Round 10:** 0.
 
 ## Corrective details
@@ -82,6 +82,9 @@ The direct protected-action/step-up path did not itself make the local revalidat
 ### FR-R9-D03 — Medium
 The boolean delegated-scope authorization helper could return true for a principal whose membership was currently protected/restricted. Active grant inventory remains inspectable, but authorization via `has_delegated_scope()` is suspended whenever the principal is not operational.
 
+### FR-R10-D01 — High
+Release/runtime/package metadata had moved to 1.2.14, but `tools/build.py` still hard-coded `VERSION = "1.2.13"`, so the deterministic builder emitted a 1.2.13 archive and the exact 1.2.14 verifier correctly failed. The builder now derives the release version directly from the plugin header and `SMC_VERSION`, requires both to exist and match, and names the deterministic archive from that canonical runtime identity. This removes the stale-version class of packaging defect instead of merely changing one hard-coded number.
+
 ## Regression evidence added or strengthened
 
 The active test chain now covers, among other inherited suites:
@@ -99,12 +102,13 @@ The active test chain now covers, among other inherited suites:
 - File 02 assertions predating the local revalidation boundary;
 - direct protected-action revalidation enforcement;
 - step-up denial for non-operational membership;
-- delegated-scope suspension while protected.
+- delegated-scope suspension while protected;
+- deterministic package filename derived from canonical runtime identity.
 
-## Tooling observations not counted as product/source defects
+## Tooling observations not counted as product/repository defects
 
-During release closure, the expanded QA harness initially lacked a database-advisory-lock stub required by the newly hardened source. The harness was aligned and the complete inherited suite then passed. Separately, GitHub correctly rejected a temporary bot attempt to push protected workflow YAML without workflow permission; workflow metadata was updated through the repository-authorized path instead. These were QA/repository-tooling closure events, not defects in the production membership source.
+During release closure, the expanded QA harness initially lacked a database-advisory-lock stub required by the newly hardened source. The harness was aligned and the complete inherited suite then passed. Separately, GitHub correctly rejected a temporary bot attempt to push protected workflow YAML without workflow permission; workflow metadata was updated through the repository-authorized path instead. The temporary write-mutator script was removed. Because workflow-file deletion was not approved by the repository operation available in this environment, its former workflow file was converted into a manual-only, `contents: read` sentinel with no mutation/push step. These are QA/repository-tooling closure events, not additional product defects.
 
 ## Final acceptance boundary
 
-This review can close repository coding/package/automated-QA only after exact-head read-only CI is green with deterministic package verification. Hostinger staging acceptance, live deployment and operational acceptance remain separate external gates and must not be inferred from repository success.
+This review closes repository coding/package/automated-QA only after exact-head read-only CI is green with deterministic package verification. Hostinger staging acceptance, live deployment and operational acceptance remain separate external gates and must not be inferred from repository success.
