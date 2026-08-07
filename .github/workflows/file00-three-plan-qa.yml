@@ -35,7 +35,7 @@ jobs:
           tools: none
       - run: npm ci --ignore-scripts
       - run: npm run verify
-      - name: Exact latest-central identity and traceability
+      - name: Exact latest-central identity, review and supply-chain traceability
         run: |
           set -euo pipefail
           grep -Fq 'Version: 1.2.12' source/sabri-membership-core/sabri-membership-core.php
@@ -51,6 +51,17 @@ jobs:
           grep -Fq 'F00-CEN-03' docs/FILE-00-LATEST-CENTRAL-TRACEABILITY-1.2.12.md
           grep -Fq 'File 26' docs/FILE-00-LATEST-CENTRAL-TRACEABILITY-1.2.12.md
           grep -Fq '#087A4E' source/sabri-membership-core/assets/membership.css
+          grep -Fq '## Round 1 — Fresh adversarial review and correction' docs/FILE-00-LATEST-CENTRAL-TWO-ROUND-REVIEW-1.2.12.md
+          grep -Fq '## Round 2 — Fresh adversarial review and correction' docs/FILE-00-LATEST-CENTRAL-TWO-ROUND-REVIEW-1.2.12.md
+          grep -Fq 'Zero known repository defects after two fresh rounds: **Yes**' docs/FILE-00-LATEST-CENTRAL-TWO-ROUND-REVIEW-1.2.12.md
+          test "$(find .github/workflows -maxdepth 1 -type f | wc -l)" -eq 2
+          ! grep -RInE '^\s*contents:\s*write\s*$' .github/workflows
+          test ! -e .github/workflows/apply-latest-central-1.2.12.yml
+          test ! -e .github/workflows/apply-review-round1-1.2.12.yml
+          test ! -e .github/workflows/apply-three-plan-1.2.11.yml
+          test ! -e .github/workflows/apply-three-plan-evidence-1.2.11.yml
+          test ! -e .github/workflows/finalize-three-plan-evidence-1.2.11.yml
+          test ! -e .github/workflows/apply-ilhami-cycle.yml
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: 00-sabri-membership-core-1.2.12-${{ github.sha }}
@@ -59,6 +70,7 @@ jobs:
             dist/CHECKSUMS.sha256
             docs/RELEASE-1.2.12-LATEST-CENTRAL.md
             docs/FILE-00-LATEST-CENTRAL-TRACEABILITY-1.2.12.md
+            docs/FILE-00-LATEST-CENTRAL-TWO-ROUND-REVIEW-1.2.12.md
             qa/latest-central-traceability.json
           if-no-files-found: error
           retention-days: 30
