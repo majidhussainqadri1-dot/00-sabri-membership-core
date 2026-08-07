@@ -197,17 +197,60 @@ final class SMC_Advanced_Trust_2026 {
 		$user_id = absint( $user_id );
 		$state = get_user_meta( $user_id, self::REVERIFY_META, true );
 		$state = is_array( $state ) ? $state : array();
-		$verified_at = absint( $state['verified_at'] ?? 0 );
 		$interval = absint( apply_filters( 'smc_reverification_interval_seconds', YEAR_IN_SECONDS, $user_id ) );
 		$interval = max( DAY_IN_SECONDS, $interval );
+		$verified_at = absint( $state['verified_at'] ?? 0 );
+		$applicable = $verified_at > 0;
+		$source = sanitize_key( $state['source'] ?? '' );
+		if ( $verified_at <= 0 ) {
+			$baseline = self::initial_reverification_baseline( $user_id );
+			$applicable = ! empty( $baseline['applicable'] );
+			$verified_at = absint( $baseline['verified_at'] ?? 0 );
+			$source = sanitize_key( $baseline['source'] ?? '' );
+		}
 		$due_at = absint( $state['due_at'] ?? ( $verified_at ? $verified_at + $interval : 0 ) );
-		$current = $verified_at > 0 && $due_at > time();
+		$current = ! $applicable || ( $verified_at > 0 && $due_at > time() );
 		return array(
+			'applicable' => (bool) $applicable,
 			'current' => (bool) $current,
 			'verified_at' => $verified_at,
 			'due_at' => $due_at,
-			'overdue' => $due_at > 0 && $due_at <= time(),
+			'overdue' => $applicable && ( $due_at <= 0 || $due_at <= time() ),
 			'interval_seconds' => $interval,
+			'source' => $source,
+		);
+	}
+
+	private static function initial_reverification_baseline( $user_id ) {
+		global $wpdb;
+		$user_id = absint( $user_id );
+		if ( $user_id <= 0 || ! isset( $wpdb ) || ! is_object( $wpdb ) || empty( $wpdb->prefix ) ) {
+			return array( 'applicable' => false, 'verified_at' => 0, 'source' => 'none' );
+		}
+		$approved_at = $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT approved_at FROM {$wpdb->prefix}smc_role_grants WHERE user_id=%d AND status='approved' AND approved_at IS NOT NULL ORDER BY approved_at DESC LIMIT 1",
+				$user_id
+			)
+		);
+		$source = 'role_grant_approval';
+		if ( ! $approved_at ) {
+			$approved_at = $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT COALESCE(decided_at,updated_at,created_at) FROM {$wpdb->prefix}smc_applications WHERE user_id=%d AND status='approved' ORDER BY id DESC LIMIT 1",
+					$user_id
+				)
+			);
+			$source = 'membership_approval';
+		}
+		if ( ! $approved_at ) {
+			return array( 'applicable' => false, 'verified_at' => 0, 'source' => 'none' );
+		}
+		$timestamp = strtotime( (string) $approved_at . ' UTC' );
+		return array(
+			'applicable' => true,
+			'verified_at' => $timestamp > 0 ? $timestamp : 0,
+			'source' => $source,
 		);
 	}
 
@@ -897,11 +940,13 @@ final class SMC_Advanced_Trust_2026 {
 		$containment = self::containment_state( $user_id );
 		$continuity = self::continuity_state( $user_id );
 		$reverification_required = (bool) get_user_meta( $user_id, '_smc_reverification_required', true );
+		$reverification = self::reverification_status( $user_id );
+		$reverification_stale = ! empty( $reverification['applicable'] ) && empty( $reverification['current'] );
 		$critical = get_user_meta( $user_id, self::CRITICAL_IDENTITY_META, true );
 		$critical_pending = is_array( $critical ) && 'reverification_required' === ( $critical['state'] ?? '' );
 		$merge = get_user_meta( $user_id, self::MERGE_META, true );
 		$merge_finalizing = is_array( $merge ) && 'finalizing' === ( $merge['state'] ?? '' );
-		return 'clear' === ( $containment['state'] ?? 'unknown' ) && 'active' === ( $continuity['state'] ?? 'unknown' ) && ! $reverification_required && ! $critical_pending && ! $merge_finalizing;
+		return 'clear' === ( $containment['state'] ?? 'unknown' ) && 'active' === ( $continuity['state'] ?? 'unknown' ) && ! $reverification_required && ! $reverification_stale && ! $critical_pending && ! $merge_finalizing;
 	}
 
 	public static function filter_capabilities( $allcaps, $caps, $args, $user ) {
