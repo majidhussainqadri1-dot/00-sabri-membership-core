@@ -268,10 +268,19 @@ final class SMC_Contracts {
 			return true;
 		}
 		if ( 'doctor' === $type ) {
+			/* File 09 is canonical. A versioned adapter may provide an explicit current claim. */
+			$claim = apply_filters( 'smc_file09_doctor_verification_claim_v1', null, absint( $user_id ) );
+			if ( is_array( $claim ) ) {
+				$status  = sanitize_key( $claim['status'] ?? '' );
+				$current = ! array_key_exists( 'current', $claim ) || ! empty( $claim['current'] );
+				return $current && in_array( $status, array( 'verified', 'active' ), true );
+			}
+			/* SPD_Helpers is the installed canonical File 09 compatibility adapter. */
 			if ( class_exists( 'SPD_Helpers' ) ) {
 				return 'verified' === SPD_Helpers::verification_status( $user_id );
 			}
-			return 'verified' === get_user_meta( $user_id, '_spd_verification_status', true );
+			/* Never infer professional truth from stale display/user-meta when File 09 is absent. */
+			return false;
 		}
 		return (bool) apply_filters( 'smc_professional_verification_state', false, absint( $user_id ), sanitize_key( $type ) );
 	}

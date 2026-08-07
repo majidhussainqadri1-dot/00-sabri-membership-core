@@ -72,12 +72,27 @@ final class SMC_Events {
 
 	public static function from_audit( $action, $subject_user_id, $details, $audit_id = 0 ) {
 		$action = sanitize_key( $action );
+		$subject_user_id = absint( $subject_user_id );
+		$details = is_array( $details ) ? $details : array();
+		$audit_id = absint( $audit_id );
+
+		/*
+		 * Mandatory native guards run before any best-effort observer. A guard may
+		 * return false when an audit-coupled security invariant (for example the
+		 * F00-CEN-03 revalidation marker) cannot be durably persisted. Because
+		 * SMC_Security::audit() propagates this false result, transactional callers
+		 * fail closed instead of committing a state change with stale assurance.
+		 */
+		$guard_ok = apply_filters( 'smc_audit_record_guard', true, $action, $subject_user_id, $details, $audit_id );
+		if ( true !== $guard_ok ) {
+			return false;
+		}
+		do_action( 'smc_audit_recorded', $action, $subject_user_id, $details, $audit_id );
 		if ( ! isset( self::$audit_map[ $action ] ) ) {
 			return true;
 		}
-		$details = is_array( $details ) ? $details : array();
-		$details['audit_id'] = absint( $audit_id );
-		$dedupe = $action . '|' . absint( $subject_user_id ) . '|' . absint( $audit_id );
+		$details['audit_id'] = $audit_id;
+		$dedupe = $action . '|' . $subject_user_id . '|' . $audit_id;
 		return self::emit( self::$audit_map[ $action ], $subject_user_id, $details, $dedupe );
 	}
 
@@ -178,67 +193,51 @@ final class SMC_Events {
 				if ( true === $accepted ) {
 					$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_event_outbox SET status='delivered',delivered_at=%s,last_error=NULL,updated_at=%s WHERE id=%d AND status='processing'", current_time( 'mysql', true ), current_time( 'mysql', true ), (int) $row['id'] ) );
 					++$processed;
-				} else {
-					$attempts = (int) $row['attempts'] + 1;
-					$status = $attempts >= 10 ? 'dead_letter' : 'retry';
-					$delay = min( DAY_IN_SECONDS, (int) pow( 2, min( 10, $attempts ) ) * MINUTE_IN_SECONDS );
-					$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_event_outbox SET status=%s,next_attempt_at=%s,last_error=%s,updated_at=%s WHERE id=%d AND status='processing'", $status, gmdate( 'Y-m-d H:i:s', time() + $delay ), 'Consumer delivery was not acknowledged.', current_time( 'mysql', true ), (int) $row['id'] ) );
+					continue;
 				}
+				$attempts = (int) $row['attempts'] + 1;
+				$status = $attempts >= 10 ? 'dead_letter' : 'retry';
+				$delay = min( HOUR_IN_SECONDS, (int) pow( 2, min( 10, $attempts ) ) * 30 );
+				$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_event_outbox SET status=%s,next_attempt_at=%s,last_error=%s,updated_at=%s WHERE id=%d AND status='processing'", $status, gmdate( 'Y-m-d H:i:s', time() + $delay ), 'No consumer acknowledged delivery.', current_time( 'mysql', true ), (int) $row['id'] ) );
 			}
 		} finally {
 			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) );
 		}
-		if ( (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}smc_event_outbox WHERE status IN ('pending','retry')" ) > 0 ) {
+		if ( $processed > 0 ) {
 			self::schedule_processor();
 		}
 		return $processed;
 	}
 
-	/**
-	 * Replay-safe consumer helper. Handler must return true before the inbox row is committed.
-	 */
-	public static function consume( $consumer, $event, $handler ) {
+	public static function consume( $consumer, $event, $callback ) {
 		global $wpdb;
-		$consumer = sanitize_key( $consumer );
-		if ( '' === $consumer || ! is_array( $event ) || empty( $event['event_id'] ) || ! is_callable( $handler ) || ! self::table_exists( 'smc_event_inbox' ) ) {
+		if ( ! self::table_exists( 'smc_event_inbox' ) || ! is_callable( $callback ) || ! is_array( $event ) || empty( $event['event_id'] ) ) {
 			return false;
 		}
-		$event_id = sanitize_text_field( $event['event_id'] );
+		$consumer = sanitize_key( $consumer );
+		$event_id = sanitize_text_field( (string) $event['event_id'] );
+		$dedupe = hash( 'sha256', $consumer . '|' . $event_id );
 		$now = current_time( 'mysql', true );
-		$wpdb->query( 'START TRANSACTION' );
 		$inserted = $wpdb->query(
 			$wpdb->prepare(
-				"INSERT IGNORE INTO {$wpdb->prefix}smc_event_inbox (consumer,event_id,status,attempts,received_at,updated_at) VALUES (%s,%s,'processing',1,%s,%s)",
-				$consumer, $event_id, $now, $now
+				"INSERT IGNORE INTO {$wpdb->prefix}smc_event_inbox (consumer,event_id,dedupe_hash,status,created_at,updated_at) VALUES (%s,%s,%s,'processing',%s,%s)",
+				$consumer,
+				$event_id,
+				$dedupe,
+				$now,
+				$now
 			)
 		);
-		if ( 1 !== $inserted ) {
-			$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}smc_event_inbox WHERE consumer=%s AND event_id=%s FOR UPDATE", $consumer, $event_id ), ARRAY_A );
-			if ( $row && 'processed' === $row['status'] ) {
-				$wpdb->query( 'COMMIT' );
-				return true;
-			}
-			if ( ! $row || ( 'processing' === $row['status'] && strtotime( $row['updated_at'] . ' UTC' ) > time() - 900 ) ) {
-				$wpdb->query( 'ROLLBACK' );
-				return false;
-			}
-			$claimed = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_event_inbox SET status='processing',attempts=attempts+1,last_error=NULL,updated_at=%s WHERE id=%d", $now, (int) $row['id'] ) );
-			if ( 1 !== $claimed ) {
-				$wpdb->query( 'ROLLBACK' );
-				return false;
-			}
+		if ( 0 === $inserted ) {
+			$status = $wpdb->get_var( $wpdb->prepare( "SELECT status FROM {$wpdb->prefix}smc_event_inbox WHERE consumer=%s AND dedupe_hash=%s LIMIT 1", $consumer, $dedupe ) );
+			return 'processed' === $status;
 		}
-		$ok = true === call_user_func( $handler, $event );
-		if ( ! $ok ) {
-			$wpdb->query( 'ROLLBACK' );
+		$result = call_user_func( $callback, $event );
+		if ( true !== $result ) {
+			$wpdb->delete( $wpdb->prefix . 'smc_event_inbox', array( 'consumer' => $consumer, 'dedupe_hash' => $dedupe ), array( '%s', '%s' ) );
 			return false;
 		}
-		$updated = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_event_inbox SET status='processed',processed_at=%s,last_error=NULL,updated_at=%s WHERE consumer=%s AND event_id=%s AND status='processing'", $now, $now, $consumer, $event_id ) );
-		if ( 1 !== $updated ) {
-			$wpdb->query( 'ROLLBACK' );
-			return false;
-		}
-		$wpdb->query( 'COMMIT' );
-		return true;
+		$updated = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_event_inbox SET status='processed',processed_at=%s,updated_at=%s WHERE consumer=%s AND dedupe_hash=%s AND status='processing'", $now, $now, $consumer, $dedupe ) );
+		return 1 === $updated;
 	}
 }
