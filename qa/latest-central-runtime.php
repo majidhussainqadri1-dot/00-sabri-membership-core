@@ -8,7 +8,11 @@ $GLOBALS['users'] = [7 => (object)['roles'=>['sabri_member']]];
 $GLOBALS['actions'] = [];
 $GLOBALS['meta_write_fail'] = false;
 function add_filter($a,$b,$c=10,$d=1){} function add_action($a,$b,$c=10,$d=1){}
-function apply_filters($tag,$value,...$args){return $value;}
+function apply_filters($tag,$value,...$args){
+  /* Simulate a lower-trust extension attempting to delete the mandatory baseline. */
+  if($tag==='smc_revalidation_audit_actions') return [];
+  return $value;
+}
 function do_action($tag,...$args){$GLOBALS['actions'][]=[$tag,$args];}
 function absint($v){return abs((int)$v);} function sanitize_key($v){return strtolower(preg_replace('/[^a-z0-9_\-]/i','',(string)$v));}
 function get_userdata($id){return $GLOBALS['users'][(int)$id]??false;}
@@ -25,11 +29,11 @@ class SMC_Contracts { public static function assertions($id){return [
 ];}}
 require dirname(__DIR__) . '/source/sabri-membership-core/includes/class-smc-latest-central-2026.php';
 function expect($ok,$label){if(!$ok){fwrite(STDERR,"FAIL: $label\n");exit(1);}echo "PASS: $label\n";}
-$c=SMC_Latest_Central_2026::constitution();
+$c=smc_latest_central_constitution();
 expect($c['single_free_tier']===true && $c['paid_unlocks_enabled']===false,'single-free constitution');
 expect($c['commission_percent']===0 && $c['donation_affects_rank']===false && $c['donation_affects_support']===false,'donor-neutral constitution');
 expect($c['brand_primary']==='#087A4E' && $c['search_discovery_owner']==='file26','green and File 26 ownership');
-$p=SMC_Latest_Central_2026::file26_projection(7);
+$p=smc_file26_membership_projection(7);
 expect($p['indexable']===true && $p['search_visibility']==='public','eligible public projection is indexable');
 expect($p['platform_uuid']==='123e4567-e89b-42d3-a456-426614174000' && !array_key_exists('user_id',$p),'File 26 projection exposes opaque platform UUID, not WordPress ID');
 expect($p['donation_rank_signal']===false && $p['paid_rank_signal']===false,'projection cannot encode paid/donor boost');
@@ -37,7 +41,7 @@ expect(!isset($p['phone']) && !isset($p['date_of_birth']) && !isset($p['address'
 $before=time();
 $guard=SMC_Latest_Central_2026::audit_record_guard(true,'guardian_consent_withdrawn',7,[],44);
 $marker=(int)$GLOBALS['meta'][7][SMC_Latest_Central_2026::REVALIDATION_META];
-expect($guard===true && $marker>$before,'security-state change creates a strictly-future revalidation marker');
+expect($guard===true && $marker>$before,'mandatory revalidation survives a filter attempting to remove baseline actions');
 expect(count(array_filter($GLOBALS['actions'],fn($x)=>$x[0]==='smc_file26_projection_invalidated'))===1,'security-state change invalidates File 26 projection');
 $GLOBALS['meta'][7][SMC_Latest_Central_2026::REVALIDATION_META]=0;
 $GLOBALS['meta_write_fail']=true;
