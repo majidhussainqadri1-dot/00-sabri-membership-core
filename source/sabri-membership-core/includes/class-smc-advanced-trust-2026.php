@@ -672,29 +672,34 @@ final class SMC_Advanced_Trust_2026 {
 	}
 
 	/** F00-EXT-014 — Selective disclosure proofs (server-local, short-lived). */
-	public static function selective_disclosure_proof( $user_id, $claims, $audience, $ttl = 120 ) {
+	public static function selective_disclosure_proof( $user_id, $claims, $audience, $ttl = 120, $purpose = 'membership_assertion' ) {
 		$user_id = absint( $user_id );
 		$audience = sanitize_key( $audience );
+		$purpose = sanitize_key( $purpose );
 		$allowed = array( 'membership_eligible', 'age_requirement_met', 'guardian_requirement_met', 'identity_current', 'professional_current', 'session_step_up_current', 'public_index_allowed' );
 		$requested = array_values( array_intersect( $allowed, array_map( 'sanitize_key', (array) $claims ) ) );
-		if ( ! $requested || '' === $audience ) {
-			return new WP_Error( 'smc_disclosure_claims', __( 'A valid audience and at least one approved claim are required.', 'sabri-membership-core' ) );
+		if ( ! $requested || '' === $audience || '' === $purpose ) {
+			return new WP_Error( 'smc_disclosure_claims', __( 'A valid audience, purpose and at least one approved claim are required.', 'sabri-membership-core' ) );
 		}
 		$ttl = max( 30, min( self::PROOF_MAX_TTL, absint( $ttl ) ) );
+		$effective_ttl = min( $ttl, self::REVOCATION_PROPAGATION_SLA );
 		$source = self::minimal_assertions( $user_id, $audience );
 		$disclosed = array();
 		foreach ( $requested as $claim ) {
 			$disclosed[ $claim ] = (bool) $source[ $claim ];
 		}
+		$issued_at = time();
 		$payload = array(
-			'proof_version' => '1.0.0',
+			'proof_version' => '1.1.0',
 			'proof_id' => wp_generate_uuid4(),
 			'subject' => $source['subject'],
 			'audience' => $audience,
+			'purpose' => $purpose,
 			'claims' => $disclosed,
 			'revocation_epoch' => $source['revocation_epoch'],
-			'issued_at' => time(),
-			'expires_at' => time() + $ttl,
+			'issued_at' => $issued_at,
+			'revocation_deadline' => $issued_at + self::REVOCATION_PROPAGATION_SLA,
+			'expires_at' => $issued_at + $effective_ttl,
 		);
 		$canonical = wp_json_encode( $payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
 		$signature = class_exists( 'SMC_Security' ) ? SMC_Security::blind_index( $canonical, 'selective-disclosure-proof' ) : new WP_Error( 'smc_disclosure_key' );
@@ -703,10 +708,11 @@ final class SMC_Advanced_Trust_2026 {
 		return $payload;
 	}
 
-	public static function verify_selective_disclosure_proof( $proof, $audience ) {
+	public static function verify_selective_disclosure_proof( $proof, $audience, $purpose = 'membership_assertion' ) {
 		$issued_at = is_array( $proof ) ? absint( $proof['issued_at'] ?? 0 ) : 0;
 		$expires_at = is_array( $proof ) ? absint( $proof['expires_at'] ?? 0 ) : 0;
-		if ( ! is_array( $proof ) || empty( $proof['proof'] ) || $issued_at <= 0 || $issued_at > time() + 60 || $expires_at < time() || $expires_at - $issued_at > self::PROOF_MAX_TTL || ! hash_equals( sanitize_key( $audience ), sanitize_key( $proof['audience'] ?? '' ) ) ) {
+		$revocation_deadline = is_array( $proof ) ? absint( $proof['revocation_deadline'] ?? 0 ) : 0;
+		if ( ! is_array( $proof ) || '1.1.0' !== (string) ( $proof['proof_version'] ?? '' ) || empty( $proof['proof'] ) || $issued_at <= 0 || $issued_at > time() + 60 || $expires_at < time() || $revocation_deadline < time() || $expires_at > $revocation_deadline || $revocation_deadline - $issued_at > self::REVOCATION_PROPAGATION_SLA || ! hash_equals( sanitize_key( $audience ), sanitize_key( $proof['audience'] ?? '' ) ) || ! hash_equals( sanitize_key( $purpose ), sanitize_key( $proof['purpose'] ?? '' ) ) ) {
 			return false;
 		}
 		$signature = (string) $proof['proof'];
