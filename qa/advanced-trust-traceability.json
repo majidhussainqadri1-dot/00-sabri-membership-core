@@ -1,0 +1,62 @@
+{
+  "release": "1.2.13",
+  "database_schema": "1.3.0",
+  "public_membership_contract": "1.2.0",
+  "advanced_trust_contract": "1.0.0",
+  "policy_version": "2026-08-07-ext-v1.0",
+  "source_plan": "Advanced Membership, Identity & Trust Extensions 2026",
+  "requirements": [
+    {"id":"F00-EXT-001","name":"Identity Assurance Levels","coded":true,"tested":true,"owner":"file00"},
+    {"id":"F00-EXT-002","name":"Passkey / WebAuthn Assurance Contract","coded":true,"tested":true,"owner":"file00"},
+    {"id":"F00-EXT-003","name":"Adaptive Step-Up Verification","coded":true,"tested":true,"owner":"file00"},
+    {"id":"F00-EXT-004","name":"Periodic Reverification Engine","coded":true,"tested":true,"owner":"file00"},
+    {"id":"F00-EXT-005","name":"Critical Identity Change Workflow","coded":true,"tested":true,"owner":"file00"},
+    {"id":"F00-EXT-006","name":"Claim Provenance & Freshness","coded":true,"tested":true,"owner":"file00"},
+    {"id":"F00-EXT-007","name":"Consent Dependency Graph","coded":true,"tested":true,"owner":"file00"},
+    {"id":"F00-EXT-008","name":"Guardian Succession / Replacement","coded":true,"tested":true,"owner":"file00"},
+    {"id":"F00-EXT-009","name":"Account Merge / Duplicate Resolution","coded":true,"tested":true,"owner":"file00"},
+    {"id":"F00-EXT-010","name":"Compromised-Account State","coded":true,"tested":true,"owner":"file00"},
+    {"id":"F00-EXT-011","name":"Revocation Propagation SLA","coded":true,"tested":true,"owner":"file00"},
+    {"id":"F00-EXT-012","name":"Canonical Contract Negotiation / Anti-Downgrade","coded":true,"tested":true,"owner":"file00"},
+    {"id":"F00-EXT-013","name":"Privacy-Preserving Assertions","coded":true,"tested":true,"owner":"file00"},
+    {"id":"F00-EXT-014","name":"Selective Disclosure / Credential Proofs","coded":true,"tested":true,"owner":"file00"},
+    {"id":"F00-EXT-015","name":"Verifiable Credential Adapter","coded":true,"tested":true,"owner":"file00"},
+    {"id":"F00-EXT-016","name":"Scoped Delegated Authority","coded":true,"tested":true,"owner":"file00"},
+    {"id":"F00-EXT-017","name":"Founder / Institutional Break-Glass Governance","coded":true,"tested":true,"owner":"file00"},
+    {"id":"F00-EXT-018","name":"Non-Human / Service Identity Classes","coded":true,"tested":true,"owner":"file00"},
+    {"id":"F00-EXT-019","name":"Dormant / Deceased / Permanently Inactive Lifecycle","coded":true,"tested":true,"owner":"file00"},
+    {"id":"F00-EXT-020","name":"User-Facing Trust & Security Timeline","coded":true,"tested":true,"owner":"file00"}
+  ],
+  "canonical_boundaries": {
+    "authentication_ceremony": "file02",
+    "professional_verification_truth": "file09",
+    "search_discovery_ranking": "file26",
+    "membership_identity_assurance": "file00"
+  },
+  "guardrails": {
+    "single_free_tier": true,
+    "donor_advantage": false,
+    "paid_unlocks": false,
+    "commission_percent": 0,
+    "brand_primary": "#087A4E",
+    "raw_identity_in_minimal_assertions": false,
+    "contract_downgrade_allowed": false,
+    "revocation_propagation_sla_seconds": 60,
+    "selective_proof_max_ttl_seconds": 300
+  },
+  "qa": {
+    "advanced_trust_static_expected": 30,
+    "advanced_trust_runtime_local": {"pass":19,"fail":0},
+    "ten_round_review_complete": false,
+    "known_unresolved_repository_defects": null
+  },
+  "status": {
+    "specified": true,
+    "coded": true,
+    "packaged": false,
+    "automated_qa_green": false,
+    "staging_accepted": false,
+    "live_deployed": false,
+    "operational": false
+  }
+}
