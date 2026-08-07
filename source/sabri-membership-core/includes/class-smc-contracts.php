@@ -287,12 +287,21 @@ final class SMC_Contracts {
 			return true;
 		}
 		if ( 'doctor' === $type ) {
-			/* File 09 is canonical. A versioned adapter may provide an explicit current claim. */
+			/* File 09 is canonical. Explicit claims must be typed, current and freshly asserted. */
 			$claim = apply_filters( 'smc_file09_doctor_verification_claim_v1', null, absint( $user_id ) );
 			if ( is_array( $claim ) ) {
-				$status  = sanitize_key( $claim['status'] ?? '' );
-				$current = ! array_key_exists( 'current', $claim ) || ! empty( $claim['current'] );
-				return $current && in_array( $status, array( 'verified', 'active' ), true );
+				$status = sanitize_key( $claim['status'] ?? '' );
+				$owner = sanitize_key( $claim['owner'] ?? '' );
+				$contract = (string) ( $claim['contract_version'] ?? '' );
+				$asserted_at = absint( $claim['asserted_at'] ?? 0 );
+				$expires_at = absint( $claim['expires_at'] ?? 0 );
+				$fresh = $asserted_at > 0 && $asserted_at <= time() + 60 && $asserted_at >= time() - 5 * MINUTE_IN_SECONDS;
+				return 'file09' === $owner
+					&& '1.0.0' === $contract
+					&& array_key_exists( 'current', $claim ) && ! empty( $claim['current'] )
+					&& $fresh
+					&& ( 0 === $expires_at || $expires_at > time() )
+					&& in_array( $status, array( 'verified', 'active' ), true );
 			}
 			/* SPD_Helpers is the installed canonical File 09 compatibility adapter. */
 			if ( class_exists( 'SPD_Helpers' ) ) {
