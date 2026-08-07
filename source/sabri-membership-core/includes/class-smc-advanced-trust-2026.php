@@ -290,19 +290,24 @@ final class SMC_Advanced_Trust_2026 {
 		global $wpdb;
 		$batch = 200;
 		$last_id = max( 0, absint( get_option( self::REVERIFY_CURSOR_OPTION, 0 ) ) );
-		if ( ! isset( $wpdb ) || ! is_object( $wpdb ) || empty( $wpdb->users ) ) {
-			return;
-		}
+		if ( ! isset( $wpdb ) || ! is_object( $wpdb ) || empty( $wpdb->users ) ) { return; }
 		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT ID FROM {$wpdb->users} WHERE ID > %d ORDER BY ID ASC LIMIT %d", $last_id, $batch ) );
+		$cursor = $last_id;
 		foreach ( (array) $ids as $user_id ) {
 			$user_id = absint( $user_id );
 			$status = self::reverification_status( $user_id );
-			if ( ! empty( $status['overdue'] ) ) {
-				update_user_meta( $user_id, '_smc_reverification_required', 1 );
+			if ( ! empty( $status['overdue'] ) && ! get_user_meta( $user_id, '_smc_reverification_required', true ) ) {
+				if ( ! self::write_user_meta_verified( $user_id, '_smc_reverification_required', 1 )
+					|| ! SMC_Security::audit( 'membership_reverification_overdue', $user_id, array( 'due_at' => absint( $status['due_at'] ?? 0 ) ) )
+					|| false === self::bump_revocation_epoch( $user_id, 'membership_reverification_overdue' ) ) {
+					self::write_option_verified( self::REVERIFY_CURSOR_OPTION, $cursor );
+					return;
+				}
 			}
+			$cursor = $user_id;
 		}
-		$next = count( (array) $ids ) < $batch ? 0 : absint( end( $ids ) );
-		update_option( self::REVERIFY_CURSOR_OPTION, $next, false );
+		$next = count( (array) $ids ) < $batch ? 0 : $cursor;
+		self::write_option_verified( self::REVERIFY_CURSOR_OPTION, $next );
 	}
 
 	/** F00-EXT-005 — Critical identity change workflow. */
