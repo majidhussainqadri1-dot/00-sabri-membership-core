@@ -3,7 +3,7 @@ Contributors: sabrihomeopathy
 Tags: membership, identity, guardian consent, two-factor authentication, privacy
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 1.2.13
+Stable tag: 1.2.14
 License: GPL-2.0-or-later
 
 Canonical membership eligibility, identity assurance, guardian consent, security assertions, and verification governance for the Sabri Social Homeopathy Platform.
@@ -68,6 +68,10 @@ File 19 receives membership notices through its canonical sabri_notify integrati
 Local source and GitHub checks do not authorize production. Test fresh activation, 1.0.1 upgrade, MySQL advisory locks, concurrent reviewers, authorization matrices, filesystem denial and rollback, scanner providers, email/mobile/guardian delivery, File 02 Google sign-in and passkey assurance adapter, CF-01 provider/consumer contracts, all named cross-file integrations, advanced trust containment/revocation/selective-disclosure workflows, privacy erasure, restore, browser accessibility, and mobile layouts on Hostinger staging.
 
 == Changelog ==
+
+= 1.2.14 =
+* Fresh ten-round corrective closure: synchronous periodic reverification, serialized revocation epochs, purpose-bound revocation-fresh selective disclosures, fail-closed state transitions, service-identity separation, typed File 09 professional claims, propagated overdue holds, and atomic emergency governance.
+* Preserves DB 1.3.0, public membership contract 1.2.0, Advanced Trust contract 1.0.0, single free tier, donor neutrality, zero commission and canonical ownership boundaries.
 
 = 1.2.13 =
 * Adds F00-EXT-001 through F00-EXT-020 Advanced Membership, Identity & Trust Extensions 2026.

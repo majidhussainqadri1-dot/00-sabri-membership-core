@@ -1,31 +1,151 @@
 {
-  "release": "1.2.13",
+  "release": "1.2.14",
   "database_schema": "1.3.0",
   "public_membership_contract": "1.2.0",
   "advanced_trust_contract": "1.0.0",
   "policy_version": "2026-08-07-ext-v1.0",
   "source_plan": "Advanced Membership, Identity & Trust Extensions 2026",
   "requirements": [
-    {"id":"F00-EXT-001","name":"Identity Assurance Levels","coded":true,"tested":true,"owner":"file00"},
-    {"id":"F00-EXT-002","name":"Passkey / WebAuthn Assurance Contract","coded":true,"tested":true,"owner":"file00"},
-    {"id":"F00-EXT-003","name":"Adaptive Step-Up Verification","coded":true,"tested":true,"owner":"file00"},
-    {"id":"F00-EXT-004","name":"Periodic Reverification Engine","coded":true,"tested":true,"owner":"file00"},
-    {"id":"F00-EXT-005","name":"Critical Identity Change Workflow","coded":true,"tested":true,"owner":"file00"},
-    {"id":"F00-EXT-006","name":"Claim Provenance & Freshness","coded":true,"tested":true,"owner":"file00"},
-    {"id":"F00-EXT-007","name":"Consent Dependency Graph","coded":true,"tested":true,"owner":"file00"},
-    {"id":"F00-EXT-008","name":"Guardian Succession / Replacement","coded":true,"tested":true,"owner":"file00"},
-    {"id":"F00-EXT-009","name":"Account Merge / Duplicate Resolution","coded":true,"tested":true,"owner":"file00"},
-    {"id":"F00-EXT-010","name":"Compromised-Account State","coded":true,"tested":true,"owner":"file00"},
-    {"id":"F00-EXT-011","name":"Revocation Propagation SLA","coded":true,"tested":true,"owner":"file00"},
-    {"id":"F00-EXT-012","name":"Canonical Contract Negotiation / Anti-Downgrade","coded":true,"tested":true,"owner":"file00"},
-    {"id":"F00-EXT-013","name":"Privacy-Preserving Assertions","coded":true,"tested":true,"owner":"file00"},
-    {"id":"F00-EXT-014","name":"Selective Disclosure / Credential Proofs","coded":true,"tested":true,"owner":"file00"},
-    {"id":"F00-EXT-015","name":"Verifiable Credential Adapter","coded":true,"tested":true,"owner":"file00"},
-    {"id":"F00-EXT-016","name":"Scoped Delegated Authority","coded":true,"tested":true,"owner":"file00"},
-    {"id":"F00-EXT-017","name":"Founder / Institutional Break-Glass Governance","coded":true,"tested":true,"owner":"file00"},
-    {"id":"F00-EXT-018","name":"Non-Human / Service Identity Classes","coded":true,"tested":true,"owner":"file00"},
-    {"id":"F00-EXT-019","name":"Dormant / Deceased / Permanently Inactive Lifecycle","coded":true,"tested":true,"owner":"file00"},
-    {"id":"F00-EXT-020","name":"User-Facing Trust & Security Timeline","coded":true,"tested":true,"owner":"file00"}
+    {
+      "id": "F00-EXT-001",
+      "name": "Identity Assurance Levels",
+      "coded": true,
+      "tested": true,
+      "owner": "file00"
+    },
+    {
+      "id": "F00-EXT-002",
+      "name": "Passkey / WebAuthn Assurance Contract",
+      "coded": true,
+      "tested": true,
+      "owner": "file00"
+    },
+    {
+      "id": "F00-EXT-003",
+      "name": "Adaptive Step-Up Verification",
+      "coded": true,
+      "tested": true,
+      "owner": "file00"
+    },
+    {
+      "id": "F00-EXT-004",
+      "name": "Periodic Reverification Engine",
+      "coded": true,
+      "tested": true,
+      "owner": "file00"
+    },
+    {
+      "id": "F00-EXT-005",
+      "name": "Critical Identity Change Workflow",
+      "coded": true,
+      "tested": true,
+      "owner": "file00"
+    },
+    {
+      "id": "F00-EXT-006",
+      "name": "Claim Provenance & Freshness",
+      "coded": true,
+      "tested": true,
+      "owner": "file00"
+    },
+    {
+      "id": "F00-EXT-007",
+      "name": "Consent Dependency Graph",
+      "coded": true,
+      "tested": true,
+      "owner": "file00"
+    },
+    {
+      "id": "F00-EXT-008",
+      "name": "Guardian Succession / Replacement",
+      "coded": true,
+      "tested": true,
+      "owner": "file00"
+    },
+    {
+      "id": "F00-EXT-009",
+      "name": "Account Merge / Duplicate Resolution",
+      "coded": true,
+      "tested": true,
+      "owner": "file00"
+    },
+    {
+      "id": "F00-EXT-010",
+      "name": "Compromised-Account State",
+      "coded": true,
+      "tested": true,
+      "owner": "file00"
+    },
+    {
+      "id": "F00-EXT-011",
+      "name": "Revocation Propagation SLA",
+      "coded": true,
+      "tested": true,
+      "owner": "file00"
+    },
+    {
+      "id": "F00-EXT-012",
+      "name": "Canonical Contract Negotiation / Anti-Downgrade",
+      "coded": true,
+      "tested": true,
+      "owner": "file00"
+    },
+    {
+      "id": "F00-EXT-013",
+      "name": "Privacy-Preserving Assertions",
+      "coded": true,
+      "tested": true,
+      "owner": "file00"
+    },
+    {
+      "id": "F00-EXT-014",
+      "name": "Selective Disclosure / Credential Proofs",
+      "coded": true,
+      "tested": true,
+      "owner": "file00"
+    },
+    {
+      "id": "F00-EXT-015",
+      "name": "Verifiable Credential Adapter",
+      "coded": true,
+      "tested": true,
+      "owner": "file00"
+    },
+    {
+      "id": "F00-EXT-016",
+      "name": "Scoped Delegated Authority",
+      "coded": true,
+      "tested": true,
+      "owner": "file00"
+    },
+    {
+      "id": "F00-EXT-017",
+      "name": "Founder / Institutional Break-Glass Governance",
+      "coded": true,
+      "tested": true,
+      "owner": "file00"
+    },
+    {
+      "id": "F00-EXT-018",
+      "name": "Non-Human / Service Identity Classes",
+      "coded": true,
+      "tested": true,
+      "owner": "file00"
+    },
+    {
+      "id": "F00-EXT-019",
+      "name": "Dormant / Deceased / Permanently Inactive Lifecycle",
+      "coded": true,
+      "tested": true,
+      "owner": "file00"
+    },
+    {
+      "id": "F00-EXT-020",
+      "name": "User-Facing Trust & Security Timeline",
+      "coded": true,
+      "tested": true,
+      "owner": "file00"
+    }
   ],
   "canonical_boundaries": {
     "authentication_ceremony": "file02",
@@ -52,11 +172,28 @@
     "core_assertions_passed": 575,
     "core_assertions_failed": 0,
     "ten_round_review_complete": true,
-    "rounds_with_defects": [2,3,4,5,6,7,8,9,10],
-    "rounds_without_defects": [1],
+    "rounds_with_defects": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "rounds_without_defects": [
+      1
+    ],
     "defects_found_total": 16,
     "defects_corrected_total": 16,
-    "severity": {"critical":1,"high":9,"medium":4,"low":2},
+    "severity": {
+      "critical": 1,
+      "high": 9,
+      "medium": 4,
+      "low": 2
+    },
     "known_unresolved_repository_defects": 0,
     "green_branch_evidence": {
       "head_sha": "eea6fc82d33e2d00d6b2bbfdf2b5b3051f471f6a",
@@ -68,24 +205,99 @@
     }
   },
   "review_rounds": [
-    {"round":1,"focus":"canonical ownership and architecture","defects":0},
-    {"round":2,"focus":"authorization actor binding and service identity","defects":1,"ids":["ATR-R2-D01"]},
-    {"round":3,"focus":"authentication passkey provenance","defects":1,"ids":["ATR-R3-D01"]},
-    {"round":4,"focus":"critical mutation atomicity and fail-closed state","defects":4,"ids":["ATR-R4-D01","ATR-R4-D02","ATR-R4-D03","ATR-R4-D04"]},
-    {"round":5,"focus":"privacy minimum disclosure and credential trust","defects":3,"ids":["ATR-R5-D01","ATR-R5-D02","ATR-R5-D03"]},
-    {"round":6,"focus":"guardian succession lifecycle","defects":1,"ids":["ATR-R6-D01"]},
-    {"round":7,"focus":"merge delegation and break-glass governance","defects":3,"ids":["ATR-R7-D01","ATR-R7-D02","ATR-R7-D03"]},
-    {"round":8,"focus":"revocation cache and direct protected-action consistency","defects":1,"ids":["ATR-R8-D01"]},
-    {"round":9,"focus":"background-job scalability and completeness","defects":1,"ids":["ATR-R9-D01"]},
-    {"round":10,"focus":"release metadata packaging and supply-chain hygiene","defects":1,"ids":["ATR-R10-D01"]}
+    {
+      "round": 1,
+      "focus": "canonical ownership and architecture",
+      "defects": 0
+    },
+    {
+      "round": 2,
+      "focus": "authorization actor binding and service identity",
+      "defects": 1,
+      "ids": [
+        "ATR-R2-D01"
+      ]
+    },
+    {
+      "round": 3,
+      "focus": "authentication passkey provenance",
+      "defects": 1,
+      "ids": [
+        "ATR-R3-D01"
+      ]
+    },
+    {
+      "round": 4,
+      "focus": "critical mutation atomicity and fail-closed state",
+      "defects": 4,
+      "ids": [
+        "ATR-R4-D01",
+        "ATR-R4-D02",
+        "ATR-R4-D03",
+        "ATR-R4-D04"
+      ]
+    },
+    {
+      "round": 5,
+      "focus": "privacy minimum disclosure and credential trust",
+      "defects": 3,
+      "ids": [
+        "ATR-R5-D01",
+        "ATR-R5-D02",
+        "ATR-R5-D03"
+      ]
+    },
+    {
+      "round": 6,
+      "focus": "guardian succession lifecycle",
+      "defects": 1,
+      "ids": [
+        "ATR-R6-D01"
+      ]
+    },
+    {
+      "round": 7,
+      "focus": "merge delegation and break-glass governance",
+      "defects": 3,
+      "ids": [
+        "ATR-R7-D01",
+        "ATR-R7-D02",
+        "ATR-R7-D03"
+      ]
+    },
+    {
+      "round": 8,
+      "focus": "revocation cache and direct protected-action consistency",
+      "defects": 1,
+      "ids": [
+        "ATR-R8-D01"
+      ]
+    },
+    {
+      "round": 9,
+      "focus": "background-job scalability and completeness",
+      "defects": 1,
+      "ids": [
+        "ATR-R9-D01"
+      ]
+    },
+    {
+      "round": 10,
+      "focus": "release metadata packaging and supply-chain hygiene",
+      "defects": 1,
+      "ids": [
+        "ATR-R10-D01"
+      ]
+    }
   ],
   "status": {
     "specified": true,
     "coded": true,
-    "packaged": true,
-    "automated_qa_green": true,
+    "packaged": false,
+    "automated_qa_green": false,
     "staging_accepted": false,
     "live_deployed": false,
     "operational": false
-  }
+  },
+  "fresh_ten_review_release": "1.2.14"
 }

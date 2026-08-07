@@ -1,0 +1,21 @@
+name: Retired File 00 Fresh-Review Mutator Sentinel
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  retired:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - name: Prove mutator is retired
+        run: |
+          set -euo pipefail
+          test ! -e tools/apply-fresh-ten-review-round.py
+          ! grep -RInE '^\s*contents:\s*write\s*$' .github/workflows

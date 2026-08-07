@@ -62,5 +62,5 @@ jobs:
           for file in "${php_files[@]}"; do php -l "$file"; done
       - name: Run inherited, CF-01 and forty-round suites
         run: npm test
-      - name: Build and verify deterministic 1.2.13 package
+      - name: Build and verify deterministic 1.2.14 package
         run: npm run verify

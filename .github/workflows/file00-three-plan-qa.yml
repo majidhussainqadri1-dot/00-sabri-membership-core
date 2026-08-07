@@ -1,4 +1,4 @@
-name: File 00 1.2.13 Advanced-Trust QA
+name: File 00 1.2.14 Fresh-Ten-Review QA
 
 on:
   pull_request:
@@ -35,10 +35,10 @@ jobs:
           tools: none
       - run: npm ci --ignore-scripts
       - run: npm run verify
-      - name: Exact latest-central and advanced-trust traceability
+      - name: Exact latest-central and fresh-review traceability
         run: |
           set -euo pipefail
-          grep -Fq 'Version: 1.2.13' source/sabri-membership-core/sabri-membership-core.php
+          grep -Fq 'Version: 1.2.14' source/sabri-membership-core/sabri-membership-core.php
           grep -Fq "define( 'SMC_CONTRACT_VERSION', '1.2.0' )" source/sabri-membership-core/sabri-membership-core.php
           grep -Fq "define( 'SMC_ADVANCED_TRUST_CONTRACT_VERSION', '1.0.0' )" source/sabri-membership-core/sabri-membership-core.php
           node qa/three-plan-runtime-completion-contract.mjs
@@ -47,31 +47,52 @@ jobs:
           php qa/latest-central-runtime.php
           node qa/advanced-trust-contract.mjs
           php qa/advanced-trust-runtime.php
-          test -f dist/00-sabri-membership-core-1.2.13.zip
+          php qa/advanced-trust-review-hardening-runtime.php
+          php qa/file09-professional-claim-runtime.php
+          test -f dist/00-sabri-membership-core-1.2.14.zip
+          ! grep -Fq 'VERSION = "1.2.13"' tools/build.py
+          grep -Fq 'version = release_version()' tools/build.py
           test "$(grep -Ec '^\| F00-R[0-9]{3} \|' docs/FILE-00-IMPLEMENTATION-TRACEABILITY-1.2.11.md)" -eq 100
           grep -Fq 'F00-CEN-01' docs/FILE-00-LATEST-CENTRAL-TRACEABILITY-1.2.12.md
           grep -Fq 'F00-CEN-02' docs/FILE-00-LATEST-CENTRAL-TRACEABILITY-1.2.12.md
           grep -Fq 'F00-CEN-03' docs/FILE-00-LATEST-CENTRAL-TRACEABILITY-1.2.12.md
           grep -Fq 'F00-EXT-001' docs/FILE-00-ADVANCED-TRUST-EXTENSIONS-1.2.13.md
           grep -Fq 'F00-EXT-020' docs/FILE-00-ADVANCED-TRUST-EXTENSIONS-1.2.13.md
+          grep -Fq 'Fresh ten-round review complete: **Yes**' docs/FILE-00-FRESH-TEN-ROUND-REVIEW-1.2.14.md
+          grep -Fq '**Unique product/repository defects found:** 16.' docs/FILE-00-FRESH-TEN-ROUND-REVIEW-1.2.14.md
+          python3 - <<'PY'
+          import json
+          d=json.load(open('qa/fresh-ten-review-traceability.json'))
+          assert d['release']=='1.2.14'
+          assert d['review_complete'] is True
+          assert d['rounds_with_defects']==[1,2,3,4,5,6,7,8,9,10]
+          assert d['rounds_without_defects']==[]
+          assert d['defects_found_total']==16 and d['defects_corrected_total']==16
+          assert d['severity']=={'critical':1,'high':12,'medium':3,'low':0}
+          assert d['known_unresolved_repository_defects']==0
+          assert d['guardrails']['package_version_derived_from_runtime'] is True
+          assert d['guardrails']['self_mutating_ci'] is False
+          assert d['external_status']=={'staging_accepted':False,'live_deployed':False,'operational':False}
+          PY
           grep -Fq '#087A4E' source/sabri-membership-core/assets/membership.css
-          if test -f docs/FILE-00-ADVANCED-TRUST-TEN-ROUND-REVIEW-1.2.13.md; then
-            grep -Fq 'Ten-round review complete: **Yes**' docs/FILE-00-ADVANCED-TRUST-TEN-ROUND-REVIEW-1.2.13.md
-          fi
-          test "$(find .github/workflows -maxdepth 1 -type f | wc -l)" -eq 2
+          test "$(find .github/workflows -maxdepth 1 -type f | wc -l)" -eq 3
           ! grep -RInE '^\s*contents:\s*write\s*$' .github/workflows
-          test ! -e .github/workflows/apply-advanced-trust-1.2.13.yml
-          test ! -e tools/apply-advanced-trust-1.2.13.py
+          grep -Fq 'Retired File 00 Fresh-Review Mutator Sentinel' .github/workflows/apply-fresh-ten-review.yml
+          grep -Fq 'contents: read' .github/workflows/apply-fresh-ten-review.yml
+          test ! -e tools/apply-fresh-ten-review-round.py
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: 00-sabri-membership-core-1.2.13-${{ github.sha }}
+          name: 00-sabri-membership-core-1.2.14-${{ github.sha }}
           path: |
-            dist/00-sabri-membership-core-1.2.13.zip
+            dist/00-sabri-membership-core-1.2.14.zip
             dist/CHECKSUMS.sha256
+            docs/RELEASE-1.2.14-FRESH-TEN-REVIEW.md
+            docs/FILE-00-FRESH-TEN-ROUND-REVIEW-1.2.14.md
             docs/RELEASE-1.2.13-ADVANCED-TRUST.md
             docs/FILE-00-ADVANCED-TRUST-EXTENSIONS-1.2.13.md
             docs/FILE-00-ADVANCED-TRUST-TEN-ROUND-REVIEW-1.2.13.md
             docs/FILE-00-LATEST-CENTRAL-TRACEABILITY-1.2.12.md
+            qa/fresh-ten-review-traceability.json
             qa/advanced-trust-traceability.json
             qa/latest-central-traceability.json
           if-no-files-found: error
