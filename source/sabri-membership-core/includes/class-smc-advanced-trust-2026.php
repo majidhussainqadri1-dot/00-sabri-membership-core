@@ -822,13 +822,14 @@ final class SMC_Advanced_Trust_2026 {
 	public static function open_break_glass( $subject_user_id, $actor_id, $purpose ) {
 		$subject_user_id = absint( $subject_user_id );
 		$actor_id = absint( $actor_id );
-		if ( ! $subject_user_id || ! $actor_id || ! self::actor_is_current( $actor_id, 'manage_options', true ) || ! SMC_Security::session_is_verified( $actor_id ) ) {
+		$purpose = sanitize_text_field( $purpose );
+		if ( ! $subject_user_id || ! $actor_id || '' === $purpose || ! self::actor_is_current( $actor_id, 'manage_options', true ) || ! SMC_Security::session_is_verified( $actor_id ) ) {
 			return new WP_Error( 'smc_break_glass_open', __( 'Break-glass initiation requires authorized institutional authority and a fresh security challenge.', 'sabri-membership-core' ) );
 		}
 		$lock = self::acquire_break_glass_lock();
 		if ( false === $lock ) { return new WP_Error( 'smc_break_glass_busy', __( 'Break-glass governance is busy; retry safely.', 'sabri-membership-core' ) ); }
 		$request = array(
-			'id' => wp_generate_uuid4(), 'subject_user_id' => $subject_user_id, 'purpose' => sanitize_text_field( $purpose ),
+			'id' => wp_generate_uuid4(), 'subject_user_id' => $subject_user_id, 'purpose' => $purpose,
 			'opened_by' => $actor_id, 'opened_at' => time(), 'expires_at' => time() + self::BREAK_GLASS_TTL,
 			'approvals' => array( $actor_id ), 'consumed_at' => 0,
 		);
@@ -878,7 +879,7 @@ final class SMC_Advanced_Trust_2026 {
 		$audit = $stored && SMC_Security::audit( 'break_glass_consumed', absint( $request['subject_user_id'] ), array( 'request_id' => $request_id ) );
 		self::release_break_glass_lock( $lock );
 		if ( ! $stored || ! $audit ) { return false; }
-		return array( 'authorized' => true, 'request_id' => $request_id, 'expires_at' => min( absint( $request['expires_at'] ), time() + 300 ) );
+		return array( 'authorized' => true, 'request_id' => $request_id, 'subject' => self::subject_reference( absint( $request['subject_user_id'] ) ), 'purpose' => sanitize_text_field( $request['purpose'] ?? '' ), 'expires_at' => min( absint( $request['expires_at'] ), time() + 300 ) );
 	}
 
 	/** F00-EXT-018 — Non-human/service identity classes. */
@@ -888,8 +889,8 @@ final class SMC_Advanced_Trust_2026 {
 			return array( 'kind' => 'institutional_ai', 'human' => false, 'doctor' => false, 'owner' => 'file00' );
 		}
 		$service = get_user_meta( $user_id, self::SERVICE_IDENTITY_META, true );
-		if ( is_array( $service ) && 'service' === ( $service['kind'] ?? '' ) && ! empty( $service['approved'] ) ) {
-			return array( 'kind' => 'service', 'human' => false, 'doctor' => false, 'owner' => 'file00', 'purpose' => sanitize_key( $service['purpose'] ?? '' ) );
+		if ( is_array( $service ) && 'service' === ( $service['kind'] ?? '' ) ) {
+			return array( 'kind' => 'service', 'human' => false, 'doctor' => false, 'owner' => 'file00', 'purpose' => sanitize_key( $service['purpose'] ?? '' ), 'approved' => ! empty( $service['approved'] ) );
 		}
 		return array( 'kind' => 'human', 'human' => true, 'doctor' => false, 'owner' => 'file00' );
 	}
