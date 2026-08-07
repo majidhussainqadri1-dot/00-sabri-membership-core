@@ -17,9 +17,23 @@
   "paid_unlocks": false,
   "commission_percent": 0,
   "search_discovery_owner": "file26",
+  "two_fresh_reviews_complete": true,
+  "review_rounds": {
+    "round_1": {
+      "defects_found": 4,
+      "defects_corrected": 4,
+      "corrected_source_head": "f24f2bce3c0f3182fe6918fbc01a1fde68f68960"
+    },
+    "round_2": {
+      "defects_found": 5,
+      "defects_corrected": 5,
+      "corrected_source_head": "ba5f7c41696958542db9fc32e56ddadee80db4b6"
+    }
+  },
+  "review_record": "docs/FILE-00-LATEST-CENTRAL-TWO-ROUND-REVIEW-1.2.12.md",
   "repository_known_unresolved_defects": 0,
   "staging_accepted": false,
   "live_deployed": false,
   "operational": false,
-  "evidence_note": "Repository-correctable status is finalized only after exact-head CI; external acceptance gates remain pending."
+  "evidence_note": "Two fresh repository review/fix/retest rounds are complete with zero known repository defects. Exact branch/PR/main CI remains a release evidence gate; Hostinger/provider/browser/restore/live/operational acceptance remains external and pending."
 }
