@@ -35,7 +35,7 @@ jobs:
           tools: none
       - run: npm ci --ignore-scripts
       - run: npm run verify
-      - name: Exact latest-central and advanced-trust traceability
+      - name: Exact latest-central and fresh-review traceability
         run: |
           set -euo pipefail
           grep -Fq 'Version: 1.2.14' source/sabri-membership-core/sabri-membership-core.php
@@ -56,6 +56,19 @@ jobs:
           grep -Fq 'F00-CEN-03' docs/FILE-00-LATEST-CENTRAL-TRACEABILITY-1.2.12.md
           grep -Fq 'F00-EXT-001' docs/FILE-00-ADVANCED-TRUST-EXTENSIONS-1.2.13.md
           grep -Fq 'F00-EXT-020' docs/FILE-00-ADVANCED-TRUST-EXTENSIONS-1.2.13.md
+          grep -Fq 'Fresh ten-round review complete: **Yes**' docs/FILE-00-FRESH-TEN-ROUND-REVIEW-1.2.14.md
+          grep -Fq '**Unique product/source defects found:** 15.' docs/FILE-00-FRESH-TEN-ROUND-REVIEW-1.2.14.md
+          python3 - <<'PY'
+          import json
+          d=json.load(open('qa/fresh-ten-review-traceability.json'))
+          assert d['release']=='1.2.14'
+          assert d['review_complete'] is True
+          assert d['rounds_with_defects']==[1,2,3,4,5,6,7,8,9]
+          assert d['rounds_without_defects']==[10]
+          assert d['defects_found_total']==15 and d['defects_corrected_total']==15
+          assert d['known_unresolved_repository_defects']==0
+          assert d['external_status']=={'staging_accepted':False,'live_deployed':False,'operational':False}
+          PY
           grep -Fq '#087A4E' source/sabri-membership-core/assets/membership.css
           test "$(find .github/workflows -maxdepth 1 -type f | wc -l)" -eq 2
           ! grep -RInE '^\s*contents:\s*write\s*$' .github/workflows
@@ -67,10 +80,13 @@ jobs:
           path: |
             dist/00-sabri-membership-core-1.2.14.zip
             dist/CHECKSUMS.sha256
+            docs/RELEASE-1.2.14-FRESH-TEN-REVIEW.md
+            docs/FILE-00-FRESH-TEN-ROUND-REVIEW-1.2.14.md
             docs/RELEASE-1.2.13-ADVANCED-TRUST.md
             docs/FILE-00-ADVANCED-TRUST-EXTENSIONS-1.2.13.md
             docs/FILE-00-ADVANCED-TRUST-TEN-ROUND-REVIEW-1.2.13.md
             docs/FILE-00-LATEST-CENTRAL-TRACEABILITY-1.2.12.md
+            qa/fresh-ten-review-traceability.json
             qa/advanced-trust-traceability.json
             qa/latest-central-traceability.json
           if-no-files-found: error
