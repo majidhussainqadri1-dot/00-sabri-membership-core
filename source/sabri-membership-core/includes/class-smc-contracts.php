@@ -128,6 +128,25 @@ final class SMC_Contracts {
 		if ( $base['institutional_ai'] ) {
 			$base['ai_identity'] = smc_institutional_ai_policy();
 		}
+		/* File 00 advanced trust containment/continuity is authoritative for protected actions. */
+		if ( class_exists( 'SMC_Advanced_Trust_2026' ) && ! SMC_Advanced_Trust_2026::protected_actions_allowed( $user_id ) ) {
+			$base['eligible'] = false;
+			$base['can_message'] = false;
+			$base['can_comment'] = false;
+			$base['can_book_appointment'] = false;
+			$base['can_practice'] = false;
+			$base['can_publish'] = false;
+			$base['can_direct_publish'] = false;
+			$base['can_transfer_files'] = false;
+			if ( isset( $base['publishing'] ) && is_array( $base['publishing'] ) ) {
+				$base['publishing']['can_open_composer'] = false;
+				$base['publishing']['can_submit_for_review'] = false;
+				$base['publishing']['can_direct_publish'] = false;
+			}
+			if ( isset( $base['transfer'] ) && is_array( $base['transfer'] ) ) {
+				$base['transfer']['can_initiate'] = false;
+			}
+		}
 		return $base;
 	}
 

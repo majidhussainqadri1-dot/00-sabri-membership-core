@@ -19,8 +19,8 @@ function assert(condition, name) {
   else failures.push(name);
 }
 
-assert(main.includes('Version: 1.2.12'), 'Plugin header is 1.2.12');
-assert(main.includes("define( 'SMC_VERSION', '1.2.12' )"), 'Runtime version is 1.2.12');
+assert(main.includes('Version: 1.2.13'), 'Plugin header is 1.2.13');
+assert(main.includes("define( 'SMC_VERSION', '1.2.13' )"), 'Runtime version is 1.2.13');
 assert(main.includes("define( 'SMC_DB_VERSION', '1.3.0' )"), 'Database version is 1.3.0');
 assert(main.includes("define( 'SMC_CONTRACT_VERSION', '1.2.0' )"), 'Contract version is 1.2.0');
 assert(stateFunction.length > 0, 'Explicit membership-state API exists');
