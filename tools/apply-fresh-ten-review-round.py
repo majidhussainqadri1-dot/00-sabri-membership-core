@@ -30,7 +30,7 @@ if old4 not in t:
     raise SystemExit('round1 WPDB stub not found')
 t = t.replace(old4, new4, 1)
 anchor = "update_user_meta(7,'_smc_reverification_required',1);t('reverification marker blocks protected actions',!SMC_Advanced_Trust_2026::protected_actions_allowed(7));delete_user_meta(7,'_smc_reverification_required');\n"
-insert = anchor + "$wpdb->approved_at=gmdate('Y-m-d H:i:s',time()-2*YEAR_IN_SECONDS);t('expired approval baseline blocks synchronously without waiting for cron',!SMC_Advanced_Trust_2026::protected_actions_allowed(7));$wpdb->approved_at=gmdate('Y-m-d H:i:s');t('recent approval baseline remains current before periodic due date',SMC_Advanced_Trust_2026::protected_actions_allowed(7));\n"
+insert = anchor + "$wpdb->approved_at=gmdate('Y-m-d H:i:s',time()-2*YEAR_IN_SECONDS);t('expired approval baseline blocks synchronously without waiting for cron',!SMC_Advanced_Trust_2026::protected_actions_allowed(10));$wpdb->approved_at=gmdate('Y-m-d H:i:s');t('recent approval baseline remains current before periodic due date',SMC_Advanced_Trust_2026::protected_actions_allowed(10));\n"
 if anchor not in t:
     raise SystemExit('round1 test anchor not found')
 t = t.replace(anchor, insert, 1)
