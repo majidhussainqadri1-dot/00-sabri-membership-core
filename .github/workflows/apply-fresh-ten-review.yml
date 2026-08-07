@@ -16,17 +16,22 @@ jobs:
   apply:
     if: github.ref == 'refs/heads/codex/file00-fresh-ten-review-1.2.14'
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           ref: codex/file00-fresh-ten-review-1.2.14
           fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+          cache: npm
       - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240
         with:
           php-version: '8.3'
           coverage: none
           tools: none
+      - run: npm ci --ignore-scripts
       - name: Apply current reviewed correction
         run: |
           set -euo pipefail
@@ -35,13 +40,14 @@ jobs:
           php -l source/sabri-membership-core/includes/class-smc-contracts.php
           php qa/advanced-trust-review-hardening-runtime.php
           if test -f qa/file09-professional-claim-runtime.php; then php qa/file09-professional-claim-runtime.php; fi
+          npm test
           git diff --check
       - name: Commit corrected source and QA
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add source/sabri-membership-core/includes/class-smc-advanced-trust-2026.php source/sabri-membership-core/includes/class-smc-contracts.php qa/
+          git config user.email '4189826+github-actions[bot]@users.noreply.github.com'
+          git add source package.json package-lock.json qa tools .github/workflows/cf01-contract.yml .github/workflows/file00-three-plan-qa.yml README.md STATUS.md docs/FILE-00-MASTER-PLAN-2026.md 2>/dev/null || true
           if git diff --cached --quiet; then exit 0; fi
-          git commit -m 'Fix File 00 fresh ten-review current round defects'
+          git commit -m 'Close File 00 1.2.14 fresh ten-review release metadata'
           git push origin HEAD:codex/file00-fresh-ten-review-1.2.14
