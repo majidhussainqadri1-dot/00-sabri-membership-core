@@ -30,6 +30,7 @@
   "canonical_boundaries": {
     "authentication_ceremony": "file02",
     "professional_verification_truth": "file09",
+    "security_risk_assurance": "file24",
     "search_discovery_ranking": "file26",
     "membership_identity_assurance": "file00"
   },
@@ -45,11 +46,29 @@
     "selective_proof_max_ttl_seconds": 300
   },
   "qa": {
-    "advanced_trust_static_expected": 30,
-    "advanced_trust_runtime_local": {"pass":19,"fail":0},
-    "ten_round_review_complete": false,
-    "known_unresolved_repository_defects": null
+    "advanced_trust_static_expected": 31,
+    "advanced_trust_runtime_expected": 21,
+    "advanced_trust_review_hardening_runtime_expected": 14,
+    "ten_round_review_complete": true,
+    "rounds_with_defects": [2,3,4,5,6,7,8,9,10],
+    "rounds_without_defects": [1],
+    "defects_found_total": 16,
+    "defects_corrected_total": 16,
+    "severity": {"critical":1,"high":9,"medium":4,"low":2},
+    "known_unresolved_repository_defects": 0
   },
+  "review_rounds": [
+    {"round":1,"focus":"canonical ownership and architecture","defects":0},
+    {"round":2,"focus":"authorization actor binding and service identity","defects":1,"ids":["ATR-R2-D01"]},
+    {"round":3,"focus":"authentication passkey provenance","defects":1,"ids":["ATR-R3-D01"]},
+    {"round":4,"focus":"critical mutation atomicity and fail-closed state","defects":4,"ids":["ATR-R4-D01","ATR-R4-D02","ATR-R4-D03","ATR-R4-D04"]},
+    {"round":5,"focus":"privacy minimum disclosure and credential trust","defects":3,"ids":["ATR-R5-D01","ATR-R5-D02","ATR-R5-D03"]},
+    {"round":6,"focus":"guardian succession lifecycle","defects":1,"ids":["ATR-R6-D01"]},
+    {"round":7,"focus":"merge delegation and break-glass governance","defects":3,"ids":["ATR-R7-D01","ATR-R7-D02","ATR-R7-D03"]},
+    {"round":8,"focus":"revocation cache and direct protected-action consistency","defects":1,"ids":["ATR-R8-D01"]},
+    {"round":9,"focus":"background-job scalability and completeness","defects":1,"ids":["ATR-R9-D01"]},
+    {"round":10,"focus":"release metadata packaging and supply-chain hygiene","defects":1,"ids":["ATR-R10-D01"]}
+  ],
   "status": {
     "specified": true,
     "coded": true,
