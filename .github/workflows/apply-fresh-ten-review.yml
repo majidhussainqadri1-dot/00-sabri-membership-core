@@ -1,53 +1,21 @@
-name: Apply File 00 Fresh Ten-Review Corrections
+name: Retired File 00 Fresh-Review Mutator Sentinel
 
 on:
-  push:
-    branches: ['codex/file00-fresh-ten-review-1.2.14']
   workflow_dispatch:
 
 permissions:
-  contents: write
-
-concurrency:
-  group: file00-fresh-ten-review-${{ github.ref }}
-  cancel-in-progress: false
+  contents: read
 
 jobs:
-  apply:
-    if: github.ref == 'refs/heads/codex/file00-fresh-ten-review-1.2.14'
+  retired:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
-          ref: codex/file00-fresh-ten-review-1.2.14
-          fetch-depth: 0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: '22'
-          cache: npm
-      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240
-        with:
-          php-version: '8.3'
-          coverage: none
-          tools: none
-      - run: npm ci --ignore-scripts
-      - name: Apply current reviewed correction
+          persist-credentials: false
+      - name: Prove mutator is retired
         run: |
           set -euo pipefail
-          python3 tools/apply-fresh-ten-review-round.py
-          php -l source/sabri-membership-core/includes/class-smc-advanced-trust-2026.php
-          php -l source/sabri-membership-core/includes/class-smc-contracts.php
-          php qa/advanced-trust-review-hardening-runtime.php
-          if test -f qa/file09-professional-claim-runtime.php; then php qa/file09-professional-claim-runtime.php; fi
-          npm test
-          git diff --check
-      - name: Commit corrected source and QA
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add source package.json package-lock.json qa README.md STATUS.md docs/FILE-00-MASTER-PLAN-2026.md
-          if git diff --cached --quiet; then exit 0; fi
-          git commit -m 'Close File 00 1.2.14 fresh ten-review release metadata'
-          git push origin HEAD:codex/file00-fresh-ten-review-1.2.14
+          test ! -e tools/apply-fresh-ten-review-round.py
+          ! grep -RInE '^\s*contents:\s*write\s*$' .github/workflows
