@@ -1,0 +1,52 @@
+name: Apply File 00 Latest Central 1.2.12
+
+on:
+  push:
+    branches: ['codex/file00-latest-central-1.2.12']
+    paths:
+      - 'tools/apply-latest-central-1.2.12.py'
+      - '.github/workflows/apply-latest-central-1.2.12.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: codex/file00-latest-central-1.2.12
+          fetch-depth: 0
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240
+        with:
+          php-version: '8.3'
+          coverage: none
+          tools: none
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Apply exact latest-central reconciliation
+        run: python3 tools/apply-latest-central-1.2.12.py
+      - name: Syntax and focused contract checks
+        run: |
+          set -euo pipefail
+          find source/sabri-membership-core qa -name '*.php' -print0 | xargs -0 -n1 php -l
+          node --check qa/latest-central-contract.mjs
+          node qa/latest-central-contract.mjs
+          php qa/latest-central-runtime.php
+      - name: Commit corrected source
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo 'No reconciliation delta.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'File 00 1.2.12: complete latest-central reconciliation'
+          git push origin HEAD:codex/file00-latest-central-1.2.12
