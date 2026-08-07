@@ -1,0 +1,171 @@
+<?php
+defined( 'ABSPATH' ) || exit;
+
+/**
+ * 6–7 August 2026 central-plan reconciliation for File 00.
+ *
+ * This layer deliberately owns no search index, profile, professional-evidence store,
+ * donation ledger, authentication UI or ranking engine.  It only publishes File 00's
+ * canonical membership constitution/projections and invalidates derived assurance when
+ * membership-security facts change.
+ */
+final class SMC_Latest_Central_2026 {
+	const CONSTITUTION_VERSION = '2026-08-07-v1.0';
+	const FILE26_CONTRACT_VERSION = '1.0.0';
+	const REVALIDATION_META = '_smc_revalidation_required_at';
+
+	private static $revalidation_actions = array(
+		'guardian_consent_verified',
+		'guardian_consent_withdrawn',
+		'contact_verified',
+		'contact_reverification_required',
+		'consent_withdrawn',
+		'policy_consent_withdrawn',
+		'membership_consent_withdrawn',
+		'age_eligibility_changed',
+		'identity_document_expired',
+		'professional_verification_changed',
+		'verification_approved',
+		'membership_approved',
+		'membership_restricted',
+		'membership_suspended',
+		'membership_restored',
+		'institutional_membership_restored',
+		'membership_erasure_requested',
+		'privacy_erasure_started',
+		'privacy_erasure_completed',
+	);
+
+	public static function init() {
+		add_filter( 'smc_latest_central_constitution_v1', array( __CLASS__, 'filter_constitution' ) );
+		add_filter( 'smc_file26_membership_projection_v1', array( __CLASS__, 'filter_file26_projection' ), 10, 2 );
+		add_action( 'smc_audit_recorded', array( __CLASS__, 'audit_recorded' ), 10, 4 );
+	}
+
+	public static function constitution() {
+		return array(
+			'constitution_version'       => self::CONSTITUTION_VERSION,
+			'membership_owner'           => 'file00',
+			'authentication_owner'       => 'file02',
+			'professional_owner'         => 'file09',
+			'search_discovery_owner'     => 'file26',
+			'numbered_file_range'        => '00-26',
+			'single_free_tier'           => true,
+			'paid_unlocks_enabled'       => false,
+			'legacy_pricing_enabled'     => false,
+			'commission_percent'         => 0,
+			'donation_optional'          => true,
+			'donation_affects_access'    => false,
+			'donation_affects_rank'      => false,
+			'donation_affects_badge'     => false,
+			'donation_affects_support'   => false,
+			'brand_primary'              => '#087A4E',
+			'ranking_payment_signal'     => false,
+			'consumer_default_fail_open' => false,
+		);
+	}
+
+	public static function filter_constitution( $value ) {
+		return array_merge( is_array( $value ) ? $value : array(), self::constitution() );
+	}
+
+	/**
+	 * Privacy-minimal File 26 projection. File 26 owns indexing/ranking; File 00 only
+	 * supplies current membership eligibility and public-index permission.
+	 */
+	public static function file26_projection( $user_id ) {
+		$user_id = absint( $user_id );
+		$hidden = array(
+			'contract_version'      => self::FILE26_CONTRACT_VERSION,
+			'source_version'        => SMC_VERSION,
+			'owner'                 => 'file00',
+			'consumer'              => 'file26',
+			'user_id'               => $user_id,
+			'indexable'             => false,
+			'search_visibility'     => 'hidden',
+			'membership_status'     => 'unavailable',
+			'account_class'         => 'unknown',
+			'approved_types'        => array(),
+			'professional_verified' => false,
+			'identity_current'      => false,
+			'donation_rank_signal'  => false,
+			'paid_rank_signal'      => false,
+		);
+		if ( $user_id <= 0 || ! get_userdata( $user_id ) || smc_privacy_erasure_lock( $user_id ) || ! class_exists( 'SMC_Contracts' ) ) {
+			return $hidden;
+		}
+		$a = SMC_Contracts::assertions( $user_id );
+		if ( ! is_array( $a ) ) {
+			return $hidden;
+		}
+		$approved = ! empty( $a['approved'] );
+		$eligible = ! empty( $a['eligible'] );
+		$suspended = ! empty( $a['suspended'] );
+		$public = ! empty( $a['public_profile_allowed'] );
+		$indexable = $approved && $eligible && ! $suspended && $public;
+		$app = smc_application( $user_id );
+		return array(
+			'contract_version'      => self::FILE26_CONTRACT_VERSION,
+			'source_version'        => SMC_VERSION,
+			'owner'                 => 'file00',
+			'consumer'              => 'file26',
+			'user_id'               => $user_id,
+			'source_record_version' => is_array( $app ) ? absint( $app['row_version'] ?? 0 ) : 0,
+			'indexable'             => (bool) $indexable,
+			'search_visibility'     => $indexable ? 'public' : 'hidden',
+			'membership_status'     => sanitize_key( $a['status'] ?? 'unknown' ),
+			'account_class'         => sanitize_key( $a['account_class'] ?? 'member' ),
+			'approved_types'        => array_values( array_map( 'sanitize_key', (array) ( $a['approved_membership_types'] ?? array() ) ) ),
+			'professional_verified' => ! empty( $a['professional_verified'] ),
+			'identity_current'      => ! empty( $a['identity_documents_current'] ),
+			'donation_rank_signal'  => false,
+			'paid_rank_signal'      => false,
+		);
+	}
+
+	public static function filter_file26_projection( $projection, $user_id ) {
+		/* File 00 is authoritative for these fields; callers cannot pre-seed a bypass. */
+		unset( $projection );
+		return self::file26_projection( $user_id );
+	}
+
+	public static function audit_recorded( $action, $user_id, $details = array(), $audit_id = 0 ) {
+		$action = sanitize_key( $action );
+		$user_id = absint( $user_id );
+		if ( $user_id <= 0 ) {
+			return;
+		}
+		$watched = (array) apply_filters( 'smc_revalidation_audit_actions', self::$revalidation_actions );
+		$watched = array_values( array_unique( array_map( 'sanitize_key', $watched ) ) );
+		if ( ! in_array( $action, $watched, true ) ) {
+			return;
+		}
+		$previous = absint( get_user_meta( $user_id, self::REVALIDATION_META, true ) );
+		$stamp = max( time(), $previous + 1 );
+		update_user_meta( $user_id, self::REVALIDATION_META, $stamp );
+		$stored = absint( get_user_meta( $user_id, self::REVALIDATION_META, true ) );
+		if ( $stored < $stamp ) {
+			/* Fail closed: a missing marker is observable to assurance/repair consumers. */
+			do_action( 'smc_revalidation_marker_failed', $user_id, $action, absint( $audit_id ) );
+			return;
+		}
+		clean_user_cache( $user_id );
+		do_action(
+			'smc_file26_projection_invalidated',
+			$user_id,
+			array(
+				'reason'               => $action,
+				'constitution_version' => self::CONSTITUTION_VERSION,
+				'audit_id'             => absint( $audit_id ),
+			)
+		);
+	}
+}
+
+function smc_latest_central_constitution() {
+	return apply_filters( 'smc_latest_central_constitution_v1', array() );
+}
+
+function smc_file26_membership_projection( $user_id ) {
+	return apply_filters( 'smc_file26_membership_projection_v1', array(), absint( $user_id ) );
+}

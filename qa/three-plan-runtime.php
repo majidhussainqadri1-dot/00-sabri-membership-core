@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 define('ABSPATH', __DIR__ . '/');
-define('SMC_VERSION', '1.2.11');
+define('SMC_VERSION', '1.2.12');
 define('SMC_CONTRACT_VERSION', '1.2.0');
 define('SMC_CF01_CONTRACT_VERSION', '1.0.0');
 define('ARRAY_A', 'ARRAY_A');

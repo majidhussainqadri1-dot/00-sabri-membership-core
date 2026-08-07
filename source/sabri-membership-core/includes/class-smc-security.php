@@ -850,7 +850,9 @@ final class SMC_Security {
 			return false;
 		}
 		global $wpdb;
-		$mfa_cutoff = gmdate( 'Y-m-d H:i:s', time() - 12 * HOUR_IN_SECONDS );
+		$base_cutoff = time() - 12 * HOUR_IN_SECONDS;
+		$required_after = absint( get_user_meta( absint( $user_id ), '_smc_revalidation_required_at', true ) );
+		$mfa_cutoff = gmdate( 'Y-m-d H:i:s', max( $base_cutoff, $required_after ) );
 		$activity_cutoff = gmdate( 'Y-m-d H:i:s', time() - 30 * MINUTE_IN_SECONDS );
 		$row = $wpdb->get_row(
 			$wpdb->prepare(

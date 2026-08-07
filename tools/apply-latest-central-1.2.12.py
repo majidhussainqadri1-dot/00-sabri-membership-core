@@ -326,7 +326,7 @@ const checks = [
   ['File 26 projection fail closed', latest.includes("'indexable'             => false") && latest.includes("$approved && $eligible && ! $suspended && $public")],
   ['no sensitive projection fields', !latest.includes("'date_of_birth'") && !latest.includes("'phone'") && !latest.includes("'address'") && !latest.includes("'guardian_email'") && !latest.includes("'document_number'")],
   ['File 09 canonical claim', contracts.includes('smc_file09_doctor_verification_claim_v1') && contracts.includes('Never infer professional truth from stale display/user-meta') && !contracts.includes("return 'verified' === get_user_meta( $user_id, '_spd_verification_status', true );")],
-  ['audit invalidation bridge', events.includes("do_action( 'smc_audit_recorded'") && latest.includes("add_action( 'smc_audit_recorded'"))],
+  ['audit invalidation bridge', events.includes("do_action( 'smc_audit_recorded'") && latest.includes("add_action( 'smc_audit_recorded'")],
   ['F00-CEN-03 2FA challenge cutoff', security.includes("'_smc_revalidation_required_at'") && security.includes('max( $base_cutoff, $required_after )')],
   ['security changes invalidate File 26 projection', latest.includes("do_action(\n\t\t\t'smc_file26_projection_invalidated'")],
   ['traceability maps latest requirements', doc.includes('F00-CEN-01') && doc.includes('F00-CEN-02') && doc.includes('F00-CEN-03') && doc.includes('File 26') && doc.includes('AJ-25') && doc.includes('CV-280')],
@@ -418,6 +418,7 @@ trace_doc = '''# File 00 — Latest Central Implementation Traceability 1.2.12
 - **AJ-25:** donor and non-donor receive equal features/rank/badge/support — File 00 emits no donor privilege and File 26 projection carries no donation/payment signal.
 - **AJ-31/AJ-32:** accessibility and RTL/LTR — automated contracts exist; real assistive-tech acceptance remains pending.
 - **AJ-34:** MFA/recovery/session control — File 00 session/recovery controls exist; real-device alert/provider acceptance remains pending.
+- **CV-280:** two fresh review/fix/retest rounds are mandatory before release; zero known repository defects is the merge gate.
 - **AJ-35:** export/delete/retention exception — native privacy implementation retained; WordPress/Hostinger staging proof pending.
 
 ## Truthful status boundary

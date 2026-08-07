@@ -8,7 +8,7 @@ const ai = load('source/sabri-membership-core/includes/class-smc-three-plan.php'
 const css = load('source/sabri-membership-core/assets/membership.css');
 const trace = JSON.parse(load('qa/requirements-traceability.json'));
 const checks = [
-  ['runtime 1.2.11', plugin.includes("define( 'SMC_VERSION', '1.2.11' );")],
+  ['runtime 1.2.12', plugin.includes("define( 'SMC_VERSION', '1.2.12' );")],
   ['contract 1.2.0', plugin.includes("define( 'SMC_CONTRACT_VERSION', '1.2.0' );")],
   ['three-plan class loaded', plugin.includes('class-smc-three-plan.php') && plugin.includes('SMC_Three_Plan::init()')],
   ['free baseline', functions.includes("'free_baseline'           => true") && functions.includes("'paid_unlocks_enabled'    => false")],
@@ -21,7 +21,7 @@ const checks = [
   ['AI publishing disclosure', contracts.includes("'ai_generated_disclosure_required'")],
   ['transfer 1GB', contracts.includes("'max_file_bytes'       => 1073741824")],
   ['transfer fail closed', contracts.includes("'relationship_authorized'") && contracts.includes("'consent_authorized'") && contracts.includes("'public_url_allowed'   => false")],
-  ['green visual token', css.includes('--smc-brand:') && css.includes('#166534') && !css.includes('--smc-orange:')],
+  ['green visual token', css.includes('--smc-brand:') && css.includes('#087A4E') && !css.includes('--smc-orange:')],
   ['three governing artifacts', !!trace.platform_master_plan && !!trace.file00_master_plan && !!trace.all_chats_recovered_directives],
   ['recovered directives mapped', Array.isArray(trace.recovered_directives) && trace.recovered_directives.length >= 7],
   ['external gates stay pending', trace.staging_accepted === false && trace.production_approved === false && trace.live_installation_authorized === false],

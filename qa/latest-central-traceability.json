@@ -1,0 +1,25 @@
+{
+  "release": "1.2.12",
+  "constitution_version": "2026-08-07-v1.0",
+  "database_version": "1.3.0",
+  "public_contract_version": "1.2.0",
+  "file26_projection_contract": "1.0.0",
+  "governing_date": "2026-08-07",
+  "requirements": {
+    "F00-CEN-01": "coded",
+    "F00-CEN-02": "coded",
+    "F00-CEN-03": "coded",
+    "File26-membership-projection": "coded",
+    "SabriGreen-087A4E": "coded",
+    "File09-canonical-doctor-verification": "coded"
+  },
+  "donor_advantage": false,
+  "paid_unlocks": false,
+  "commission_percent": 0,
+  "search_discovery_owner": "file26",
+  "repository_known_unresolved_defects": 0,
+  "staging_accepted": false,
+  "live_deployed": false,
+  "operational": false,
+  "evidence_note": "Repository-correctable status is finalized only after exact-head CI; external acceptance gates remain pending."
+}

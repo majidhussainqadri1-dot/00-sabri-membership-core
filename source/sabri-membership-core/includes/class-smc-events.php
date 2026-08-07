@@ -72,6 +72,7 @@ final class SMC_Events {
 
 	public static function from_audit( $action, $subject_user_id, $details, $audit_id = 0 ) {
 		$action = sanitize_key( $action );
+		do_action( 'smc_audit_recorded', $action, absint( $subject_user_id ), is_array( $details ) ? $details : array(), absint( $audit_id ) );
 		if ( ! isset( self::$audit_map[ $action ] ) ) {
 			return true;
 		}

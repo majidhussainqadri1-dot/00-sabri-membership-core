@@ -1,6 +1,6 @@
 :root {
-	--smc-brand: var(--sabri-color-primary, var(--ssp-primary, #166534));
-	--smc-brand-hover: var(--sabri-color-primary-hover, var(--ssp-primary-hover, #14532d));
+	--smc-brand: var(--sabri-color-primary, var(--ssp-primary, #087A4E));
+	--smc-brand-hover: var(--sabri-color-primary-hover, var(--ssp-primary-hover, #06663F));
 	--smc-ink: #172033;
 	--smc-muted: #4b5563;
 	--smc-border: #cbd5e1;
