@@ -565,22 +565,14 @@ final class SMC_Advanced_Trust_2026 {
 		$actor_id = absint( $actor_id );
 		$authorized = $actor_id > 0 ? self::actor_is_current( $actor_id, 'smc_manage_membership' ) && SMC_Security::session_is_verified( $actor_id ) : (bool) apply_filters( 'smc_file24_security_containment_authorized', false, $user_id, $state, $reason );
 		if ( ! $authorized ) { return new WP_Error( 'smc_containment_authorization', __( 'Security containment requires authorized membership/security governance.', 'sabri-membership-core' ) ); }
+		if ( ! self::begin_transition_hold( $user_id, 'containment', $state, $actor_id ) ) { return new WP_Error( 'smc_containment_hold', __( 'Security containment could not enter a fail-closed transition hold.', 'sabri-membership-core' ) ); }
 		$record = array( 'state' => $state, 'updated_at' => time(), 'actor_id' => $actor_id, 'reason' => sanitize_text_field( $reason ) );
-		if ( ! self::write_user_meta_verified( $user_id, self::CONTAINMENT_META, $record ) ) {
-			return new WP_Error( 'smc_containment_store', __( 'Security containment state could not be persisted safely.', 'sabri-membership-core' ) );
-		}
-		if ( ! SMC_Security::revoke_all_sessions( $user_id, 'security_containment_' . $state ) ) {
-			return new WP_Error( 'smc_containment_sessions', __( 'Security containment could not invalidate existing sessions.', 'sabri-membership-core' ) );
-		}
-		if ( ! self::write_user_meta_verified( $user_id, '_smc_revalidation_required_at', time() + 1 ) ) {
-			return new WP_Error( 'smc_containment_revalidation', __( 'Security containment could not require a fresh session challenge.', 'sabri-membership-core' ) );
-		}
-		if ( ! SMC_Security::audit( 'security_containment_changed', $user_id, array( 'state' => $state, 'reason' => $record['reason'] ) ) ) {
-			return new WP_Error( 'smc_containment_audit', __( 'Security containment change could not be audited.', 'sabri-membership-core' ) );
-		}
-		if ( false === self::bump_revocation_epoch( $user_id, 'security_containment_changed' ) ) {
-			return new WP_Error( 'smc_containment_revocation', __( 'Security containment change could not be propagated safely.', 'sabri-membership-core' ) );
-		}
+		if ( ! self::write_user_meta_verified( $user_id, self::CONTAINMENT_META, $record ) ) { return new WP_Error( 'smc_containment_store', __( 'Security containment state could not be persisted safely.', 'sabri-membership-core' ) ); }
+		if ( ! SMC_Security::revoke_all_sessions( $user_id, 'security_containment_' . $state ) ) { return new WP_Error( 'smc_containment_sessions', __( 'Security containment could not invalidate existing sessions.', 'sabri-membership-core' ) ); }
+		if ( ! self::write_user_meta_verified( $user_id, '_smc_revalidation_required_at', time() + 1 ) ) { return new WP_Error( 'smc_containment_revalidation', __( 'Security containment could not require a fresh session challenge.', 'sabri-membership-core' ) ); }
+		if ( ! SMC_Security::audit( 'security_containment_changed', $user_id, array( 'state' => $state, 'reason' => $record['reason'] ) ) ) { return new WP_Error( 'smc_containment_audit', __( 'Security containment change could not be audited.', 'sabri-membership-core' ) ); }
+		if ( false === self::bump_revocation_epoch( $user_id, 'security_containment_changed' ) ) { return new WP_Error( 'smc_containment_revocation', __( 'Security containment change could not be propagated safely.', 'sabri-membership-core' ) ); }
+		if ( ! self::clear_transition_hold( $user_id ) ) { return new WP_Error( 'smc_containment_hold_clear', __( 'Security containment remains fail-closed because its transition hold could not be cleared.', 'sabri-membership-core' ) ); }
 		return $record;
 	}
 
@@ -929,12 +921,14 @@ final class SMC_Advanced_Trust_2026 {
 		if ( ! in_array( $state, array( 'active', 'dormant', 'deceased', 'permanently_inactive' ), true ) ) { return new WP_Error( 'smc_continuity_state', __( 'Unsupported continuity state.', 'sabri-membership-core' ) ); }
 		$actor_id = absint( $actor_id );
 		if ( ! self::actor_is_current( $actor_id, 'smc_manage_membership' ) || ! SMC_Security::session_is_verified( $actor_id ) ) { return new WP_Error( 'smc_continuity_authorization', __( 'Continuity-state changes require authorized membership governance and fresh security challenge.', 'sabri-membership-core' ) ); }
+		if ( ! self::begin_transition_hold( $user_id, 'continuity', $state, $actor_id ) ) { return new WP_Error( 'smc_continuity_hold', __( 'Continuity change could not enter a fail-closed transition hold.', 'sabri-membership-core' ) ); }
 		$record = array( 'state' => $state, 'updated_at' => time(), 'actor_id' => $actor_id, 'reason' => sanitize_text_field( $reason ), 'authorship_preserved' => true );
 		if ( ! self::write_user_meta_verified( $user_id, self::CONTINUITY_META, $record ) ) { return new WP_Error( 'smc_continuity_store', __( 'Continuity state could not be persisted safely.', 'sabri-membership-core' ) ); }
 		if ( ! SMC_Security::revoke_all_sessions( $user_id, 'continuity_state_' . $state ) ) { return new WP_Error( 'smc_continuity_sessions', __( 'Continuity change could not invalidate existing sessions.', 'sabri-membership-core' ) ); }
 		if ( ! self::write_user_meta_verified( $user_id, '_smc_revalidation_required_at', time() + 1 ) ) { return new WP_Error( 'smc_continuity_revalidation', __( 'Continuity change could not require a fresh challenge.', 'sabri-membership-core' ) ); }
 		if ( ! SMC_Security::audit( 'continuity_state_changed', $user_id, array( 'state' => $state, 'reason' => $record['reason'] ) ) ) { return new WP_Error( 'smc_continuity_audit', __( 'Continuity change could not be audited.', 'sabri-membership-core' ) ); }
 		if ( false === self::bump_revocation_epoch( $user_id, 'continuity_state_changed' ) ) { return new WP_Error( 'smc_continuity_revocation', __( 'Continuity change could not be propagated safely.', 'sabri-membership-core' ) ); }
+		if ( ! self::clear_transition_hold( $user_id ) ) { return new WP_Error( 'smc_continuity_hold_clear', __( 'Continuity state remains fail-closed because its transition hold could not be cleared.', 'sabri-membership-core' ) ); }
 		return $record;
 	}
 
@@ -963,6 +957,7 @@ final class SMC_Advanced_Trust_2026 {
 
 	public static function protected_actions_allowed( $user_id ) {
 		$user_id = absint( $user_id );
+		if ( metadata_exists( 'user', $user_id, '_smc_trust_transition_hold_v1' ) ) { return false; }
 		$containment = self::containment_state( $user_id );
 		$continuity = self::continuity_state( $user_id );
 		$reverification_required = (bool) get_user_meta( $user_id, '_smc_reverification_required', true );
@@ -1017,6 +1012,16 @@ final class SMC_Advanced_Trust_2026 {
 		if ( function_exists( 'get_current_user_id' ) && get_current_user_id() > 0 && get_current_user_id() !== $actor_id ) { return false; }
 		if ( $founder_or_admin && function_exists( 'smc_is_founder' ) && smc_is_founder( $actor_id ) ) { return true; }
 		return '' === $capability || current_user_can( $capability );
+	}
+
+	private static function begin_transition_hold( $user_id, $kind, $target_state, $actor_id ) {
+		$hold = array( 'kind' => sanitize_key( $kind ), 'target_state' => sanitize_key( $target_state ), 'actor_id' => absint( $actor_id ), 'started_at' => time() );
+		return self::write_user_meta_verified( absint( $user_id ), '_smc_trust_transition_hold_v1', $hold );
+	}
+
+	private static function clear_transition_hold( $user_id ) {
+		delete_user_meta( absint( $user_id ), '_smc_trust_transition_hold_v1' );
+		return ! metadata_exists( 'user', absint( $user_id ), '_smc_trust_transition_hold_v1' );
 	}
 
 	private static function write_user_meta_verified( $user_id, $key, $value ) {
