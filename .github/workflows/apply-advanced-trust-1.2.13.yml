@@ -30,16 +30,17 @@ jobs:
           php -l source/sabri-membership-core/includes/class-smc-advanced-trust-2026.php
           php -l source/sabri-membership-core/includes/class-smc-contracts.php
           php -l source/sabri-membership-core/sabri-membership-core.php
-      - name: Commit only when patch changed tracked files
+      - name: Commit only non-workflow release changes
         run: |
           set -euo pipefail
-          if git diff --quiet; then
-            echo 'Release patch already applied.'
+          git checkout -- .github/workflows/file00-three-plan-qa.yml .github/workflows/cf01-contract.yml
+          git diff --check
+          git add source/sabri-membership-core/includes/class-smc-contracts.php package.json package-lock.json tools/build.py qa docs/FILE-00-MASTER-PLAN-2026.md
+          if git diff --cached --quiet; then
+            echo 'Non-workflow release patch already applied.'
             exit 0
           fi
-          git diff --check
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add source/sabri-membership-core/includes/class-smc-contracts.php package.json package-lock.json tools/build.py qa docs/FILE-00-MASTER-PLAN-2026.md .github/workflows/file00-three-plan-qa.yml .github/workflows/cf01-contract.yml
           git commit -m 'Complete File 00 advanced trust release wiring for 1.2.13'
           git push origin HEAD:codex/file00-advanced-trust-1.2.13
