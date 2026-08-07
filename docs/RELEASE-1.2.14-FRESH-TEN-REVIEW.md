@@ -1,6 +1,6 @@
 # Sabri Membership Core 1.2.14 — Fresh Ten-Review Corrective Release
 
-Release 1.2.14 is a security/authorization hardening release for the existing Advanced Membership, Identity & Trust Extensions. It does not create new canonical owners and does not change the database schema or the public membership contract.
+Release 1.2.14 is a security/authorization and deterministic-packaging hardening release for the existing Advanced Membership, Identity & Trust Extensions. It does not create new canonical owners and does not change the database schema or the public membership contract.
 
 ## Release identity
 
@@ -16,9 +16,9 @@ Release 1.2.14 is a security/authorization hardening release for the existing Ad
 
 ## Corrective scope
 
-The fresh ten-round audit corrected 15 unique repository/source defects across periodic reverification, revocation concurrency, selective-disclosure freshness, fail-closed state transitions, service identity classification, emergency governance, File 09 claim provenance, background propagation, File 02 revalidation freshness, direct protected-action gating and delegated-scope authorization.
+The fresh ten-round audit corrected **16 unique product/repository defects** across periodic reverification, revocation concurrency, selective-disclosure freshness, fail-closed state transitions, service identity classification, emergency governance, File 09 claim provenance, background propagation, File 02 revalidation freshness, direct protected-action gating, delegated-scope authorization, and deterministic release-version packaging.
 
-Round 10 found no new reproducible coding defect after the prior corrections.
+Every one of the ten fresh rounds found at least one reproducible defect; all **16/16** were corrected before release closure. The final Round 10 defect was a stale hard-coded `1.2.13` builder version; the deterministic builder now derives and validates the release identity from the plugin header plus `SMC_VERSION`.
 
 ## Preserved governing laws
 
@@ -32,7 +32,7 @@ Round 10 found no new reproducible coding defect after the prior corrections.
 
 ## QA and package gate
 
-Release acceptance requires the final branch and merged `main` to pass both read-only workflow families on the exact immutable head, including the full inherited suite, fresh review regressions, PHP 7.4/8.3 compatibility, deterministic ZIP verification, archive path/symlink/manifest/CRC checks, secret/binary hygiene and workflow write-permission hygiene.
+Release acceptance requires the final branch and merged `main` to pass the read-only QA workflow families on the exact immutable head, including the full inherited suite, fresh review regressions, PHP 7.4/8.3 compatibility, deterministic ZIP verification, archive path/symlink/manifest/CRC checks, secret/binary hygiene and workflow write-permission hygiene.
 
 The exact final package SHA-256 and exact merged-main workflow runs are recorded as CI evidence rather than hard-coded into this source-controlled release note, so the note does not become stale when the final merge SHA is created.
 
