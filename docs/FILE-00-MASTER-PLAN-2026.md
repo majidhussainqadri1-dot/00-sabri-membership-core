@@ -9,7 +9,7 @@
 
 ## Current implementation identity
 
-- Runtime implementation release: `1.2.13`
+- Runtime implementation release: `1.2.14`
 - Public membership contract: `1.2.0`
 - Database schema: `1.3.0`
 - Latest-central constitution: `2026-08-07-v1.0`
@@ -20,8 +20,8 @@
 
 ## Current evidence
 
-- `docs/FILE-00-ADVANCED-TRUST-EXTENSIONS-1.2.13.md`
-- `docs/RELEASE-1.2.13-ADVANCED-TRUST.md`
+- `docs/FILE-00-ADVANCED-TRUST-EXTENSIONS-1.2.14.md`
+- `docs/RELEASE-1.2.14-ADVANCED-TRUST.md`
 - `qa/advanced-trust-traceability.json`
 - `qa/advanced-trust-contract.mjs`
 - `qa/advanced-trust-runtime.php`

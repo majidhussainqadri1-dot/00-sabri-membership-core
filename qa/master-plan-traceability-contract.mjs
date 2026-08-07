@@ -37,9 +37,9 @@ if (evidence.conclusion === 'success') {
   assert((evidence.head_sha ?? '') === '' && (evidence.workflow_run_id ?? 0) === 0 && evidence.package_sha256 === '', 'Pending evidence blank');
 }
 const plugin = read('source/sabri-membership-core/sabri-membership-core.php');
-assert(plugin.includes('Version: 1.2.13') && plugin.includes("define( 'SMC_DB_VERSION', '1.3.0' )") && plugin.includes("define( 'SMC_CONTRACT_VERSION', '1.2.0' )") && plugin.includes("define( 'SMC_ADVANCED_TRUST_CONTRACT_VERSION', '1.0.0' )"), 'Current runtime identity 1.2.13/1.3.0/1.2.0 + advanced trust 1.0.0');
+assert(plugin.includes('Version: 1.2.14') && plugin.includes("define( 'SMC_DB_VERSION', '1.3.0' )") && plugin.includes("define( 'SMC_CONTRACT_VERSION', '1.2.0' )") && plugin.includes("define( 'SMC_ADVANCED_TRUST_CONTRACT_VERSION', '1.0.0' )"), 'Current runtime identity 1.2.14/1.3.0/1.2.0 + advanced trust 1.0.0');
 const master = read('docs/FILE-00-MASTER-PLAN-2026.md');
-assert(master.includes('Runtime implementation release: `1.2.13`'), 'Master index current runtime');
+assert(master.includes('Runtime implementation release: `1.2.14`'), 'Master index current runtime');
 assert(master.includes('Public membership contract: `1.2.0`'), 'Master index current public contract');
 assert(master.includes('File 26 membership projection contract: `1.0.0`'), 'Master index File 26 projection');
 assert(master.includes('Historical 1.2.11 three-plan evidence remains immutable'), 'Historical evidence boundary explicit');
@@ -54,7 +54,7 @@ assert(current.review_rounds?.round_2?.defects_found === 5 && current.review_rou
 assert(current.repository_known_unresolved_defects === 0 && fs.existsSync(path.join(root, current.review_record)), 'Zero known repository defects and review record exists');
 assert(current.staging_accepted === false && current.live_deployed === false && current.operational === false, 'Current latest-central external gates remain pending');
 const advanced = JSON.parse(read('qa/advanced-trust-traceability.json'));
-assert(advanced.release === '1.2.13' && advanced.advanced_trust_contract === '1.0.0' && advanced.requirements?.length === 20, 'Advanced trust 1.2.13 machine trace identity');
+assert(advanced.release === '1.2.14' && advanced.advanced_trust_contract === '1.0.0' && advanced.requirements?.length === 20, 'Advanced trust 1.2.14 machine trace identity');
 assert(advanced.requirements.every((r)=>r.coded===true && r.tested===true), 'All F00-EXT-001..020 mapped coded/tested');
 assert(advanced.status.staging_accepted === false && advanced.status.live_deployed === false && advanced.status.operational === false, 'Advanced trust external gates remain pending');
 assert(read('package.json').includes('latest-central-contract.mjs'), 'Package test includes executable latest-central contract');

@@ -4,7 +4,7 @@ define('ABSPATH', __DIR__ . '/');
 define('MINUTE_IN_SECONDS', 60);
 define('DAY_IN_SECONDS', 86400);
 define('YEAR_IN_SECONDS', 31536000);
-define('SMC_VERSION', '1.2.13');
+define('SMC_VERSION', '1.2.14');
 $meta=[]; $options=[]; $actions=[]; $filters=[]; $current_user_id=1;
 class WP_Error { public $code; public function __construct($c,$m=''){ $this->code=$c; } }
 function is_wp_error($v){ return $v instanceof WP_Error; }
@@ -33,6 +33,8 @@ function delete_option($key){ global $options; unset($options[$key]); return tru
 function get_users($args=[]){ return []; }
 function smc_is_founder($id){ return in_array((int)$id,[1,2],true); }
 function smc_is_institutional_ai($id){ return (int)$id===99; }
+class WPDBRevocationStub { public $prefix='wp_'; public $users='wp_users'; public $approved_at; public function __construct(){ $this->approved_at=gmdate('Y-m-d H:i:s'); } public function prepare($q,...$a){ return $q; } public function get_var($q){ if(strpos($q,'GET_LOCK')!==false||strpos($q,'RELEASE_LOCK')!==false) return 1; if(strpos($q,'smc_role_grants')!==false||strpos($q,'smc_applications')!==false) return $this->approved_at; return 1; } public function get_col($q){ return []; } }
+$wpdb=new WPDBRevocationStub();
 class SMC_Security {
   public static $verified=true; public static $audits=[];
   public static function session_is_verified($id){ return self::$verified; }
@@ -67,6 +69,7 @@ t('minimal assertion has revocation epoch', array_key_exists('revocation_epoch',
 $proof=SMC_Advanced_Trust_2026::selective_disclosure_proof(7,['identity_current','age_requirement_met'],'file17',600);
 t('selective proof capped TTL', is_array($proof) && ($proof['expires_at']-$proof['issued_at'])<=300);
 t('selective proof verifies', SMC_Advanced_Trust_2026::verify_selective_disclosure_proof($proof,'file17'));
+t('selective proof is purpose bound and revocation-fresh', $proof['proof_version']==='1.1.0' && !empty($proof['purpose']) && ($proof['expires_at']-$proof['issued_at'])<=60 && !SMC_Advanced_Trust_2026::verify_selective_disclosure_proof($proof,'file17','wrong_purpose'));
 $proof['claims']['identity_current']=false;
 t('tampered proof rejected', !SMC_Advanced_Trust_2026::verify_selective_disclosure_proof($proof,'file17'));
 $rev=SMC_Advanced_Trust_2026::bump_revocation_epoch(7,'test');
@@ -79,6 +82,7 @@ $caps=['publish_posts'=>true,'read'=>true];
 $out=SMC_Advanced_Trust_2026::filter_capabilities($caps,[],[],(object)['ID'=>7]);
 t('contained account loses sensitive cap', $out['publish_posts']===false && $out['read']===true);
 SMC_Advanced_Trust_2026::set_containment_state(7,'clear',1,'recovered');
+update_user_meta(14,'_smc_service_identity_v1',['kind'=>'service','purpose'=>'integration','approved'=>false]);$disabled_service=SMC_Advanced_Trust_2026::subject_kind(14);t('disabled service identity remains non-human', $disabled_service['kind']==='service' && !$disabled_service['human'] && !$disabled_service['approved']);
 $kind=SMC_Advanced_Trust_2026::subject_kind(99);
 t('institutional AI never human/doctor', $kind['kind']==='institutional_ai' && !$kind['human'] && !$kind['doctor']);
 $cont=SMC_Advanced_Trust_2026::set_continuity_state(8,'deceased',1,'verified notice');
@@ -88,6 +92,8 @@ t('break glass opens bounded', is_array($bg) && ($bg['expires_at']-$bg['opened_a
 $current_user_id=2; SMC_Advanced_Trust_2026::approve_break_glass($bg['id'],2);
 $current_user_id=1; $token=SMC_Advanced_Trust_2026::consume_break_glass($bg['id'],1);
 t('break glass requires/uses two approvals', is_array($token) && !empty($token['authorized']));
+t('break glass authority is subject and purpose bound', is_array($token) && $token['subject']==='uuid-7' && $token['purpose']==='founder recovery');
+t('blank break glass purpose is rejected', is_wp_error(SMC_Advanced_Trust_2026::open_break_glass(7,1,'   ')));
 t('break glass cannot be replayed', SMC_Advanced_Trust_2026::consume_break_glass($bg['id'],1)===false);
 $profile=SMC_Advanced_Trust_2026::assurance_profile(7);
 t('assurance profile reaches verified level', $profile['identity_assurance_level']>=3 && $profile['authentication_assurance_level']>=2 && $profile['authentication_owner']==='file00');
