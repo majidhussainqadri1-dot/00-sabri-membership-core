@@ -1051,19 +1051,17 @@ final class SMC_Advanced_Trust_2026 {
 	}
 
 	private static function acquire_break_glass_lock() {
-		$key = 'smc_break_glass_lock_v1'; $token = wp_generate_uuid4(); $now = time();
-		$current = get_option( $key, array() );
-		if ( is_array( $current ) && ! empty( $current['expires_at'] ) && absint( $current['expires_at'] ) > $now ) { return false; }
-		if ( is_array( $current ) && ! empty( $current ) ) { delete_option( $key ); }
-		$record = array( 'token' => $token, 'expires_at' => $now + 30 );
-		if ( ! add_option( $key, $record, '', 'no' ) ) { return false; }
-		$stored = get_option( $key, array() );
-		return is_array( $stored ) && hash_equals( $token, (string) ( $stored['token'] ?? '' ) ) ? $token : false;
+		global $wpdb;
+		if ( ! isset( $wpdb ) || ! is_object( $wpdb ) || ! method_exists( $wpdb, 'get_var' ) || ! method_exists( $wpdb, 'prepare' ) ) { return false; }
+		$lock_name = 'smc_emergency_governance_v2';
+		$locked = $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s,%d)', $lock_name, 3 ) );
+		return '1' === (string) $locked ? $lock_name : false;
 	}
 
 	private static function release_break_glass_lock( $token ) {
-		$key = 'smc_break_glass_lock_v1'; $stored = get_option( $key, array() );
-		if ( is_array( $stored ) && hash_equals( (string) $token, (string) ( $stored['token'] ?? '' ) ) ) { delete_option( $key ); }
+		global $wpdb;
+		if ( 'smc_emergency_governance_v2' !== (string) $token || ! isset( $wpdb ) || ! is_object( $wpdb ) || ! method_exists( $wpdb, 'get_var' ) || ! method_exists( $wpdb, 'prepare' ) ) { return; }
+		$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', (string) $token ) );
 	}
 
 	private static function current_guardian_consent_id( $user_id ) {
