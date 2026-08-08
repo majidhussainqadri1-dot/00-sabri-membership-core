@@ -290,7 +290,7 @@ final class SMC_Advanced_Trust_2026 {
 		if ( $user_id <= 0 || ! get_userdata( $user_id ) ) {
 			return new WP_Error( 'smc_reverify_subject', __( 'A valid membership subject is required.', 'sabri-membership-core' ) );
 		}
-		$authorized = $actor_id > 0 ? self::actor_is_current( $actor_id, 'smc_finalize_verification' ) && SMC_Security::session_is_verified( $actor_id ) : (bool) apply_filters( 'smc_system_reverification_authorized', false, $user_id, sanitize_key( $source ) );
+		$authorized = $actor_id > 0 ? self::actor_is_current( $actor_id, 'smc_finalize_verification' ) && SMC_Security::session_is_verified( $actor_id ) : self::system_reverification_authorized( $user_id, $source );
 		if ( ! $authorized ) {
 			return new WP_Error( 'smc_reverify_authorization', __( 'Reverification requires an authorized reviewer or explicitly authorized system adapter.', 'sabri-membership-core' ) );
 		}
@@ -1116,6 +1116,17 @@ final class SMC_Advanced_Trust_2026 {
 			&& hash_equals( self::subject_reference( absint( $user_id ) ), (string) ( $claim['subject'] ?? '' ) )
 			&& sanitize_key( $state ) === sanitize_key( $claim['state'] ?? '' )
 			&& $asserted_at > 0 && $asserted_at <= time() + 60 && $asserted_at >= time() - 5 * MINUTE_IN_SECONDS;
+	}
+
+	private static function system_reverification_authorized( $user_id, $source ) {
+		$user_id = absint( $user_id ); $source = sanitize_key( $source );
+		$claim = apply_filters( 'smc_system_reverification_authorization_v1', null, $user_id, $source );
+		if ( ! is_array( $claim ) ) { return false; }
+		$asserted_at = absint( $claim['asserted_at'] ?? 0 );
+		return 'file00' === sanitize_key( $claim['owner'] ?? '' ) && '1.0.0' === (string) ( $claim['contract_version'] ?? '' ) && ! empty( $claim['authorized'] )
+			&& '' !== $source && hash_equals( $source, sanitize_key( $claim['source'] ?? '' ) )
+			&& hash_equals( self::subject_reference( $user_id ), (string) ( $claim['subject'] ?? '' ) )
+			&& $asserted_at > 0 && $asserted_at <= time() + 60 && $asserted_at >= time() - 60;
 	}
 
 	private static function delegation_grantor_current( $grantor_user_id ) {
