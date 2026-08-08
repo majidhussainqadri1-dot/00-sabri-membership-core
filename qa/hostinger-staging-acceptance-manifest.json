@@ -144,9 +144,11 @@
       "artifact_expires_at": "2026-08-21T17:33:01Z"
     }
   },
-  "mandatory_unpinned_companions": [],
-  "candidate_pinning_status": "complete_for_file00_plan_named_integrations",
-  "candidate_pinning_note": "Pinned means exact source candidate selected for staging. It does not mean merged, staging-accepted, production-approved or mutually compatible until the real integrated environment tests pass.",
+  "mandatory_unpinned_companions": [
+    "02-current-plan-1.3.2-exact-head"
+  ],
+  "candidate_pinning_status": "blocked_current_plan_file02_exact_head_missing",
+  "candidate_pinning_note": "Older exact source candidates remain useful compatibility baselines, but current-plan pinning is incomplete while File 02 v2.3/runtime 1.3.2 has no synchronized GitHub exact-head candidate. Pinned never means staging-accepted or mutually compatible.",
   "gates": {
     "environment_and_backup": "pending",
     "fresh_install": "pending",
@@ -183,8 +185,8 @@
     "24",
     "25"
   ],
-  "candidate_source_pinning_status": "complete_for_file00_plan_named_integrations",
-  "package_pinning_status": "partial_pending_external_artifact_receipts",
+  "candidate_source_pinning_status": "partial_current_plan_file02_exact_head_missing",
+  "package_pinning_status": "partial_pending_file02_current_plan_and_file12_inner_package_receipts",
   "preflight_status": "blocked_waiting_for_current_file02_1.3.2_exact_head_candidate_and_real_hostinger_evidence",
   "release_review": "sixth_fresh_ten_round",
   "prior_exact_candidate_artifact": {
