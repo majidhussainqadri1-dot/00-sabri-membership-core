@@ -28,3 +28,14 @@ if text.count(old) != 1:
 text = text.replace(old, new, 1)
 path.write_text(text, encoding='utf-8', newline='\n')
 print('retained forty-round QA aligned with 1.2.19 package identity and signed restore-proof contract')
+
+# Latest-central revalidation contract: TOTP acceptance now also serializes the
+# user/factor replay state, so the revalidation clear predicate includes that CAS.
+path = root / 'qa/latest-central-contract.mjs'
+text = path.read_text(encoding='utf-8')
+old = "  ['successful TOTP clears revalidation marker before audit', security.includes('private static function clear_revalidation_requirement') && security.includes('$revalidation_ok = 1 === $updated && self::clear_revalidation_requirement( $user_id );') && security.includes(\"$audit_ok = $revalidation_ok && self::audit( 'two_factor_passed'\")],"
+new = "  ['successful TOTP clears revalidation marker before audit', security.includes('private static function clear_revalidation_requirement') && security.includes('$revalidation_ok = false !== $factor_updated && 1 === $updated && self::clear_revalidation_requirement( $user_id );') && security.includes(\"$audit_ok = $revalidation_ok && self::audit( 'two_factor_passed'\")],"
+if text.count(old) != 1:
+    raise SystemExit(f'qacontractfix: latest-central TOTP assertion expected once, found {text.count(old)}')
+path.write_text(text.replace(old, new, 1), encoding='utf-8', newline='\n')
+print('latest-central TOTP revalidation QA aligned with global factor replay CAS')
