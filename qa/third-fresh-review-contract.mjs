@@ -8,10 +8,10 @@ const privacy=read('source/sabri-membership-core/includes/class-smc-privacy.php'
 const completion=read('source/sabri-membership-core/includes/class-smc-completion.php');
 const bootstrap=read('source/sabri-membership-core/sabri-membership-core.php');
 const assertions=[
- ['runtime 1.2.18', bootstrap.includes("Version: 1.2.18") && bootstrap.includes("SMC_VERSION', '1.2.18")],
- ['explicit non-secret key ID', security.includes("SMC_MASTER_KEY_ID") && security.includes("private static function legacy_key_id")],
- ['new encryption fails closed without key ID', security.includes("smc_key_id_missing")],
- ['legacy key id limited to compatibility', security.includes("hash_equals( $legacy_kid, $stored_kid )")],
+ ['runtime 1.2.19', bootstrap.includes("Version: 1.2.19") && bootstrap.includes("SMC_VERSION', '1.2.19")],
+ ['explicit non-secret key ID', security.includes("SMC_MASTER_KEY_ID") && security.includes('public static function key_id()') && security.includes("preg_match( '/^[A-Za-z0-9][A-Za-z0-9._:-]{2,63}$/'")),
+ ['new encryption fails closed without key ID', security.includes("'smc_key_id_missing'") && security.includes("if ( '' === $key_id )")),
+ ['legacy key id limited to compatibility', security.includes('if ( 2 === (int) $version )') && security.includes('$derived_kid = substr( hash( \'sha256\', $key ), 0, 16 )') && security.includes("hash_equals( $derived_kid, (string) $legacy_stored_kid )")),
  ['document scope assignment enforced', security.includes('reviewer_not_assigned') && security.includes('assigned_reviewer=%d')],
  ['arbitrary publishing filter removed', !contracts.includes("apply_filters( 'smc_external_publishing_claims'") && contracts.includes("smc_trusted_publisher")],
  ['doctor direct publish is capability fact', !contracts.includes("apply_filters( 'smc_doctor_direct_publish_allowed'") && contracts.includes("smc_doctor_direct_publish")],
