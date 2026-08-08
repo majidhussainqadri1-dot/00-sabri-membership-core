@@ -8,7 +8,7 @@ const main=read('source/sabri-membership-core/sabri-membership-core.php');
 const readme=read('source/sabri-membership-core/README.txt');
 const qa=read('qa/advanced-trust-runtime.php');
 const checks=[
- ['runtime 1.2.20',main.includes('Version: 1.2.20')&&main.includes("SMC_VERSION', '1.2.20")],
+ ['runtime 1.2.21',main.includes('Version: 1.2.21')&&main.includes("SMC_VERSION', '1.2.21")],
  ['institutional expired hard block',fn.includes("'rejected', 'suspended', 'expired', 'appeal_review', 'erasure_pending'")],
  ['recovery baseline cannot be filtered away',auth.includes('array_merge( self::$recovery_actions, $filtered )')],
  ['administrator no longer bypasses ordinary admin gate',!auth.includes('if ( $is_admin && ! $is_file00 )')],
@@ -16,7 +16,7 @@ const checks=[
  ['assurance profile omits local user id',!/assurance_profile[\s\S]{0,1800}'user_id'\s*=>/.test(adv)],
  ['MFA provenance reads actual session time',sec.includes('public static function session_verified_at')&&sec.includes('SELECT two_factor_at FROM')&&adv.includes('SMC_Security::session_verified_at')],
  ['new encryption key ID documented',readme.includes('Define SMC_MASTER_KEY_ID as a stable non-secret key identifier')],
- ['active advanced runtime is current',qa.includes("define('SMC_VERSION', '1.2.20');")],
+ ['active advanced runtime is current',qa.includes("define('SMC_VERSION', '1.2.21');")],
  ['historical first-fresh changelog identity repaired',readme.includes('= 1.2.14 =')&&readme.split('= 1.2.15 =').length-1===1],
  ['public membership contract preserved',main.includes("SMC_CONTRACT_VERSION', '1.2.0")],
  ['advanced trust contract preserved',main.includes("SMC_ADVANCED_TRUST_CONTRACT_VERSION', '1.0.0")],

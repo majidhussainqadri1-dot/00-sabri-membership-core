@@ -6,7 +6,7 @@ const pkg=JSON.parse(fs.readFileSync('package.json','utf8'));
 const trace=JSON.parse(fs.readFileSync('qa/seventh-fresh-ten-review-traceability.json','utf8'));
 const stage=JSON.parse(fs.readFileSync('qa/hostinger-staging-acceptance-manifest.json','utf8'));
 const t=[];const test=(n,v)=>t.push([n,!!v]);
-test('runtime 1.2.20',main.includes('Version: 1.2.20')&&main.includes("SMC_VERSION', '1.2.20")&&pkg.version==='1.2.20'&&readme.includes('Stable tag: 1.2.20'));
+test('runtime 1.2.21',main.includes('Version: 1.2.21')&&main.includes("SMC_VERSION', '1.2.21")&&pkg.version==='1.2.21'&&readme.includes('Stable tag: 1.2.21'));
 test('v2 adapter additive',src.includes('smc_file02_authentication_assurance_v2')&&src.includes("'2.0.0' === (string) ( $v2['contract_version']" )&&src.includes('smc_file02_authentication_assurance_v1'));
 test('v2 anti downgrade bindings',src.includes("! $session_bound || ! $fingerprint_bound")&&src.includes("return $baseline;"));
 test('privacy minimal v2 provenance',src.includes("'phishing_resistant'")&&src.includes("'user_verified'")&&src.includes("'fingerprint_bound'")&&!src.includes("'fingerprint' =>"));
