@@ -24,6 +24,8 @@ jobs:
           git config user.email "actions@users.noreply.github.com"
       - name: Prepare applicator for current repository shape
         run: python3 tools/file00_sixth_review_prep.py
+      - name: Normalize and compile-check applicator
+        run: python3 tools/file00_sixth_review_postprep.py
       - name: Apply ten fresh review fix retest rounds
         run: python3 tools/file00_sixth_review_apply.py
       - name: Push reviewed commits
