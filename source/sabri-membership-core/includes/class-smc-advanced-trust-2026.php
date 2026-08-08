@@ -1153,9 +1153,10 @@ final class SMC_Advanced_Trust_2026 {
 		$now = time();
 		foreach ( $all as $request_id => $request ) {
 			if ( ! is_array( $request ) ) { unset( $all[ $request_id ] ); continue; }
-			$expired_at = absint( $request['expires_at'] ?? 0 );
-			$consumed_at = absint( $request['consumed_at'] ?? 0 );
-			if ( ( $consumed_at > 0 && $consumed_at < $now - DAY_IN_SECONDS ) || ( $consumed_at <= 0 && $expired_at > 0 && $expired_at < $now - DAY_IN_SECONDS ) ) { unset( $all[ $request_id ] ); }
+			$record_id = sanitize_text_field( (string) ( $request['id'] ?? '' ) ); $subject_user_id = absint( $request['subject_user_id'] ?? 0 );
+			$opened_at = absint( $request['opened_at'] ?? 0 ); $expired_at = absint( $request['expires_at'] ?? 0 ); $consumed_at = absint( $request['consumed_at'] ?? 0 );
+			$malformed = '' === $record_id || ! hash_equals( (string) $request_id, $record_id ) || $subject_user_id <= 0 || $opened_at <= 0 || $expired_at <= $opened_at || $expired_at - $opened_at > self::BREAK_GLASS_TTL + 60;
+			if ( $malformed || ( $consumed_at > 0 && $consumed_at < $now - DAY_IN_SECONDS ) || ( $consumed_at <= 0 && $expired_at < $now - DAY_IN_SECONDS ) ) { unset( $all[ $request_id ] ); }
 		}
 		return $all;
 	}
