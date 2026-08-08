@@ -37,9 +37,9 @@ if (evidence.conclusion === 'success') {
   assert((evidence.head_sha ?? '') === '' && (evidence.workflow_run_id ?? 0) === 0 && evidence.package_sha256 === '', 'Pending evidence blank');
 }
 const plugin = read('source/sabri-membership-core/sabri-membership-core.php');
-assert(plugin.includes('Version: 1.2.15') && plugin.includes("define( 'SMC_DB_VERSION', '1.3.0' )") && plugin.includes("define( 'SMC_CONTRACT_VERSION', '1.2.0' )") && plugin.includes("define( 'SMC_ADVANCED_TRUST_CONTRACT_VERSION', '1.0.0' )"), 'Current runtime identity 1.2.15/1.3.0/1.2.0 + advanced trust 1.0.0');
+assert(plugin.includes('Version: 1.2.16') && plugin.includes("define( 'SMC_DB_VERSION', '1.3.0' )") && plugin.includes("define( 'SMC_CONTRACT_VERSION', '1.2.0' )") && plugin.includes("define( 'SMC_ADVANCED_TRUST_CONTRACT_VERSION', '1.0.0' )"), 'Current runtime identity 1.2.16/1.3.0/1.2.0 + advanced trust 1.0.0');
 const master = read('docs/FILE-00-MASTER-PLAN-2026.md');
-assert(master.includes('Runtime implementation release: `1.2.15`'), 'Master index current runtime');
+assert(master.includes('Runtime implementation release: `1.2.16`'), 'Master index current runtime');
 assert(master.includes('Public membership contract: `1.2.0`'), 'Master index current public contract');
 assert(master.includes('File 26 membership projection contract: `1.0.0`'), 'Master index File 26 projection');
 assert(master.includes('Historical 1.2.11 three-plan evidence remains immutable'), 'Historical evidence boundary explicit');

@@ -9,7 +9,7 @@
 
 ## Current implementation identity
 
-- Runtime implementation release: `1.2.15`
+- Runtime implementation release: `1.2.16`
 - Public membership contract: `1.2.0`
 - Database schema: `1.3.0`
 - Latest-central constitution: `2026-08-07-v1.0`
@@ -19,6 +19,12 @@
 - Main merge: pending until review/PR gates succeed
 
 ## Current evidence
+
+- `docs/FILE-00-THIRD-FRESH-TEN-ROUND-REVIEW-1.2.16.md`
+- `docs/RELEASE-1.2.16-THIRD-FRESH-TEN-REVIEW.md`
+- `qa/third-fresh-ten-review-traceability.json`
+- `qa/third-fresh-review-contract.mjs`
+- `qa/third-fresh-review-runtime.php`
 
 - `docs/FILE-00-SECOND-FRESH-TEN-ROUND-REVIEW-1.2.15.md`
 - `docs/RELEASE-1.2.15-SECOND-FRESH-TEN-REVIEW.md`

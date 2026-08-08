@@ -230,14 +230,15 @@ final class SMC_Completion {
 
 	public static function health_snapshot() {
 		global $wpdb;
-		$dir = SMC_Security::key_ready() ? SMC_Security::private_dir() : new WP_Error( 'key', 'Key unavailable' );
+		$key_ready = SMC_Security::key_ready() && '' !== SMC_Security::key_id();
+		$dir = $key_ready ? SMC_Security::private_dir() : new WP_Error( 'key', 'Key configuration unavailable' );
 		$audit = SMC_Security::verify_audit_chain( 5000 );
 		return array(
 			'version'             => SMC_VERSION,
 			'database_version'    => get_option( 'smc_db_version', '' ),
 			'contract_version'    => SMC_CONTRACT_VERSION,
 			'safe_mode'           => self::safe_mode(),
-			'key_ready'           => SMC_Security::key_ready(),
+			'key_ready'           => $key_ready,
 			'private_storage'     => ! is_wp_error( $dir ),
 			'scanner_configured'  => (bool) apply_filters( 'smc_scanner_health', false ),
 			'notification_health' => apply_filters( 'smc_notification_health', 'unknown' ),
@@ -383,7 +384,12 @@ final class SMC_Completion {
 		$ok = $health['key_ready'] && $health['private_storage'] && $health['audit_valid'] && SMC_DB_VERSION === $health['database_version'];
 		$record = array( 'evidence_reference' => $reference, 'checked_at' => current_time( 'mysql', true ), 'result' => $ok ? 'passed' : 'failed', 'health' => $health );
 		update_option( 'smc_last_restore_test', $record, false );
-		SMC_Security::audit( 'post_restore_reconciliation_' . ( $ok ? 'passed' : 'failed' ), 0, array( 'evidence_reference' => $reference ) );
+		if ( get_option( 'smc_last_restore_test', null ) !== $record ) {
+			wp_die( esc_html__( 'Restore reconciliation finished, but its evidence record could not be persisted.', 'sabri-membership-core' ), '', array( 'response' => 503 ) );
+		}
+		if ( ! SMC_Security::audit( 'post_restore_reconciliation_' . ( $ok ? 'passed' : 'failed' ), 0, array( 'evidence_reference' => $reference ) ) ) {
+			wp_die( esc_html__( 'Restore reconciliation evidence could not be appended to the audit chain.', 'sabri-membership-core' ), '', array( 'response' => 503 ) );
+		}
 		wp_safe_redirect( admin_url( 'admin.php?page=smc-health-repair' ) ); exit;
 	}
 }

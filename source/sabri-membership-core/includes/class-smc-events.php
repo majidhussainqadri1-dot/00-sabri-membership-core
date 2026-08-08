@@ -188,8 +188,15 @@ final class SMC_Events {
 					'payload'        => json_decode( (string) $row['payload'], true ),
 					'created_at'     => $row['created_at'],
 				);
-				$accepted = has_filter( 'smc_deliver_event' ) ? apply_filters( 'smc_deliver_event', false, $event ) : false;
-				do_action( 'smc_outbox_event', $event );
+				$accepted = false;
+				$delivery_error = '';
+				try {
+					$accepted = has_filter( 'smc_deliver_event' ) ? apply_filters( 'smc_deliver_event', false, $event ) : false;
+					do_action( 'smc_outbox_event', $event );
+				} catch ( Throwable $error ) {
+					$accepted = false;
+					$delivery_error = 'Delivery adapter raised an exception.';
+				}
 				if ( true === $accepted ) {
 					$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_event_outbox SET status='delivered',delivered_at=%s,last_error=NULL,updated_at=%s WHERE id=%d AND status='processing'", current_time( 'mysql', true ), current_time( 'mysql', true ), (int) $row['id'] ) );
 					++$processed;
@@ -198,7 +205,8 @@ final class SMC_Events {
 				$attempts = (int) $row['attempts'] + 1;
 				$status = $attempts >= 10 ? 'dead_letter' : 'retry';
 				$delay = min( HOUR_IN_SECONDS, (int) pow( 2, min( 10, $attempts ) ) * 30 );
-				$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_event_outbox SET status=%s,next_attempt_at=%s,last_error=%s,updated_at=%s WHERE id=%d AND status='processing'", $status, gmdate( 'Y-m-d H:i:s', time() + $delay ), 'No consumer acknowledged delivery.', current_time( 'mysql', true ), (int) $row['id'] ) );
+				$last_error = '' !== $delivery_error ? $delivery_error : 'No consumer acknowledged delivery.';
+				$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_event_outbox SET status=%s,next_attempt_at=%s,last_error=%s,updated_at=%s WHERE id=%d AND status='processing'", $status, gmdate( 'Y-m-d H:i:s', time() + $delay ), $last_error, current_time( 'mysql', true ), (int) $row['id'] ) );
 			}
 		} finally {
 			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) );
@@ -229,16 +237,32 @@ final class SMC_Events {
 			)
 		);
 		if ( 0 === $inserted ) {
-			$status = $wpdb->get_var( $wpdb->prepare( "SELECT status FROM {$wpdb->prefix}smc_event_inbox WHERE consumer=%s AND event_id=%s LIMIT 1", $consumer, $event_id ) );
-			return 'processed' === $status;
+			$existing = $wpdb->get_row( $wpdb->prepare( "SELECT status,updated_at FROM {$wpdb->prefix}smc_event_inbox WHERE consumer=%s AND event_id=%s LIMIT 1", $consumer, $event_id ), ARRAY_A );
+			if ( is_array( $existing ) && 'processed' === ( $existing['status'] ?? '' ) ) {
+				return true;
+			}
+			$stale_before = gmdate( 'Y-m-d H:i:s', time() - 15 * MINUTE_IN_SECONDS );
+			$reclaimed = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_event_inbox SET attempts=attempts+1,updated_at=%s,last_error=%s WHERE consumer=%s AND event_id=%s AND status='processing' AND updated_at<%s", $now, 'Recovered stale consumer claim.', $consumer, $event_id, $stale_before ) );
+			if ( 1 !== $reclaimed ) {
+				return false;
+			}
+		} elseif ( 1 !== $inserted ) {
+			return false;
 		}
-		if ( 1 !== $inserted ) { return false; }
-		$result = call_user_func( $callback, $event );
+		try {
+			$result = call_user_func( $callback, $event );
+		} catch ( Throwable $error ) {
+			$result = false;
+		}
 		if ( true !== $result ) {
 			$wpdb->delete( $wpdb->prefix . 'smc_event_inbox', array( 'consumer' => $consumer, 'event_id' => $event_id ), array( '%s', '%s' ) );
 			return false;
 		}
-		$updated = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_event_inbox SET status='processed',processed_at=%s,updated_at=%s WHERE consumer=%s AND event_id=%s AND status='processing'", $now, $now, $consumer, $event_id ) );
-		return 1 === $updated;
+		$updated = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_event_inbox SET status='processed',processed_at=%s,updated_at=%s,last_error=NULL WHERE consumer=%s AND event_id=%s AND status='processing'", $now, $now, $consumer, $event_id ) );
+		if ( 1 !== $updated ) {
+			$wpdb->delete( $wpdb->prefix . 'smc_event_inbox', array( 'consumer' => $consumer, 'event_id' => $event_id ), array( '%s', '%s' ) );
+			return false;
+		}
+		return true;
 	}
 }
