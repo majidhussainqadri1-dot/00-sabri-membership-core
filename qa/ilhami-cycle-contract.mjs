@@ -15,8 +15,8 @@ const failures = [];
 let passed = 0;
 function assert(condition, name) { if (condition) passed += 1; else failures.push(name); }
 
-assert(main.includes('Version: 1.2.18'), 'Plugin header is 1.2.18');
-assert(main.includes("define( 'SMC_VERSION', '1.2.18' )"), 'Runtime version is 1.2.18');
+assert(main.includes('Version: 1.2.20'), 'Plugin header is 1.2.18');
+assert(main.includes("define( 'SMC_VERSION', '1.2.20' )"), 'Runtime version is 1.2.18');
 assert(main.includes("define( 'SMC_DB_VERSION', '1.3.0' )"), 'Database version is 1.3.0');
 assert(main.includes('SMC_Lifecycle::institutional_repair_complete()'), 'Release repair marker is conditional on a complete repair pass');
 assert(functions.includes("if ( ! isset( smc_allowed_genders()[ $gender ] ) )"), 'Unknown gender fails closed');

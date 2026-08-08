@@ -1,0 +1,39 @@
+{
+  "release": "1.2.20",
+  "series": "seventh-fresh-ten-round",
+  "review_complete": true,
+  "rounds": 10,
+  "defect_rounds": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10
+  ],
+  "clean_rounds": [],
+  "defect_count": 10,
+  "defects_corrected_total": 10,
+  "known_unresolved_repository_defects": 0,
+  "severity": {
+    "critical": 0,
+    "high": 5,
+    "medium": 5,
+    "low": 0
+  },
+  "file02_governing_evidence": {
+    "plan_version": "2.3",
+    "reviewed_runtime": "1.3.2",
+    "authentication_assurance_v2_contract": "2.0.0",
+    "github_exact_head_synced": false
+  },
+  "external_status": {
+    "staging_accepted": false,
+    "live_deployed": false,
+    "operational": false
+  }
+}

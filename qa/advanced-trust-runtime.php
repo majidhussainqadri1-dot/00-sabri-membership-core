@@ -4,7 +4,7 @@ define('ABSPATH', __DIR__ . '/');
 define('MINUTE_IN_SECONDS', 60);
 define('DAY_IN_SECONDS', 86400);
 define('YEAR_IN_SECONDS', 31536000);
-define('SMC_VERSION', '1.2.18');
+define('SMC_VERSION', '1.2.20');
 $meta=[]; $options=[]; $actions=[]; $filters=[]; $current_user_id=1;
 class WP_Error { public $code; public function __construct($c,$m=''){ $this->code=$c; } }
 function is_wp_error($v){ return $v instanceof WP_Error; }
@@ -88,7 +88,7 @@ $kind=SMC_Advanced_Trust_2026::subject_kind(99);
 t('institutional AI never human/doctor', $kind['kind']==='institutional_ai' && !$kind['human'] && !$kind['doctor']);
 $cont=SMC_Advanced_Trust_2026::set_continuity_state(8,'deceased',1,'verified notice');
 t('deceased preserves authorship and blocks protected actions', is_array($cont) && !empty($cont['authorship_preserved']) && !SMC_Advanced_Trust_2026::protected_actions_allowed(8));
-$filters['smc_file02_authentication_assurance_v1']=fn($base,$uid)=>['owner'=>'file02','contract_version'=>'1.0.0','level'=>3,'method'=>'passkey','passkey_asserted'=>true,'hardware_backed'=>true,'verified_at'=>time()];
+$filters['smc_file02_authentication_assurance_v2']=fn($base,$uid)=>['owner'=>'file02','contract_version'=>'2.0.0','level'=>3,'method'=>'passkey','passkey_asserted'=>true,'hardware_backed'=>true,'user_verified'=>true,'phishing_resistant'=>true,'risk'=>'normal','session_bound'=>true,'fingerprint_bound'=>true,'verified_at'=>time()];
 $bg=SMC_Advanced_Trust_2026::open_break_glass(7,1,'founder recovery');
 t('break glass opens bounded', is_array($bg) && ($bg['expires_at']-$bg['opened_at'])===900);
 $current_user_id=2; SMC_Advanced_Trust_2026::approve_break_glass($bg['id'],2);
@@ -97,7 +97,7 @@ t('break glass requires/uses two approvals', is_array($token) && !empty($token['
 t('break glass authority is subject and purpose bound', is_array($token) && $token['subject']==='uuid-7' && $token['purpose']==='founder recovery');
 t('blank break glass purpose is rejected', is_wp_error(SMC_Advanced_Trust_2026::open_break_glass(7,1,'   ')));
 t('break glass cannot be replayed', SMC_Advanced_Trust_2026::consume_break_glass($bg['id'],1)===false);
-unset($filters['smc_file02_authentication_assurance_v1']);
+unset($filters['smc_file02_authentication_assurance_v2']);
 $profile=SMC_Advanced_Trust_2026::assurance_profile(7);
 t('assurance profile exposes opaque subject only', isset($profile['subject']) && $profile['subject']==='uuid-7' && !array_key_exists('user_id',$profile));
 t('assurance profile reaches verified level', $profile['identity_assurance_level']>=3 && $profile['authentication_assurance_level']>=2 && $profile['authentication_owner']==='file00');
