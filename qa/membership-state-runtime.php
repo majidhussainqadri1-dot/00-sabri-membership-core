@@ -66,7 +66,7 @@ $state = smc_membership_state( 2 );
 $assert( 'verified' === $state['status'] && true === $state['approved'], 'Founder with a legacy review row must remain institutionally verified.' );
 $assert( 'under_review' === $state['application_status'] && 'founder' === $state['account_class'], 'Founder application evidence and class must be retained.' );
 
-foreach ( array( 'rejected', 'suspended', 'appeal_review', 'erasure_pending' ) as $hard_block ) {
+foreach ( array( 'rejected', 'suspended', 'expired', 'appeal_review', 'erasure_pending' ) as $hard_block ) {
 	$set_row( 1, $hard_block );
 	$state = smc_membership_state( 1 );
 	$assert( $hard_block === $state['status'] && false === $state['approved'], 'Institutional hard block must remain controlling: ' . $hard_block );
