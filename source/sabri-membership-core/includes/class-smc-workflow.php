@@ -161,6 +161,10 @@ final class SMC_Workflow {
 	public static function handle_submit_application() {
 		self::guard_user_action( 'smc_submit_application' );
 		$user_id = get_current_user_id();
+		$existing_application = smc_application( $user_id );
+		if ( $existing_application && ! in_array( sanitize_key( $existing_application['status'] ?? '' ), array( 'draft', 'more_information', 'rejected' ), true ) ) {
+			self::redirect( 'status', 'saved' );
+		}
 		$submission_key = sanitize_text_field( wp_unslash( $_POST['submission_key'] ?? '' ) );
 		if ( ! preg_match( '/^[0-9a-f-]{36}$/i', $submission_key ) ) {
 			self::redirect( 'application', 'invalid' );
@@ -332,8 +336,15 @@ final class SMC_Workflow {
 			SMC_Completion::record_repair( $user_id, 'application_submission_reconciliation', array( 'application_version' => $application_version, 'status' => $status ), $trace_id );
 			self::redirect( 'application', 'invalid', array( 'trace_id' => $trace_id ) );
 		}
+		$completed_receipt = array( 'status' => 'completed', 'completed_at' => time(), 'trace_id' => $trace_id );
 		update_user_meta( $user_id, '_smc_last_submission_key', $submission_key );
-		update_user_meta( $user_id, $submission_receipt_key, array( 'status' => 'completed', 'completed_at' => time(), 'trace_id' => $trace_id ) );
+		$last_key_ok = hash_equals( $submission_key, (string) get_user_meta( $user_id, '_smc_last_submission_key', true ) );
+		update_user_meta( $user_id, $submission_receipt_key, $completed_receipt );
+		$stored_receipt = get_user_meta( $user_id, $submission_receipt_key, true );
+		$receipt_ok = is_array( $stored_receipt ) && 'completed' === ( $stored_receipt['status'] ?? '' ) && hash_equals( $trace_id, (string) ( $stored_receipt['trace_id'] ?? '' ) );
+		if ( ! $last_key_ok && ! $receipt_ok ) {
+			SMC_Security::audit( 'application_idempotency_receipt_failed', $user_id, array( 'trace_id' => $trace_id ) );
+		}
 		SMC_Completion::clear_draft( $user_id );
 		self::redirect( 'status', 'saved', array( 'trace_id' => $trace_id ) );
 	}
