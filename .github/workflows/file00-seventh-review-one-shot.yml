@@ -1,0 +1,37 @@
+name: File 00 Seventh Fresh Ten-Round Corrective Applicator
+
+on:
+  push:
+    branches:
+      - codex/file00-seventh-fresh-ten-review-1.2.20
+    paths:
+      - .github/workflows/file00-seventh-review-one-shot.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/file00-seventh-fresh-ten-review-1.2.20
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+          tools: none
+      - name: Install locked test dependency
+        run: npm ci --ignore-scripts
+      - name: Configure review identity
+        run: |
+          git config user.name "File 00 Review Bot"
+          git config user.email "actions@users.noreply.github.com"
+      - name: Apply seventh fresh review
+        run: python3 tools/file00_seventh_review_bootstrap.py
