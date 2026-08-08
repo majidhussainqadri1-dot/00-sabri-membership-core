@@ -1,0 +1,37 @@
+name: Apply File 00 Third Fresh Ten-Review Corrections
+
+on:
+  push:
+    branches:
+      - codex/file00-third-fresh-ten-review-1.2.16
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Apply reviewed corrections
+        run: python3 tools/apply-third-fresh-ten-review.py
+      - name: Lint corrected PHP
+        run: |
+          set -euo pipefail
+          find source/sabri-membership-core qa -name '*.php' -print0 | xargs -0 -n1 php -l
+      - name: Commit corrected source
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add source package.json qa docs .github/workflows/file00-three-plan-qa.yml .github/workflows/cf01-contract.yml
+          git diff --cached --quiet && exit 0
+          git commit -m 'File 00 1.2.16 third fresh ten-round corrective closure'
+          git push origin HEAD:codex/file00-third-fresh-ten-review-1.2.16
