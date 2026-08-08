@@ -42,6 +42,10 @@ All File 00-plan-named integrations are now represented. Source-ref pinning is n
 - exact-main Actions artifact ID: `9020924990`
 - artifact wrapper SHA-256: `aa4bc3b845506685fa39ed705053d82b3fe774f5fb0fe7a16f838770374fbf6d`
 
+## Preflight blocker — File 02 governing-plan freshness
+
+The latest approved File 02 plan is v2.2 and defines an additive `1.3.0` scope with 24 modern authentication enhancements while preserving File 00 passkey-assurance v1 compatibility. No matching File 02 `1.3.0` repository candidate was found during this review. Therefore PR #7 `1.2.0` remains useful compatibility evidence but is **not sufficient for final integrated staging acceptance**. File 00 staging must remain BLOCKED at preflight until a current-plan File 02 candidate is exact-head QA/package pinned.
+
 ## Gate A — Environment and immutable evidence
 
 - [ ] Confirm staging hostname, WordPress version, PHP version, MySQL/MariaDB version, LiteSpeed/cache mode and active production theme.
