@@ -5,102 +5,28 @@
   "advanced_trust_contract": "1.0.0",
   "baseline_main_sha": "c9c299163df49322ae868d35374524ca46a3edca",
   "review_complete": true,
-  "rounds_with_defects": [
-    1,
-    2,
-    3,
-    4,
-    5,
-    7,
-    8,
-    9,
-    10
-  ],
-  "rounds_without_defects": [
-    6
-  ],
-  "defects_found_total": 13,
-  "defects_corrected_total": 13,
+  "rounds_with_defects": [1, 2, 3, 4, 5, 7, 8, 9, 10],
+  "rounds_without_defects": [6],
+  "defects_found_total": 14,
+  "defects_corrected_total": 14,
   "severity": {
     "critical": 1,
     "high": 7,
-    "medium": 5,
+    "medium": 6,
     "low": 0
   },
   "known_unresolved_repository_defects": 0,
   "rounds": [
-    {
-      "round": 1,
-      "defects": [
-        "TFR-R1-D01"
-      ],
-      "status": "corrected"
-    },
-    {
-      "round": 2,
-      "defects": [
-        "TFR-R2-D01"
-      ],
-      "status": "corrected"
-    },
-    {
-      "round": 3,
-      "defects": [
-        "TFR-R3-D01"
-      ],
-      "status": "corrected"
-    },
-    {
-      "round": 4,
-      "defects": [
-        "TFR-R4-D01"
-      ],
-      "status": "corrected"
-    },
-    {
-      "round": 5,
-      "defects": [
-        "TFR-R5-D01",
-        "TFR-R5-D02"
-      ],
-      "status": "corrected"
-    },
-    {
-      "round": 6,
-      "defects": [],
-      "status": "no_reproducible_defect"
-    },
-    {
-      "round": 7,
-      "defects": [
-        "TFR-R7-D01",
-        "TFR-R7-D02"
-      ],
-      "status": "corrected"
-    },
-    {
-      "round": 8,
-      "defects": [
-        "TFR-R8-D01"
-      ],
-      "status": "corrected"
-    },
-    {
-      "round": 9,
-      "defects": [
-        "TFR-R9-D01",
-        "TFR-R9-D02"
-      ],
-      "status": "corrected"
-    },
-    {
-      "round": 10,
-      "defects": [
-        "TFR-R10-D01",
-        "TFR-R10-D02"
-      ],
-      "status": "corrected"
-    }
+    {"round":1,"defects":["TFR-R1-D01"],"status":"corrected"},
+    {"round":2,"defects":["TFR-R2-D01"],"status":"corrected"},
+    {"round":3,"defects":["TFR-R3-D01"],"status":"corrected"},
+    {"round":4,"defects":["TFR-R4-D01"],"status":"corrected"},
+    {"round":5,"defects":["TFR-R5-D01","TFR-R5-D02"],"status":"corrected"},
+    {"round":6,"defects":[],"status":"no_reproducible_defect"},
+    {"round":7,"defects":["TFR-R7-D01","TFR-R7-D02"],"status":"corrected"},
+    {"round":8,"defects":["TFR-R8-D01"],"status":"corrected"},
+    {"round":9,"defects":["TFR-R9-D01","TFR-R9-D02"],"status":"corrected"},
+    {"round":10,"defects":["TFR-R10-D01","TFR-R10-D02","TFR-R10-D03"],"status":"corrected"}
   ],
   "guardrails": {
     "single_free_tier": true,
@@ -109,7 +35,8 @@
     "commission_percent": 0,
     "brand_primary": "#087A4E",
     "self_mutating_ci": false,
-    "third_fresh_regressions_permanent": true
+    "third_fresh_regressions_permanent": true,
+    "lockfile_matches_runtime": true
   },
   "external_status": {
     "staging_accepted": false,
