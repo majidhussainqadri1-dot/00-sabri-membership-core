@@ -119,46 +119,55 @@ final class SMC_Advanced_Trust_2026 {
 		$user_id = absint( $user_id );
 		$session_mfa = class_exists( 'SMC_Security' ) && SMC_Security::session_is_verified( $user_id );
 		$session_verified_at = $session_mfa && method_exists( 'SMC_Security', 'session_verified_at' ) ? absint( SMC_Security::session_verified_at( $user_id ) ) : 0;
-		if ( $session_mfa && $session_verified_at <= 0 ) {
-			$session_mfa = false;
-		}
+		if ( $session_mfa && $session_verified_at <= 0 ) { $session_mfa = false; }
 		$baseline = array(
-			'contract_version' => '1.0.0',
-			'owner' => 'file00',
-			'level' => $session_mfa ? 2 : 1,
+			'contract_version' => '1.0.0', 'owner' => 'file00', 'level' => $session_mfa ? 2 : 1,
 			'method' => $session_mfa ? 'file00_totp_or_recovery' : 'primary_authentication_unasserted',
-			'passkey_asserted' => false,
-			'hardware_backed' => false,
-			'verified_at' => $session_verified_at,
+			'passkey_asserted' => false, 'hardware_backed' => false, 'user_verified' => false,
+			'phishing_resistant' => false, 'risk' => 'unknown', 'session_bound' => false,
+			'fingerprint_bound' => false, 'verified_at' => $session_verified_at,
 		);
-		$claim = apply_filters( 'smc_file02_authentication_assurance_v1', $baseline, $user_id );
-		if ( ! is_array( $claim ) ) {
-			return $baseline;
+		$required_after = absint( get_user_meta( $user_id, '_smc_revalidation_required_at', true ) );
+		$v2 = apply_filters( 'smc_file02_authentication_assurance_v2', null, $user_id );
+		if ( is_array( $v2 ) ) {
+			$verified_at = absint( $v2['verified_at'] ?? 0 );
+			$level = max( (int) $baseline['level'], min( 4, absint( $v2['level'] ?? 0 ) ) );
+			$risk = sanitize_key( $v2['risk'] ?? 'unknown' );
+			if ( ! in_array( $risk, array( 'unknown', 'low', 'normal', 'elevated', 'high' ), true ) ) { $risk = 'unknown'; }
+			$owner_ok = 'file02' === sanitize_key( $v2['owner'] ?? '' );
+			$contract_ok = '2.0.0' === (string) ( $v2['contract_version'] ?? '' );
+			$fresh = $verified_at > 0 && $verified_at <= time() + 60 && $verified_at >= time() - 5 * MINUTE_IN_SECONDS;
+			$fresh_after_revalidation = 0 === $required_after || $verified_at >= $required_after;
+			$session_bound = ! empty( $v2['session_bound'] );
+			$fingerprint_bound = ! empty( $v2['fingerprint_bound'] );
+			if ( ! $owner_ok || ! $contract_ok || ! $fresh || ! $fresh_after_revalidation || ! $session_bound || ! $fingerprint_bound ) { return $baseline; }
+			return array(
+				'contract_version' => '2.0.0', 'owner' => 'file02', 'level' => $level,
+				'method' => sanitize_key( $v2['method'] ?? 'file02_authentication_assurance_v2' ) ?: 'file02_authentication_assurance_v2',
+				'passkey_asserted' => ! empty( $v2['passkey_asserted'] ), 'hardware_backed' => ! empty( $v2['hardware_backed'] ),
+				'user_verified' => ! empty( $v2['user_verified'] ), 'phishing_resistant' => ! empty( $v2['phishing_resistant'] ),
+				'risk' => $risk, 'session_bound' => true, 'fingerprint_bound' => true, 'verified_at' => $verified_at,
+			);
 		}
+		$claim = apply_filters( 'smc_file02_authentication_assurance_v1', $baseline, $user_id );
+		if ( ! is_array( $claim ) ) { return $baseline; }
 		$level = max( 0, min( 4, absint( $claim['level'] ?? $baseline['level'] ) ) );
 		$method = sanitize_key( $claim['method'] ?? $baseline['method'] );
 		$verified_at = absint( $claim['verified_at'] ?? 0 );
 		$owner = sanitize_key( $claim['owner'] ?? '' );
 		$owner_ok = 'file02' === $owner;
 		$contract_ok = '1.0.0' === (string) ( $claim['contract_version'] ?? '' );
-		$required_after = absint( get_user_meta( $user_id, '_smc_revalidation_required_at', true ) );
 		$fresh = $verified_at > 0 && $verified_at <= time() + 60 && $verified_at >= time() - 5 * MINUTE_IN_SECONDS;
 		$fresh_after_revalidation = 0 === $required_after || $verified_at >= $required_after;
 		$elevated = $level > (int) $baseline['level'] || ! empty( $claim['passkey_asserted'] ) || ! empty( $claim['hardware_backed'] );
-		if ( $verified_at > time() + 60 || ( $elevated && ( ! $owner_ok || ! $contract_ok || ! $fresh || ! $fresh_after_revalidation ) ) ) {
-			return $baseline;
-		}
-		if ( ! $elevated ) {
-			return $baseline;
-		}
+		if ( $verified_at > time() + 60 || ( $elevated && ( ! $owner_ok || ! $contract_ok || ! $fresh || ! $fresh_after_revalidation ) ) ) { return $baseline; }
+		if ( ! $elevated ) { return $baseline; }
 		return array(
-			'contract_version' => '1.0.0',
-			'owner' => 'file02',
-			'level' => $level,
-			'method' => $method ?: 'file02_authentication_assurance',
-			'passkey_asserted' => ! empty( $claim['passkey_asserted'] ),
-			'hardware_backed' => ! empty( $claim['hardware_backed'] ),
-			'verified_at' => $verified_at,
+			'contract_version' => '1.0.0', 'owner' => 'file02', 'level' => $level,
+			'method' => $method ?: 'file02_authentication_assurance', 'passkey_asserted' => ! empty( $claim['passkey_asserted'] ),
+			'hardware_backed' => ! empty( $claim['hardware_backed'] ), 'user_verified' => false,
+			'phishing_resistant' => false, 'risk' => 'unknown', 'session_bound' => false,
+			'fingerprint_bound' => false, 'verified_at' => $verified_at,
 		);
 	}
 
