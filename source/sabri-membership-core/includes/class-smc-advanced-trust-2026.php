@@ -841,6 +841,8 @@ final class SMC_Advanced_Trust_2026 {
 		$principal_user_id = absint( $principal_user_id );
 		$scope = sanitize_key( $scope );
 		if ( $principal_user_id <= 0 || ! self::protected_actions_allowed( $principal_user_id ) ) { return false; }
+		$membership = class_exists( 'SMC_Contracts' ) ? SMC_Contracts::assertions( $principal_user_id ) : array();
+		if ( empty( $membership['approved'] ) || ! empty( $membership['suspended'] ) || empty( $membership['eligible'] ) ) { return false; }
 		foreach ( self::delegated_authorities( $principal_user_id ) as $grant ) {
 			if ( in_array( $scope, (array) ( $grant['scopes'] ?? array() ), true ) ) { return true; }
 		}
