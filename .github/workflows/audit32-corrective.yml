@@ -27,7 +27,9 @@ jobs:
       - name: Install locked test dependency
         run: npm ci --ignore-scripts
       - name: Apply exact-baseline corrective patch
-        run: python3 tools/audit32/apply.py
+        run: |
+          python3 tools/audit32/preflight.py
+          python3 tools/audit32/apply.py
       - name: PHP syntax lint
         run: |
           set -euo pipefail
