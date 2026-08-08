@@ -38,6 +38,21 @@ jobs:
           python3 tools/audit32/securityblockfix.py
           python3 tools/audit32/sourcefix.py
           python3 tools/audit32/sourcefix2.py
+          python3 tools/audit32/sourcefix3.py
+      - name: Refresh source manifest
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          root = Path('source/sabri-membership-core')
+          manifest = root / 'MANIFEST.sha256'
+          lines = []
+          for file in sorted(p for p in root.rglob('*') if p.is_file() and p != manifest):
+              digest = hashlib.sha256(file.read_bytes()).hexdigest()
+              lines.append(f"{digest}  {file.relative_to(root).as_posix()}")
+          manifest.write_text('\n'.join(lines) + '\n', encoding='utf-8', newline='\n')
+          print(f'refreshed {manifest} with {len(lines)} entries')
+          PY
       - name: PHP syntax lint
         run: |
           set -euo pipefail
