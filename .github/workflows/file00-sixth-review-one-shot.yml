@@ -18,6 +18,10 @@ jobs:
         with:
           ref: staging/file00-1.2.18-hostinger-acceptance
           fetch-depth: 0
+      - name: Configure review commit identity
+        run: |
+          git config user.name "File 00 Review Bot"
+          git config user.email "actions@users.noreply.github.com"
       - name: Apply ten fresh review fix retest rounds
         run: python3 tools/file00_sixth_review_apply.py
       - name: Push reviewed commits
