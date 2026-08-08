@@ -17,4 +17,5 @@ pass('event inbox idempotency matches unique consumer-event schema', installer.i
 pass('submission handler enforces lifecycle server-side', /handle_submit_application[\s\S]{0,650}existing_application[\s\S]{0,450}more_information[\s\S]{0,250}rejected/.test(workflow));
 pass('submission completion verifies idempotency persistence', workflow.includes('$last_key_ok = hash_equals') && workflow.includes('$receipt_ok = is_array') && workflow.includes('application_idempotency_receipt_failed'));
 pass('privacy exporter processes only requested page', privacy.includes('switch ( $page )') && !privacy.includes('1 => self::export_identity( $user->ID )'));
+pass('failed outbox delivery preserves retry scheduling', events.includes("status IN ('pending','retry')") && events.includes('$retry_backlog > 0'));
 console.log(`Second fresh static complete; failures: ${failed}`); process.exit(failed?1:0);

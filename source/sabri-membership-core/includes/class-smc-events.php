@@ -203,7 +203,8 @@ final class SMC_Events {
 		} finally {
 			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) );
 		}
-		if ( $processed > 0 ) {
+		$retry_backlog = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}smc_event_outbox WHERE status IN ('pending','retry')" );
+		if ( $retry_backlog > 0 ) {
 			self::schedule_processor();
 		}
 		return $processed;
