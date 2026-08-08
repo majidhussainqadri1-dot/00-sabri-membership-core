@@ -1,0 +1,34 @@
+name: Apply File 00 Fifth Fresh Ten-Review Corrections
+
+on:
+  push:
+    branches: ['codex/file00-fifth-fresh-ten-review-1.2.18']
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: ${{ !contains(github.event.head_commit.message, '[fifth-fresh-applied]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: codex/file00-fifth-fresh-ten-review-1.2.18
+          fetch-depth: 0
+      - name: Decode and apply corrections
+        run: |
+          set -euo pipefail
+          base64 -d tools/apply-fifth-fresh-ten-review.py.gz.b64 | gzip -d > tools/apply-fifth-fresh-ten-review.py
+          rm tools/apply-fifth-fresh-ten-review.py.gz.b64
+          python3 tools/apply-fifth-fresh-ten-review.py
+          git diff --check
+      - name: Commit corrected release
+        run: |
+          set -euo pipefail
+          git config user.name 'majidhussainqadri1-dot'
+          git config user.email 'majidhussainqadri1@gmail.com'
+          git add -A
+          git commit -m 'File 00 1.2.18 fifth fresh ten-round corrective closure [fifth-fresh-applied]'
+          git push origin HEAD:codex/file00-fifth-fresh-ten-review-1.2.18
