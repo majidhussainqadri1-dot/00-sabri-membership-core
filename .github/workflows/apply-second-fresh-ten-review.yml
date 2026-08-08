@@ -36,8 +36,9 @@ jobs:
         run: |
           set -euo pipefail
           python3 tools/apply-second-fresh-ten-review-round.py
-          php -l source/sabri-membership-core/includes/class-smc-installer.php
+          find source/sabri-membership-core -type f -name '*.php' -print0 | xargs -0 -n1 php -l >/dev/null
           php qa/second-fresh-review-runtime.php
+          if test -f qa/second-fresh-review-contract.mjs; then node qa/second-fresh-review-contract.mjs; fi
           npm test
           git diff --check
       - name: Commit corrected source and QA
