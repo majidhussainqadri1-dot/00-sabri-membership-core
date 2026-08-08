@@ -227,8 +227,7 @@ final class SMC_Advanced_Trust_2026 {
 		$user_id = absint( $user_id );
 		$state = get_user_meta( $user_id, self::REVERIFY_META, true );
 		$state = is_array( $state ) ? $state : array();
-		$interval = absint( apply_filters( 'smc_reverification_interval_seconds', YEAR_IN_SECONDS, $user_id ) );
-		$interval = max( DAY_IN_SECONDS, $interval );
+		$interval = self::reverification_interval_seconds( $user_id );
 		$verified_at = absint( $state['verified_at'] ?? 0 );
 		$applicable = $verified_at > 0;
 		$source = sanitize_key( $state['source'] ?? '' );
@@ -238,7 +237,11 @@ final class SMC_Advanced_Trust_2026 {
 			$verified_at = absint( $baseline['verified_at'] ?? 0 );
 			$source = sanitize_key( $baseline['source'] ?? '' );
 		}
-		$due_at = absint( $state['due_at'] ?? ( $verified_at ? $verified_at + $interval : 0 ) );
+		$policy_due_at = $verified_at > 0 ? $verified_at + $interval : 0;
+		if ( $verified_at > 0 && array_key_exists( 'due_at', $state ) ) {
+			$stored_due_at = absint( $state['due_at'] );
+			$due_at = $stored_due_at > $verified_at ? min( $stored_due_at, $policy_due_at ) : $verified_at;
+		} else { $due_at = $policy_due_at; }
 		$current = ! $applicable || ( $verified_at > 0 && $due_at > time() );
 		return array(
 			'applicable' => (bool) $applicable,
@@ -295,7 +298,7 @@ final class SMC_Advanced_Trust_2026 {
 			return new WP_Error( 'smc_reverify_authorization', __( 'Reverification requires an authorized reviewer or explicitly authorized system adapter.', 'sabri-membership-core' ) );
 		}
 		$now = time();
-		$interval = max( DAY_IN_SECONDS, absint( apply_filters( 'smc_reverification_interval_seconds', YEAR_IN_SECONDS, $user_id ) ) );
+		$interval = self::reverification_interval_seconds( $user_id );
 		$state = array( 'verified_at' => $now, 'due_at' => $now + $interval, 'source' => sanitize_key( $source ), 'actor_id' => $actor_id );
 		if ( ! self::write_user_meta_verified( $user_id, self::REVERIFY_META, $state ) ) {
 			return new WP_Error( 'smc_reverify_store', __( 'Reverification could not be committed safely.', 'sabri-membership-core' ) );
@@ -1116,6 +1119,12 @@ final class SMC_Advanced_Trust_2026 {
 			&& hash_equals( self::subject_reference( absint( $user_id ) ), (string) ( $claim['subject'] ?? '' ) )
 			&& sanitize_key( $state ) === sanitize_key( $claim['state'] ?? '' )
 			&& $asserted_at > 0 && $asserted_at <= time() + 60 && $asserted_at >= time() - 5 * MINUTE_IN_SECONDS;
+	}
+
+	private static function reverification_interval_seconds( $user_id ) {
+		$requested = absint( apply_filters( 'smc_reverification_interval_seconds', YEAR_IN_SECONDS, absint( $user_id ) ) );
+		if ( $requested <= 0 ) { $requested = YEAR_IN_SECONDS; }
+		return max( DAY_IN_SECONDS, min( YEAR_IN_SECONDS, $requested ) );
 	}
 
 	private static function system_reverification_authorized( $user_id, $source ) {
