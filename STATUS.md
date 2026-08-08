@@ -1,10 +1,9 @@
-# File 00 Status — 1.2.11
+# File 00 — Corrective status
 
-- Three-plan repository coding: **100% verified** at `2618d9d75896ae3881c5404511103c23ffca8d04`.
-- Three-Plan QA `31002935962`: **success**.
-- Contract Integrity `31002938897`: **success**.
-- Package SHA-256: `0dca9b3fa9995736332c40d6a44f5dc36e2ff62d771c9cbea637d022cad9c715`.
-- Repository-correctable known defects: **0**.
-- Staging accepted: **No**.
-- Live deployed: **No**.
-- Operational: **No**.
+- Audited baseline: `3a84c32a6ddad151f2ed09d244fa8aa536a58108` (runtime 1.2.18).
+- Corrective candidate: runtime **1.2.19**, DB schema **1.4.0**, contract **1.2.1**.
+- Scope: closes the 32 source-code findings in `File-00-GitHub-Code-Only-Audit-2026-08-08-Urdu`.
+- Status: **code corrective candidate / production release still blocked until real WordPress+MySQL, provider, browser, restore, security and staging acceptance gates pass**.
+- No “zero defects” or production-complete claim is made from static/contract tests alone.
+
+Generated/updated by the audit-32 corrective branch on 2026-08-08 PKT.

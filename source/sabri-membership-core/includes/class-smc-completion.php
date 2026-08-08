@@ -83,23 +83,26 @@ final class SMC_Completion {
 
 	public static function load_draft( $user_id ) {
 		$receipt = get_user_meta( absint( $user_id ), self::DRAFT_META, true );
-		if ( ! is_array( $receipt ) || empty( $receipt['envelope'] ) || empty( $receipt['expires'] ) || (int) $receipt['expires'] < time() ) {
+		$issued_at = absint( is_array( $receipt ) ? ( $receipt['issued_at'] ?? 0 ) : 0 );
+		$expires_at = absint( is_array( $receipt ) ? ( $receipt['expires'] ?? 0 ) : 0 );
+		if ( ! is_array( $receipt ) || empty( $receipt['envelope'] ) || ! $issued_at || $expires_at !== $issued_at + self::DRAFT_TTL || $expires_at < time() ) {
 			delete_user_meta( absint( $user_id ), self::DRAFT_META );
 			return array();
 		}
-		$json = SMC_Security::decrypt( $receipt['envelope'], 'application-draft', self::draft_context( $user_id ) );
+		$context = array_merge( self::draft_context( $user_id ), array( 'issued_at'=>$issued_at, 'expires_at'=>$expires_at ) );
+		$json = SMC_Security::decrypt( $receipt['envelope'], 'application-draft', $context );
 		if ( is_wp_error( $json ) ) {
 			delete_user_meta( absint( $user_id ), self::DRAFT_META );
 			SMC_Security::audit( 'application_draft_decryption_failed', absint( $user_id ) );
 			return array();
 		}
-		$data = json_decode( $json, true );
-		if ( ! is_array( $data ) ) {
+		$sealed = json_decode( $json, true );
+		if ( ! is_array( $sealed ) || absint( $sealed['issued_at'] ?? 0 ) !== $issued_at || absint( $sealed['expires_at'] ?? 0 ) !== $expires_at || ! is_array( $sealed['draft'] ?? null ) ) {
 			delete_user_meta( absint( $user_id ), self::DRAFT_META );
 			SMC_Security::audit( 'application_draft_invalid', absint( $user_id ) );
 			return array();
 		}
-		return $data;
+		return $sealed['draft'];
 	}
 
 	private static function sanitize_draft( $raw ) {
@@ -139,17 +142,19 @@ final class SMC_Completion {
 		}
 		$raw = isset( $_POST['draft'] ) ? json_decode( wp_unslash( $_POST['draft'] ), true ) : array();
 		$data = self::sanitize_draft( $raw );
-		$envelope = SMC_Security::encrypt( wp_json_encode( $data ), 'application-draft', self::draft_context( $user_id ) );
-		if ( is_wp_error( $envelope ) ) {
-			wp_send_json_error( array( 'code' => 'encryption_unavailable' ), 503 );
-		}
-		$receipt = array( 'envelope' => $envelope, 'expires' => time() + self::DRAFT_TTL, 'updated_at' => time() );
+		$issued_at = time();
+		$expires_at = $issued_at + self::DRAFT_TTL;
+		$sealed = wp_json_encode( array( 'issued_at'=>$issued_at, 'expires_at'=>$expires_at, 'draft'=>$data ) );
+		$context = array_merge( self::draft_context( $user_id ), array( 'issued_at'=>$issued_at, 'expires_at'=>$expires_at ) );
+		$envelope = SMC_Security::encrypt( $sealed, 'application-draft', $context );
+		if ( is_wp_error( $envelope ) ) { wp_send_json_error( array( 'code'=>'encryption_unavailable' ), 503 ); }
+		$receipt = array( 'envelope'=>$envelope, 'issued_at'=>$issued_at, 'expires'=>$expires_at, 'updated_at'=>$issued_at );
 		update_user_meta( $user_id, self::DRAFT_META, $receipt );
 		$stored = get_user_meta( $user_id, self::DRAFT_META, true );
-		if ( ! is_array( $stored ) || ! hash_equals( (string) $envelope, (string) ( $stored['envelope'] ?? '' ) ) ) {
-			wp_send_json_error( array( 'code' => 'draft_not_persisted' ), 500 );
+		if ( ! is_array( $stored ) || ! hash_equals( (string) $envelope, (string) ( $stored['envelope'] ?? '' ) ) || absint( $stored['expires'] ?? 0 ) !== $expires_at ) {
+			wp_send_json_error( array( 'code'=>'draft_not_persisted' ), 500 );
 		}
-		wp_send_json_success( array( 'updated_at' => $data['updated_at'], 'expires' => $receipt['expires'] ) );
+		wp_send_json_success( array( 'updated_at'=>$data['updated_at'], 'expires'=>$expires_at ) );
 	}
 
 	public static function clear_draft( $user_id ) {
@@ -209,9 +214,9 @@ final class SMC_Completion {
 			}
 			$details = json_decode( (string) $row['details'], true );
 			$resolved = (bool) apply_filters( 'smc_repair_application_item', false, $row, is_array( $details ) ? $details : array() );
-			if ( ! $resolved && 'application_document_incomplete' === $row['repair_type'] ) {
-				$resolved = self::application_documents_complete( (int) $row['user_id'] );
-			}
+			if ( ! $resolved && 'application_document_incomplete' === $row['repair_type'] ) { $resolved = self::application_documents_complete( (int) $row['user_id'] ); }
+			if ( ! $resolved && 'membership_effects_reconciliation' === $row['repair_type'] ) { $resolved = self::reconcile_membership_effects( (int) $row['user_id'] ); }
+			if ( ! $resolved && 'advanced_trust_transition' === $row['repair_type'] && class_exists( 'SMC_Advanced_Trust_2026' ) ) { $resolved = SMC_Advanced_Trust_2026::repair_transition_hold( (int) $row['user_id'] ); }
 			if ( $resolved ) {
 				$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_application_repairs SET status='complete',last_error=NULL,resolved_at=%s,updated_at=%s WHERE id=%d AND status='processing'", current_time( 'mysql', true ), current_time( 'mysql', true ), (int) $row['id'] ) );
 			} else {
@@ -226,6 +231,18 @@ final class SMC_Completion {
 		global $wpdb;
 		$keys = $wpdb->get_col( $wpdb->prepare( "SELECT document_key FROM {$wpdb->prefix}smc_identity_documents WHERE user_id=%d AND scan_status='passed' AND status IN ('submitted','approved') AND (expiry_date IS NULL OR expiry_date>=UTC_DATE())", absint( $user_id ) ) );
 		return ! array_diff( array_keys( smc_required_identity_documents() ), array_map( 'sanitize_key', (array) $keys ) );
+	}
+
+	public static function queue_effects_repair( $user_id, $operation, $target_status, $reason ) {
+		global $wpdb; $trace = wp_generate_uuid4(); $now = current_time( 'mysql', true );
+		$details = wp_json_encode( array( 'operation'=>sanitize_key($operation),'target_status'=>sanitize_key($target_status),'reason'=>sanitize_key($reason) ) );
+		return false !== $wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->prefix}smc_application_repairs (trace_id,user_id,repair_type,status,details,attempts,next_attempt_at,created_at,updated_at) VALUES (%s,%d,'membership_effects_reconciliation','pending',%s,0,%s,%s,%s) ON DUPLICATE KEY UPDATE id=id", $trace, absint($user_id), $details, $now, $now, $now ) );
+	}
+
+	private static function reconcile_membership_effects( $user_id ) {
+		$user_id = absint( $user_id ); $hold = get_user_meta( $user_id, '_smc_membership_effects_hold_v1', true ); if ( ! is_array( $hold ) ) { return true; }
+		$role_ok = SMC_Contracts::sync_wordpress_roles( $user_id ); $sessions_ok = $role_ok && SMC_Security::revoke_all_sessions( $user_id, 'effects_reconciliation' );
+		if ( ! $role_ok || ! $sessions_ok ) { return false; } delete_user_meta( $user_id, '_smc_membership_effects_hold_v1' ); return ! metadata_exists( 'user', $user_id, '_smc_membership_effects_hold_v1' );
 	}
 
 	public static function health_snapshot() {
@@ -245,6 +262,7 @@ final class SMC_Completion {
 			'audit_valid'         => ! empty( $audit['valid'] ),
 			'audit_checked'       => absint( $audit['checked'] ?? 0 ),
 			'file_job_backlog'    => (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}smc_file_jobs WHERE status IN ('pending','retry','processing')" ),
+			'file_job_failed'     => (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}smc_file_jobs WHERE status IN ('failed','dead_letter')" ),
 			'repair_backlog'      => (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}smc_application_repairs WHERE status IN ('pending','retry','processing','dead_letter')" ),
 			'outbox_backlog'      => (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}smc_event_outbox WHERE status IN ('pending','retry','processing','dead_letter')" ),
 			'review_overdue'      => (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}smc_verification_requests WHERE status NOT IN ('approved','rejected') AND sla_due_at IS NOT NULL AND sla_due_at<UTC_TIMESTAMP()" ),
@@ -373,23 +391,19 @@ final class SMC_Completion {
 	}
 
 	public static function post_restore_reconcile() {
-		self::require_high_risk_authority();
-		check_admin_referer( 'smc_post_restore_reconcile', 'smc_nonce' );
+		self::require_high_risk_authority(); check_admin_referer( 'smc_post_restore_reconcile', 'smc_nonce' );
 		$reference = sanitize_text_field( wp_unslash( $_POST['evidence_reference'] ?? '' ) );
-		if ( strlen( $reference ) < 8 ) {
-			SMC_Security::audit( 'post_restore_reconciliation_rejected', 0, array( 'reason_code' => 'missing_evidence_reference' ) );
-			wp_die( esc_html__( 'A meaningful restore evidence reference is required.', 'sabri-membership-core' ), '', array( 'response' => 400 ) );
-		}
-		$health = self::health_snapshot();
-		$ok = $health['key_ready'] && $health['private_storage'] && $health['audit_valid'] && SMC_DB_VERSION === $health['database_version'];
-		$record = array( 'evidence_reference' => $reference, 'checked_at' => current_time( 'mysql', true ), 'result' => $ok ? 'passed' : 'failed', 'health' => $health );
+		$proof = apply_filters( 'smc_restore_proof_v1', null, $reference );
+		$required = array( 'restore_run_id','manifest_verified','isolated_restore','component_digests_match','row_counts_match','private_files_match','decrypt_samples_pass','key_recovery_pass','audit_chain_pass','retention_holds_reconciled','migrations_reconciled' );
+		$ok = is_array( $proof ) && strlen( $reference ) >= 8;
+		foreach ( $required as $key ) { if ( ! $ok || empty( $proof[ $key ] ) ) { $ok = false; break; } }
+		$health = self::health_snapshot(); $ok = $ok && $health['key_ready'] && $health['private_storage'] && $health['audit_valid'] && SMC_DB_VERSION === $health['database_version'] && 0 === (int) $health['file_job_failed'];
+		$result = $ok ? 'passed' : 'failed';
+		if ( ! SMC_Security::audit( 'post_restore_reconciliation_' . $result, 0, array( 'evidence_reference'=>$reference,'restore_run_id'=>is_array($proof)?sanitize_text_field($proof['restore_run_id']??''):'' ) ) ) { wp_die( esc_html__( 'Restore reconciliation evidence could not be appended to the audit chain.', 'sabri-membership-core' ), '', array( 'response'=>503 ) ); }
+		$record = array( 'evidence_reference'=>$reference,'restore_run_id'=>is_array($proof)?sanitize_text_field($proof['restore_run_id']??''):'','checked_at'=>current_time('mysql',true),'result'=>$result,'health'=>$health );
 		update_option( 'smc_last_restore_test', $record, false );
-		if ( get_option( 'smc_last_restore_test', null ) !== $record ) {
-			wp_die( esc_html__( 'Restore reconciliation finished, but its evidence record could not be persisted.', 'sabri-membership-core' ), '', array( 'response' => 503 ) );
-		}
-		if ( ! SMC_Security::audit( 'post_restore_reconciliation_' . ( $ok ? 'passed' : 'failed' ), 0, array( 'evidence_reference' => $reference ) ) ) {
-			wp_die( esc_html__( 'Restore reconciliation evidence could not be appended to the audit chain.', 'sabri-membership-core' ), '', array( 'response' => 503 ) );
-		}
+		if ( get_option( 'smc_last_restore_test', null ) !== $record ) { wp_die( esc_html__( 'Restore reconciliation finished, but its evidence record could not be persisted.', 'sabri-membership-core' ), '', array( 'response'=>503 ) ); }
+		if ( ! $ok ) { wp_die( esc_html__( 'Restore proof did not satisfy the isolated-restore acceptance contract.', 'sabri-membership-core' ), '', array( 'response'=>409 ) ); }
 		wp_safe_redirect( admin_url( 'admin.php?page=smc-health-repair' ) ); exit;
 	}
 }

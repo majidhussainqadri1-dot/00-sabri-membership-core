@@ -3,7 +3,7 @@ Contributors: sabrihomeopathy
 Tags: membership, identity, guardian consent, two-factor authentication, privacy
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 1.2.18
+Stable tag: 1.2.19
 License: GPL-2.0-or-later
 
 Canonical membership eligibility, identity assurance, guardian consent, security assertions, and verification governance for the Sabri Social Homeopathy Platform.
@@ -69,6 +69,12 @@ File 19 receives membership notices through its canonical sabri_notify integrati
 Local source and GitHub checks do not authorize production. Test fresh activation, 1.0.1 upgrade, MySQL advisory locks, concurrent reviewers, authorization matrices, filesystem denial and rollback, scanner providers, email/mobile/guardian delivery, File 02 Google sign-in and passkey assurance adapter, CF-01 provider/consumer contracts, all named cross-file integrations, advanced trust containment/revocation/selective-disclosure workflows, privacy erasure, restore, browser accessibility, and mobile layouts on Hostinger staging.
 
 == Changelog ==
+
+= 1.2.19 =
+* Corrective candidate for the 8 August 2026 GitHub code-only audit: fixes dual professional approval generation/independent handoff, appeal restoration provenance, reviewer assignment/document scoping, guardian immutable succession, rejected-reapplication bypass and jurisdiction-effective age enforcement.
+* Adds versioned encryption-key generations for new SMC3 envelopes, global factor-level TOTP replay protection, safe 2FA replacement with current password/factor re-authentication, serialized tamper-evident audit tail, fail-closed post-commit role/session reconciliation, and stronger Safe Mode worker blocking.
+* Strengthens privacy export/erasure, ancillary role/capability and break-glass cleanup, authenticated draft expiry, recovery-code receipt acknowledgement, orphan lease cleanup, outbox delivery acknowledgement, trust-transition repair and structured isolated-restore proof.
+* Runtime 1.2.19; DB schema 1.4.0; public membership contract 1.2.1. This is a code/automated-QA candidate only: real WordPress/MySQL concurrency, providers, browser/accessibility, isolated restore/rollback, security review and Hostinger staging acceptance remain mandatory before production.
 
 = 1.2.18 =
 * Fifth completely fresh ten-round review: enforced the declared adaptive step-up policy on critical identity, guardian, merge, delegation and break-glass workflows; break-glass now requires current hardware-backed File 02 assurance and revalidates both privileged approvers at consumption.

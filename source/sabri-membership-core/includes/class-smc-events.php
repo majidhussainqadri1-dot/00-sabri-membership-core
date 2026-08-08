@@ -139,6 +139,7 @@ final class SMC_Events {
 	}
 
 	public static function process_outbox( $limit = 25, $only_id = 0 ) {
+		if ( ! $only_id && class_exists( 'SMC_Completion' ) && SMC_Completion::safe_mode() ) { return 0; }
 		global $wpdb;
 		if ( ! self::table_exists( 'smc_event_outbox' ) ) {
 			return 0;
@@ -198,9 +199,9 @@ final class SMC_Events {
 					$delivery_error = 'Delivery adapter raised an exception.';
 				}
 				if ( true === $accepted ) {
-					$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_event_outbox SET status='delivered',delivered_at=%s,last_error=NULL,updated_at=%s WHERE id=%d AND status='processing'", current_time( 'mysql', true ), current_time( 'mysql', true ), (int) $row['id'] ) );
-					++$processed;
-					continue;
+					$acked = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_event_outbox SET status='delivered',delivered_at=%s,last_error=NULL,updated_at=%s WHERE id=%d AND status='processing'", current_time( 'mysql', true ), current_time( 'mysql', true ), (int) $row['id'] ) );
+					if ( 1 === $acked ) { ++$processed; continue; }
+					$delivery_error = 'Consumer acknowledged but delivery receipt CAS failed; replay requires consumer idempotency.';
 				}
 				$attempts = (int) $row['attempts'] + 1;
 				$status = $attempts >= 10 ? 'dead_letter' : 'retry';

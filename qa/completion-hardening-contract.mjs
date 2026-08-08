@@ -19,7 +19,7 @@ check(main.includes('Version: 1.2.19'), 'plugin header 1.2.19');
 check(main.includes("define( 'SMC_VERSION', '1.2.19' )"), 'runtime version 1.2.19');
 check(main.includes("define( 'SMC_DB_VERSION', '1.4.0' )"), 'schema is 1.4.0');
 check(main.includes("define( 'SMC_CONTRACT_VERSION', '1.2.1' )"), 'contract is 1.2.1');
-check(readme.includes('Stable tag: 1.2.19') || readme.includes('Stable tag: 1.2.18'), 'readme stable tag is present pending release-doc synchronization');
+check(readme.includes('Stable tag: 1.2.19') || readme.includes('Stable tag: 1.2.19'), 'readme stable tag is present pending release-doc synchronization');
 
 check(admin.includes('private static function approval_gate'), 'approval gate helper exists');
 check(admin.includes("'pending_senior'"), 'senior pending state exists');

@@ -10,15 +10,33 @@ final class SMC_Security {
 		add_action( 'smc_process_file_jobs', array( __CLASS__, 'process_file_jobs' ) );
 	}
 
-	public static function key_ready() {
-		return defined( 'SMC_MASTER_KEY' ) && is_string( SMC_MASTER_KEY ) && strlen( SMC_MASTER_KEY ) >= 32;
+	private static function master_material( $raw ) {
+		$raw = trim( (string) $raw );
+		if ( 0 === strpos( $raw, 'base64:' ) ) {
+			$decoded = base64_decode( substr( $raw, 7 ), true );
+			return is_string( $decoded ) && 32 === strlen( $decoded ) ? $decoded : false;
+		}
+		if ( 0 === strpos( $raw, 'hex:' ) && preg_match( '/^[a-f0-9]{64}$/i', substr( $raw, 4 ) ) ) {
+			$decoded = hex2bin( substr( $raw, 4 ) );
+			return is_string( $decoded ) && 32 === strlen( $decoded ) ? $decoded : false;
+		}
+		// 1.2.x compatibility. New deployments should use base64:/hex: random 256-bit material.
+		return strlen( $raw ) >= 32 ? $raw : false;
 	}
 
+	public static function key_ready() {
+		return defined( 'SMC_MASTER_KEY' ) && false !== self::master_material( SMC_MASTER_KEY ) && '' !== self::key_id();
+	}
+
+	/** Legacy purpose/index/audit key retained until the explicit index/audit migration completes. */
 	private static function key() {
-		if ( ! self::key_ready() ) {
-			return new WP_Error( 'smc_key_missing', __( 'SMC_MASTER_KEY must be configured with at least 32 random characters before sensitive membership data can be processed.', 'sabri-membership-core' ) );
+		if ( ! defined( 'SMC_MASTER_KEY' ) || false === ( $material = self::master_material( SMC_MASTER_KEY ) ) ) {
+			return new WP_Error( 'smc_key_missing', __( 'SMC_MASTER_KEY must contain at least 256 bits of configured key material.', 'sabri-membership-core' ) );
 		}
-		return hash_hkdf( 'sha256', SMC_MASTER_KEY, 32, 'sabri-membership-core:v2', wp_salt( 'auth' ) );
+		$legacy_salt = defined( 'SMC_LEGACY_AUTH_SALT' ) && is_string( SMC_LEGACY_AUTH_SALT ) && '' !== SMC_LEGACY_AUTH_SALT
+			? SMC_LEGACY_AUTH_SALT
+			: wp_salt( 'auth' );
+		return hash_hkdf( 'sha256', $material, 32, 'sabri-membership-core:v2', $legacy_salt );
 	}
 
 	public static function key_id() {
@@ -29,9 +47,36 @@ final class SMC_Security {
 		return preg_match( '/^[A-Za-z0-9][A-Za-z0-9._:-]{2,63}$/', $key_id ) ? $key_id : '';
 	}
 
-	private static function legacy_key_id() {
-		$key = self::key();
-		return is_wp_error( $key ) ? '' : substr( hash( 'sha256', $key ), 0, 16 );
+	private static function envelope_keyring() {
+		$ring = array();
+		if ( defined( 'SMC_MASTER_KEY' ) && false !== ( $material = self::master_material( SMC_MASTER_KEY ) ) && '' !== self::key_id() ) {
+			$ring[ self::key_id() ] = array( 'material' => $material, 'legacy_auth_salt' => defined( 'SMC_LEGACY_AUTH_SALT' ) ? (string) SMC_LEGACY_AUTH_SALT : wp_salt( 'auth' ) );
+		}
+		$extra = function_exists( 'apply_filters' ) ? apply_filters( 'smc_encryption_keyring_v1', array() ) : array();
+		foreach ( (array) $extra as $kid => $entry ) {
+			if ( ! preg_match( '/^[A-Za-z0-9][A-Za-z0-9._:-]{2,63}$/', (string) $kid ) || ! is_array( $entry ) ) { continue; }
+			$material = self::master_material( $entry['material'] ?? '' );
+			if ( false === $material ) { continue; }
+			$ring[ (string) $kid ] = array( 'material' => $material, 'legacy_auth_salt' => (string) ( $entry['legacy_auth_salt'] ?? '' ) );
+		}
+		return $ring;
+	}
+
+	private static function envelope_key( $kid, $version, $legacy_stored_kid = '' ) {
+		$ring = self::envelope_keyring();
+		if ( 3 === (int) $version ) {
+			if ( ! isset( $ring[ $kid ] ) ) { return new WP_Error( 'smc_key_unknown', __( 'The encrypted record references an unavailable key generation.', 'sabri-membership-core' ) ); }
+			return hash_hkdf( 'sha256', $ring[ $kid ]['material'], 32, 'sabri-membership-core:envelope:v3', '' );
+		}
+		if ( 2 === (int) $version ) {
+			foreach ( $ring as $ring_kid => $entry ) {
+				$salt = '' !== $entry['legacy_auth_salt'] ? $entry['legacy_auth_salt'] : wp_salt( 'auth' );
+				$key = hash_hkdf( 'sha256', $entry['material'], 32, 'sabri-membership-core:v2', $salt );
+				$derived_kid = substr( hash( 'sha256', $key ), 0, 16 );
+				if ( hash_equals( (string) $ring_kid, (string) $legacy_stored_kid ) || hash_equals( $derived_kid, (string) $legacy_stored_kid ) ) { return $key; }
+			}
+		}
+		return new WP_Error( 'smc_key_unknown', __( 'The encrypted record references an unavailable key generation.', 'sabri-membership-core' ) );
 	}
 
 	private static function canonical_json( $value ) {
@@ -56,60 +101,34 @@ final class SMC_Security {
 	}
 
 	public static function encrypt( $plaintext, $purpose, $context = array() ) {
-		$key = self::key();
-		if ( is_wp_error( $key ) ) {
-			return $key;
-		}
 		$key_id = self::key_id();
-		if ( '' === $key_id ) {
-			return new WP_Error( 'smc_key_id_missing', __( 'SMC_MASTER_KEY_ID must be configured as a stable non-secret identifier before new sensitive data can be encrypted.', 'sabri-membership-core' ) );
-		}
+		if ( '' === $key_id ) { return new WP_Error( 'smc_key_id_missing', __( 'SMC_MASTER_KEY_ID must identify the active non-secret encryption key generation.', 'sabri-membership-core' ) ); }
+		$key = self::envelope_key( $key_id, 3 );
+		if ( is_wp_error( $key ) ) { return $key; }
 		$nonce = random_bytes( 12 );
-		$tag   = '';
-		$aad   = self::canonical_json(
-			array(
-				'v'       => 2,
-				'kid'     => $key_id,
-				'purpose' => sanitize_key( $purpose ),
-				'context' => $context,
-			)
-		);
+		$tag = '';
+		$aad = self::canonical_json( array( 'v' => 3, 'kid' => $key_id, 'purpose' => sanitize_key( $purpose ), 'context' => $context ) );
 		$cipher = openssl_encrypt( (string) $plaintext, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $nonce, $tag, $aad, 16 );
-		if ( false === $cipher ) {
-			return new WP_Error( 'smc_encrypt', __( 'Sensitive data could not be encrypted.', 'sabri-membership-core' ) );
-		}
+		if ( false === $cipher ) { return new WP_Error( 'smc_encrypt', __( 'Sensitive data could not be encrypted.', 'sabri-membership-core' ) ); }
 		return self::ENVELOPE . '.' . base64_encode( $aad ) . '.' . base64_encode( $nonce ) . '.' . base64_encode( $tag ) . '.' . base64_encode( $cipher );
 	}
 
 	public static function decrypt( $envelope, $purpose, $context = array() ) {
-		$key = self::key();
-		if ( is_wp_error( $key ) ) {
-			return $key;
-		}
 		$parts = explode( '.', (string) $envelope, 5 );
-		if ( 5 !== count( $parts ) || self::ENVELOPE !== $parts[0] ) {
-			return new WP_Error( 'smc_envelope', __( 'Encrypted data uses an unsupported envelope.', 'sabri-membership-core' ) );
-		}
-		$aad   = base64_decode( $parts[1], true );
-		$nonce = base64_decode( $parts[2], true );
-		$tag   = base64_decode( $parts[3], true );
-		$data  = base64_decode( $parts[4], true );
-		if ( false === $aad || false === $nonce || false === $tag || false === $data ) {
-			return new WP_Error( 'smc_envelope', __( 'Encrypted data is malformed.', 'sabri-membership-core' ) );
-		}
+		if ( 5 !== count( $parts ) || self::ENVELOPE !== $parts[0] ) { return new WP_Error( 'smc_envelope', __( 'Encrypted data uses an unsupported envelope.', 'sabri-membership-core' ) ); }
+		$aad = base64_decode( $parts[1], true ); $nonce = base64_decode( $parts[2], true ); $tag = base64_decode( $parts[3], true ); $data = base64_decode( $parts[4], true );
+		if ( false === $aad || false === $nonce || false === $tag || false === $data ) { return new WP_Error( 'smc_envelope', __( 'Encrypted data is malformed.', 'sabri-membership-core' ) ); }
 		$aad_data = json_decode( $aad, true );
-		if ( ! is_array( $aad_data ) ) {
-			return new WP_Error( 'smc_context', __( 'Encrypted data has malformed authenticated context.', 'sabri-membership-core' ) );
-		}
-		$stored_kid = isset( $aad_data['kid'] ) && is_string( $aad_data['kid'] ) ? $aad_data['kid'] : '';
-		$current_kid = self::key_id();
-		$legacy_kid = self::legacy_key_id();
-		$kid_ok = ( '' !== $current_kid && hash_equals( $current_kid, $stored_kid ) ) || ( '' !== $legacy_kid && hash_equals( $legacy_kid, $stored_kid ) );
+		if ( ! is_array( $aad_data ) ) { return new WP_Error( 'smc_context', __( 'Encrypted data has malformed authenticated context.', 'sabri-membership-core' ) ); }
+		$version = (int) ( $aad_data['v'] ?? 0 );
+		$stored_kid = (string) ( $aad_data['kid'] ?? '' );
 		$expected_context = self::canonical_json( $context );
 		$stored_context = self::canonical_json( $aad_data['context'] ?? null );
-		if ( 2 !== (int) ( $aad_data['v'] ?? 0 ) || ! $kid_ok || ! hash_equals( sanitize_key( $purpose ), sanitize_key( $aad_data['purpose'] ?? '' ) ) || ! hash_equals( $expected_context, $stored_context ) ) {
+		if ( ! in_array( $version, array( 2, 3 ), true ) || ! hash_equals( sanitize_key( $purpose ), sanitize_key( $aad_data['purpose'] ?? '' ) ) || ! hash_equals( $expected_context, $stored_context ) ) {
 			return new WP_Error( 'smc_context', __( 'Encrypted data does not match its authenticated context.', 'sabri-membership-core' ) );
 		}
+		$key = self::envelope_key( $stored_kid, $version, $stored_kid );
+		if ( is_wp_error( $key ) ) { return $key; }
 		$plain = openssl_decrypt( $data, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $nonce, $tag, $aad );
 		return false === $plain ? new WP_Error( 'smc_authentication', __( 'Encrypted data authentication failed.', 'sabri-membership-core' ) ) : $plain;
 	}
@@ -670,6 +689,7 @@ final class SMC_Security {
 	}
 
 	public static function process_file_jobs() {
+		if ( class_exists( 'SMC_Completion' ) && SMC_Completion::safe_mode() ) { return; }
 		global $wpdb;
 		$dir = self::private_dir();
 		if ( is_wp_error( $dir ) ) {
@@ -697,6 +717,10 @@ final class SMC_Security {
 			}
 			$path = trailingslashit( $dir ) . $name;
 			$ok = $valid && self::path_is_within( $path, $dir ) && self::verified_unlink( $path );
+			if ( $ok && 'delete_orphan' === sanitize_key( $job['job_type'] ) ) {
+				$lease_path = $path . '.lease';
+				$ok = ! file_exists( $lease_path ) || ( self::path_is_within( $lease_path, $dir ) && self::verified_unlink( $lease_path ) );
+			}
 			$attempts = (int) $job['attempts'] + 1;
 			$status = $ok ? 'complete' : ( $attempts >= 10 || ! $valid ? 'failed' : 'retry' );
 			$wpdb->update(
@@ -824,10 +848,23 @@ final class SMC_Security {
 		return self::decrypt( $envelope, 'session-token-envelope', array( 'user_id' => absint( $user_id ), 'token_hash' => (string) $token_hash ) );
 	}
 
-	private static function delete_session_token_envelope( $user_id, $token_hash ) {
+	public static function delete_session_token_envelope( $user_id, $token_hash ) {
 		$key = self::session_token_meta_key( $token_hash );
 		delete_user_meta( absint( $user_id ), $key );
 		return ! metadata_exists( 'user', absint( $user_id ), $key );
+	}
+
+	public static function sweep_session_token_envelopes( $user_id, $live_hashes = array() ) {
+		$live = array_fill_keys( array_map( 'strtolower', array_filter( (array) $live_hashes ) ), true );
+		$ok = true;
+		foreach ( array_keys( get_user_meta( absint( $user_id ) ) ) as $meta_key ) {
+			if ( 0 !== strpos( $meta_key, '_smc_session_token_' ) ) { continue; }
+			$short = substr( $meta_key, strlen( '_smc_session_token_' ) );
+			$matched = false;
+			foreach ( array_keys( $live ) as $hash ) { if ( hash_equals( substr( $hash, 0, 40 ), $short ) ) { $matched = true; break; } }
+			if ( ! $matched ) { delete_user_meta( absint( $user_id ), $meta_key ); $ok = $ok && ! metadata_exists( 'user', absint( $user_id ), $meta_key ); }
+		}
+		return $ok;
 	}
 
 	private static function clear_revalidation_requirement( $user_id ) {
@@ -837,6 +874,46 @@ final class SMC_Security {
 		}
 		delete_user_meta( $user_id, '_smc_revalidation_required_at' );
 		return ! metadata_exists( 'user', $user_id, '_smc_revalidation_required_at' );
+	}
+
+	public static function verify_current_factor_without_session_rotation( $user_id, $code ) {
+		$user_id = absint( $user_id ); $code = trim( (string) $code );
+		if ( preg_match( '/^[0-9]{6}$/', $code ) ) {
+			$secret = self::two_factor_secret( $user_id ); if ( is_wp_error( $secret ) ) { return false; }
+			return false !== self::matching_totp_slice( $secret, $code );
+		}
+		return self::consume_recovery_code( $user_id, $code );
+	}
+
+	public static function create_factor_replacement_receipt( $user_id ) {
+		$user_id = absint( $user_id ); $token = wp_get_session_token(); if ( ! $token ) { return new WP_Error( 'smc_factor_replace_session', __( 'A current session is required.', 'sabri-membership-core' ) ); }
+		$hash = self::blind_index( $token, 'session-token' ); if ( is_wp_error( $hash ) ) { return $hash; }
+		$expires = time() + 5 * MINUTE_IN_SECONDS; $payload = wp_json_encode( array( 'user_id'=>$user_id,'session_hash'=>$hash,'expires'=>$expires ) );
+		$enc = self::encrypt( $payload, 'factor-replacement-receipt', array( 'user_id'=>$user_id,'expires'=>$expires ) ); if ( is_wp_error( $enc ) ) { return $enc; }
+		update_user_meta( $user_id, '_smc_factor_replace_receipt', array( 'expires'=>$expires,'envelope'=>$enc ) );
+		return get_user_meta( $user_id, '_smc_factor_replace_receipt', true ) ? true : new WP_Error( 'smc_factor_replace_store', __( 'Replacement authorization could not be stored.', 'sabri-membership-core' ) );
+	}
+
+	private static function factor_replacement_receipt_valid( $user_id ) {
+		$receipt = get_user_meta( absint( $user_id ), '_smc_factor_replace_receipt', true ); if ( ! is_array( $receipt ) || absint( $receipt['expires'] ?? 0 ) <= time() ) { return false; }
+		$payload = self::decrypt( $receipt['envelope'] ?? '', 'factor-replacement-receipt', array( 'user_id'=>absint($user_id),'expires'=>absint($receipt['expires']) ) ); if ( is_wp_error( $payload ) ) { return false; }
+		$data = json_decode( $payload, true ); $token_hash = self::blind_index( wp_get_session_token(), 'session-token' );
+		return is_array( $data ) && ! is_wp_error( $token_hash ) && absint( $data['user_id'] ?? 0 ) === absint( $user_id ) && absint( $data['expires'] ?? 0 ) === absint( $receipt['expires'] ) && hash_equals( (string) ($data['session_hash'] ?? ''), (string) $token_hash );
+	}
+
+	public static function commit_factor_enrollment_or_replacement( $user_id, $new_secret, $new_code, $replacement, $receipt_callback ) {
+		$user_id = absint( $user_id ); $slice = self::matching_totp_slice( (string) $new_secret, (string) $new_code );
+		if ( false === $slice || ( $replacement && ! self::factor_replacement_receipt_valid( $user_id ) ) ) { return new WP_Error( 'smc_factor_replace_challenge', __( 'The new authenticator challenge or replacement authorization is invalid.', 'sabri-membership-core' ) ); }
+		$old_secret = get_user_meta( $user_id, '_smc_totp_secret_enc', true ); $old_enabled = get_user_meta( $user_id, '_smc_2fa_enabled', true );
+		$old_codes = null; global $wpdb; $wpdb->query( 'START TRANSACTION' );
+		$encrypted = self::encrypt( (string) $new_secret, 'totp-secret', array( 'user_id'=>$user_id ) ); if ( is_wp_error( $encrypted ) ) { $wpdb->query('ROLLBACK'); return $encrypted; }
+		update_user_meta( $user_id, '_smc_totp_secret_enc', $encrypted ); update_user_meta( $user_id, '_smc_2fa_enabled', '1' );
+		$codes = self::recovery_codes( $user_id, 8, $receipt_callback );
+		if ( is_wp_error( $codes ) ) { if ( $old_secret ) { update_user_meta($user_id,'_smc_totp_secret_enc',$old_secret); } else { delete_user_meta($user_id,'_smc_totp_secret_enc'); } if ($old_enabled) {update_user_meta($user_id,'_smc_2fa_enabled',$old_enabled);} else {delete_user_meta($user_id,'_smc_2fa_enabled');} $wpdb->query('ROLLBACK'); return $codes; }
+		$wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->prefix}smc_mfa_factor_state (user_id,last_totp_slice,updated_at) VALUES (%d,%d,%s) ON DUPLICATE KEY UPDATE last_totp_slice=VALUES(last_totp_slice),updated_at=VALUES(updated_at)", $user_id, $slice, current_time('mysql',true) ) );
+		delete_user_meta( $user_id, '_smc_factor_replace_receipt' );
+		if ( ! self::audit( $replacement ? 'two_factor_replaced' : 'two_factor_enabled', $user_id ) ) { $wpdb->query('ROLLBACK'); return new WP_Error('smc_factor_replace_audit',__( 'Factor change could not be audited.', 'sabri-membership-core' )); }
+		$wpdb->query( 'COMMIT' ); self::revoke_all_sessions( $user_id, 'two_factor_changed' ); return true;
 	}
 
 	public static function register_session( $user_id, $token, $expiration ) {
@@ -967,13 +1044,16 @@ final class SMC_Security {
 		}
 		$wpdb->query( 'START TRANSACTION' );
 		$row = $wpdb->get_row( $wpdb->prepare( "SELECT id,last_totp_slice FROM {$wpdb->prefix}smc_auth_sessions WHERE user_id=%d AND token_hash=%s AND revoked_at IS NULL AND expires_at>UTC_TIMESTAMP() LIMIT 1 FOR UPDATE", $user_id, $hash ), ARRAY_A );
-		if ( ! $row || ( null !== $row['last_totp_slice'] && (int) $row['last_totp_slice'] >= (int) $slice ) ) {
+		$factor = $wpdb->get_row( $wpdb->prepare( "SELECT user_id,last_totp_slice FROM {$wpdb->prefix}smc_mfa_factor_state WHERE user_id=%d LIMIT 1 FOR UPDATE", $user_id ), ARRAY_A );
+		$global_last = $factor && null !== $factor['last_totp_slice'] ? (int) $factor['last_totp_slice'] : null;
+		if ( ! $row || ( null !== $global_last && $global_last >= (int) $slice ) ) {
 			$wpdb->query( 'ROLLBACK' );
-			return new WP_Error( 'smc_totp_replay', __( 'This verification code was already used for the current session.', 'sabri-membership-core' ) );
+			return new WP_Error( 'smc_totp_replay', __( 'This verification code was already used for this authenticator factor.', 'sabri-membership-core' ) );
 		}
 		$now = current_time( 'mysql', true );
-		$updated = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_auth_sessions SET two_factor_at=%s,last_totp_slice=%d,updated_at=%s WHERE id=%d AND user_id=%d AND token_hash=%s AND revoked_at IS NULL AND (last_totp_slice IS NULL OR last_totp_slice<%d)", $now, $slice, $now, (int) $row['id'], $user_id, $hash, $slice ) );
-		$revalidation_ok = 1 === $updated && self::clear_revalidation_requirement( $user_id );
+		$factor_updated = $wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->prefix}smc_mfa_factor_state (user_id,last_totp_slice,updated_at) VALUES (%d,%d,%s) ON DUPLICATE KEY UPDATE last_totp_slice=IF(last_totp_slice IS NULL OR last_totp_slice<VALUES(last_totp_slice),VALUES(last_totp_slice),last_totp_slice),updated_at=IF(last_totp_slice IS NULL OR last_totp_slice<VALUES(last_totp_slice),VALUES(updated_at),updated_at)", $user_id, $slice, $now ) );
+		$updated = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_auth_sessions SET two_factor_at=%s,last_totp_slice=%d,updated_at=%s WHERE id=%d AND user_id=%d AND token_hash=%s AND revoked_at IS NULL", $now, $slice, $now, (int) $row['id'], $user_id, $hash ) );
+		$revalidation_ok = false !== $factor_updated && 1 === $updated && self::clear_revalidation_requirement( $user_id );
 		$audit_ok = $revalidation_ok && self::audit( 'two_factor_passed', $user_id, array( 'session_id' => (int) $row['id'], 'totp_slice' => (int) $slice ) );
 		if ( 1 !== $updated || ! $revalidation_ok || ! $audit_ok ) {
 			$wpdb->query( 'ROLLBACK' );
@@ -992,45 +1072,44 @@ final class SMC_Security {
 		for ( $i = 0; $i < $count; $i++ ) {
 			$code = strtoupper( wp_generate_password( 12, false, false ) );
 			$lookup = self::blind_index( $code, 'recovery-code' );
-			if ( is_wp_error( $lookup ) ) {
-				return $lookup;
-			}
+			if ( is_wp_error( $lookup ) ) { return $lookup; }
 			$plain[] = $code;
 			$records[] = array(
-				'user_id'          => $user_id,
-				'code_lookup_hash' => $lookup,
-				'code_hash'        => wp_hash_password( $code ),
-				'created_at'       => current_time( 'mysql', true ),
+				'user_id'=>$user_id,
+				'code_lookup_hash'=>$lookup,
+				'code_hash'=>wp_hash_password( $code ),
+				'created_at'=>current_time( 'mysql', true ),
 			);
 		}
-		$wpdb->query( 'START TRANSACTION' );
-		$deleted = $wpdb->delete( $wpdb->prefix . 'smc_recovery_codes', array( 'user_id' => $user_id ), array( '%d' ) );
+		$owns_transaction = ! self::transaction_active();
+		if ( $owns_transaction && false === $wpdb->query( 'START TRANSACTION' ) ) {
+			return new WP_Error( 'smc_recovery_transaction', __( 'Recovery-code rotation could not start a database transaction.', 'sabri-membership-core' ) );
+		}
+		$deleted = $wpdb->delete( $wpdb->prefix . 'smc_recovery_codes', array( 'user_id'=>$user_id ), array('%d') );
 		if ( false === $deleted ) {
-			$wpdb->query( 'ROLLBACK' );
+			if ( $owns_transaction ) { $wpdb->query( 'ROLLBACK' ); }
 			return new WP_Error( 'smc_recovery_reset', __( 'Existing recovery codes could not be replaced.', 'sabri-membership-core' ) );
 		}
 		foreach ( $records as $record ) {
-			if ( 1 !== $wpdb->insert(
-				$wpdb->prefix . 'smc_recovery_codes',
-				$record,
-				array( '%d', '%s', '%s', '%s' )
-			) ) {
-				$wpdb->query( 'ROLLBACK' );
+			if ( 1 !== $wpdb->insert( $wpdb->prefix . 'smc_recovery_codes', $record, array('%d','%s','%s','%s') ) ) {
+				if ( $owns_transaction ) { $wpdb->query( 'ROLLBACK' ); }
 				clean_user_cache( $user_id );
 				return new WP_Error( 'smc_recovery_store', __( 'Recovery codes could not be stored.', 'sabri-membership-core' ) );
 			}
 		}
 		if ( is_callable( $receipt_callback ) && true !== call_user_func( $receipt_callback, $plain ) ) {
-			$wpdb->query( 'ROLLBACK' );
+			if ( $owns_transaction ) { $wpdb->query( 'ROLLBACK' ); }
 			clean_user_cache( $user_id );
-			return new WP_Error( 'smc_recovery_receipt', __( 'Recovery codes were not replaced because the one-time receipt could not be stored.', 'sabri-membership-core' ) );
+			return new WP_Error( 'smc_recovery_receipt', __( 'Recovery codes were not replaced because the protected receipt could not be stored.', 'sabri-membership-core' ) );
 		}
 		if ( ! self::audit( 'recovery_codes_rotated', $user_id ) ) {
-			$wpdb->query( 'ROLLBACK' );
+			if ( $owns_transaction ) { $wpdb->query( 'ROLLBACK' ); }
 			clean_user_cache( $user_id );
-			return new WP_Error( 'smc_recovery_audit', __( 'Recovery codes were not replaced because the required audit evidence could not be recorded.', 'sabri-membership-core' ) );
+			return new WP_Error( 'smc_recovery_audit', __( 'Recovery codes were not replaced because required audit evidence could not be recorded.', 'sabri-membership-core' ) );
 		}
-		$wpdb->query( 'COMMIT' );
+		if ( $owns_transaction && false === $wpdb->query( 'COMMIT' ) ) {
+			return new WP_Error( 'smc_recovery_commit', __( 'Recovery-code rotation could not be committed.', 'sabri-membership-core' ) );
+		}
 		clean_user_cache( $user_id );
 		return $plain;
 	}
@@ -1274,45 +1353,68 @@ final class SMC_Security {
 				++$checked;
 			}
 		} while ( count( (array) $rows ) === $batch_size && ( ! $maximum || $checked < $maximum ) );
+		if ( ! $maximum ) {
+			$tail = (string) $wpdb->get_var( "SELECT row_hash FROM {$wpdb->prefix}smc_audit_tail WHERE id=1" );
+			if ( ! hash_equals( $previous, $tail ) ) { return array( 'valid' => false, 'checked' => $checked, 'failed_id' => $cursor, 'reason' => 'tail_hash_mismatch' ); }
+		}
 		return array( 'valid' => true, 'checked' => $checked, 'failed_id' => 0, 'reason' => '' );
 	}
 
 	public static function audit( $action, $subject_user_id = 0, $details = array() ) {
 		global $wpdb;
 		$key = self::key();
-		if ( is_wp_error( $key ) ) {
-			return false;
-		}
-		$lock_name = 'smc_audit_' . substr( hash( 'sha256', DB_NAME . '|' . $wpdb->prefix ), 0, 32 );
-		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s,2)', $lock_name ) ) ) {
-			return false;
-		}
+		if ( is_wp_error( $key ) ) { return false; }
+		$owns_transaction = ! self::transaction_active();
+		if ( $owns_transaction && false === $wpdb->query( 'START TRANSACTION' ) ) { return false; }
+		$ok = false;
 		try {
-			$previous = (string) $wpdb->get_var( "SELECT row_hash FROM {$wpdb->prefix}smc_audit_log ORDER BY id DESC LIMIT 1" );
+			$tail = $wpdb->get_row( "SELECT id,row_hash FROM {$wpdb->prefix}smc_audit_tail WHERE id=1 FOR UPDATE", ARRAY_A );
+			if ( ! $tail ) {
+				$last = (string) $wpdb->get_var( "SELECT row_hash FROM {$wpdb->prefix}smc_audit_log ORDER BY id DESC LIMIT 1" );
+				$now = current_time( 'mysql', true );
+				if ( false === $wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->prefix}smc_audit_tail (id,row_hash,updated_at) VALUES (1,%s,%s)", $last, $now ) ) ) { throw new RuntimeException( 'audit_tail_init' ); }
+				$tail = $wpdb->get_row( "SELECT id,row_hash FROM {$wpdb->prefix}smc_audit_tail WHERE id=1 FOR UPDATE", ARRAY_A );
+			}
+			$previous = (string) ( $tail['row_hash'] ?? '' );
+			$actual_last = (string) $wpdb->get_var( "SELECT row_hash FROM {$wpdb->prefix}smc_audit_log ORDER BY id DESC LIMIT 1" );
+			if ( ! hash_equals( $actual_last, $previous ) ) { throw new RuntimeException( 'audit_tail_mismatch' ); }
 			$created = current_time( 'mysql', true );
 			$record = array(
-				'actor_id'     => get_current_user_id(),
+				'actor_id' => get_current_user_id(),
 				'subject_hash' => $subject_user_id ? self::subject_hash( $subject_user_id ) : null,
-				'action'       => sanitize_key( $action ),
-				'details'      => self::canonical_json( $details ),
-				'previous_hash'=> $previous,
-				'created_at'   => $created,
+				'action' => sanitize_key( $action ),
+				'details' => self::canonical_json( self::minimize_audit_details( $details ) ),
+				'previous_hash' => $previous,
+				'created_at' => $created,
 			);
 			$record['row_hash'] = hash_hmac( 'sha256', self::canonical_json( $record ), $key );
-			$inserted = 1 === $wpdb->insert(
-				$wpdb->prefix . 'smc_audit_log',
-				$record,
-				array( '%d', '%s', '%s', '%s', '%s', '%s', '%s' )
-			);
-			if ( ! $inserted ) {
-				return false;
-			}
-			if ( class_exists( 'SMC_Events' ) && ! SMC_Events::from_audit( $record['action'], $subject_user_id, $details, (int) $wpdb->insert_id ) ) {
-				return false;
-			}
-			return true;
-		} finally {
-			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) );
+			if ( 1 !== $wpdb->insert( $wpdb->prefix . 'smc_audit_log', $record, array( '%d','%s','%s','%s','%s','%s','%s' ) ) ) { throw new RuntimeException( 'audit_insert' ); }
+			$audit_id = (int) $wpdb->insert_id;
+			if ( 1 !== $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_audit_tail SET row_hash=%s,updated_at=%s WHERE id=1 AND row_hash=%s", $record['row_hash'], $created, $previous ) ) ) { throw new RuntimeException( 'audit_tail_update' ); }
+			if ( class_exists( 'SMC_Events' ) && ! SMC_Events::from_audit( $record['action'], $subject_user_id, self::minimize_audit_details( $details ), $audit_id ) ) { throw new RuntimeException( 'audit_event' ); }
+			$ok = true;
+			if ( $owns_transaction && false === $wpdb->query( 'COMMIT' ) ) { $ok = false; }
+		} catch ( Throwable $error ) {
+			if ( $owns_transaction ) { $wpdb->query( 'ROLLBACK' ); }
+			$ok = false;
 		}
+		return $ok;
+	}
+
+	private static function minimize_audit_details( $details ) {
+		$details = is_array( $details ) ? $details : array();
+		$deny = array( 'name','legal_name','email','phone','address','note','reviewer_note','conflict_note','reason','purpose' );
+		$out = array();
+		foreach ( $details as $key => $value ) {
+			$key = sanitize_key( $key );
+			if ( in_array( $key, $deny, true ) ) {
+				$out[ $key . '_digest' ] = hash( 'sha256', (string) ( is_scalar( $value ) ? $value : wp_json_encode( $value ) ) );
+				continue;
+			}
+			if ( is_array( $value ) ) { $out[ $key ] = array_slice( $value, 0, 20 ); }
+			elseif ( is_bool( $value ) || is_int( $value ) || is_float( $value ) ) { $out[ $key ] = $value; }
+			else { $out[ $key ] = substr( sanitize_text_field( (string) $value ), 0, 190 ); }
+		}
+		return $out;
 	}
 }

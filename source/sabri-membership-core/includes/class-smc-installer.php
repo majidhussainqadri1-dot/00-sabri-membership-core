@@ -13,11 +13,13 @@ final class SMC_Installer {
 		'smc_consents',
 		'smc_contact_otps',
 		'smc_auth_sessions',
+		'smc_mfa_factor_state',
 		'smc_recovery_codes',
 		'smc_rate_limits',
 		'smc_file_jobs',
 		'smc_retention_holds',
 		'smc_audit_log',
+		'smc_audit_tail',
 		'smc_migrations',
 		'smc_role_grants',
 		'smc_event_outbox',
@@ -123,7 +125,7 @@ final class SMC_Installer {
 		global $wpdb;
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		$p = $wpdb->prefix;
-		$c = $wpdb->get_charset_collate();
+		$c = $wpdb->get_charset_collate() . ' ENGINE=InnoDB';
 		$sql = array();
 
 		$sql[] = "CREATE TABLE {$p}smc_applications (
@@ -201,6 +203,8 @@ final class SMC_Installer {
 		$sql[] = "CREATE TABLE {$p}smc_guardian_consents (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 			user_id bigint(20) unsigned NOT NULL,
+			generation bigint(20) unsigned NOT NULL DEFAULT 1,
+			is_current tinyint(1) NOT NULL DEFAULT 1,
 			guardian_name_enc longtext NOT NULL,
 			guardian_email_enc longtext NOT NULL,
 			guardian_email_hash char(64) NOT NULL,
@@ -223,7 +227,8 @@ final class SMC_Installer {
 			ip_hash char(64) NULL,
 			device_hash char(64) NULL,
 			PRIMARY KEY  (id),
-			UNIQUE KEY user_id (user_id),
+			UNIQUE KEY user_generation (user_id,generation),
+			KEY user_current (user_id,is_current),
 			KEY guardian_email_hash (guardian_email_hash),
 			KEY status (status)
 		) {$c};";
@@ -242,6 +247,8 @@ final class SMC_Installer {
 			sla_due_at datetime NULL,
 			reviewer_note longtext NULL,
 			applicant_version bigint(20) unsigned NOT NULL DEFAULT 1,
+			approval_generation char(36) NULL,
+			approval_snapshot_hash char(64) NULL,
 			row_version bigint(20) unsigned NOT NULL DEFAULT 1,
 			submitted_at datetime NOT NULL,
 			decided_at datetime NULL,
@@ -258,13 +265,14 @@ final class SMC_Installer {
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 			request_id bigint(20) unsigned NOT NULL,
 			reviewer_id bigint(20) unsigned NOT NULL,
+			approval_generation char(36) NOT NULL DEFAULT '',
 			decision varchar(20) NOT NULL,
 			reason text NOT NULL,
 			evidence_snapshot longtext NOT NULL,
 			created_at datetime NOT NULL,
 			PRIMARY KEY  (id),
-			UNIQUE KEY request_reviewer (request_id,reviewer_id),
-			KEY decision (request_id,decision)
+			UNIQUE KEY request_generation_reviewer (request_id,approval_generation,reviewer_id),
+			KEY decision (request_id,approval_generation,decision)
 		) {$c};";
 
 		$sql[] = "CREATE TABLE {$p}smc_verification_events (
@@ -333,6 +341,13 @@ final class SMC_Installer {
 			KEY user_active (user_id,revoked_at)
 		) {$c};";
 
+		$sql[] = "CREATE TABLE {$p}smc_mfa_factor_state (
+			user_id bigint(20) unsigned NOT NULL,
+			last_totp_slice bigint(20) NULL,
+			updated_at datetime NOT NULL,
+			PRIMARY KEY  (user_id)
+		) {$c};";
+
 		$sql[] = "CREATE TABLE {$p}smc_recovery_codes (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 			user_id bigint(20) unsigned NOT NULL,
@@ -396,6 +411,13 @@ final class SMC_Installer {
 			PRIMARY KEY  (id),
 			KEY action_date (action,created_at),
 			KEY subject_hash (subject_hash)
+		) {$c};";
+
+		$sql[] = "CREATE TABLE {$p}smc_audit_tail (
+			id tinyint(1) unsigned NOT NULL,
+			row_hash char(64) NOT NULL DEFAULT '',
+			updated_at datetime NOT NULL,
+			PRIMARY KEY  (id)
 		) {$c};";
 
 		$sql[] = "CREATE TABLE {$p}smc_migrations (
@@ -493,6 +515,35 @@ final class SMC_Installer {
 			if ( $found !== $table ) {
 				throw new RuntimeException( 'Required membership table is missing: ' . $suffix );
 			}
+			$engine = $wpdb->get_var( $wpdb->prepare( 'SELECT ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=%s', $table ) );
+			if ( 'InnoDB' !== (string) $engine ) {
+				throw new RuntimeException( 'File 00 requires InnoDB transactional tables: ' . $suffix );
+			}
+		}
+
+		// dbDelta does not reliably remove superseded unique indexes. Remove the
+		// pre-1.4.0 guardian/vote uniqueness only after the replacement indexes exist.
+		$guardian_table = $p . 'smc_guardian_consents';
+		$legacy_guardian_unique = $wpdb->get_var( "SELECT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='" . esc_sql( $guardian_table ) . "' AND INDEX_NAME='user_id' AND NON_UNIQUE=0 LIMIT 1" );
+		if ( $legacy_guardian_unique ) {
+			$wpdb->query( "ALTER TABLE {$guardian_table} DROP INDEX user_id" );
+		}
+		$vote_table = $p . 'smc_approval_votes';
+		$legacy_vote_unique = $wpdb->get_var( "SELECT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='" . esc_sql( $vote_table ) . "' AND INDEX_NAME='request_reviewer' AND NON_UNIQUE=0 LIMIT 1" );
+		if ( $legacy_vote_unique ) {
+			$wpdb->query( "ALTER TABLE {$vote_table} DROP INDEX request_reviewer" );
+		}
+		$wpdb->query( "UPDATE {$guardian_table} SET generation=id,is_current=1 WHERE generation<=0" );
+		$tail_hash = (string) $wpdb->get_var( "SELECT row_hash FROM {$p}smc_audit_log ORDER BY id DESC LIMIT 1" );
+		$now = current_time( 'mysql', true );
+		$tail_ok = $wpdb->query( $wpdb->prepare( "INSERT INTO {$p}smc_audit_tail (id,row_hash,updated_at) VALUES (1,%s,%s) ON DUPLICATE KEY UPDATE id=id", $tail_hash, $now ) );
+		if ( false === $tail_ok ) {
+			throw new RuntimeException( 'Audit tail serializer could not be initialized.' );
+		}
+		$started = false !== $wpdb->query( 'START TRANSACTION' );
+		$rolled = $started && false !== $wpdb->query( 'ROLLBACK' );
+		if ( ! $started || ! $rolled ) {
+			throw new RuntimeException( 'The database does not provide the required transaction semantics.' );
 		}
 	}
 

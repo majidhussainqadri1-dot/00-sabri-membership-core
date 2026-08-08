@@ -442,24 +442,24 @@ final class SMC_Contracts {
 		return ! array_diff( $desired, $actual ) && ! array_diff( array_intersect( $actual, smc_membership_roles() ), $desired );
 	}
 
-	public static function approve_requested_roles( $user_id, $application_version, $actor_id ) {
+	public static function approve_requested_roles( $user_id, $application_version, $actor_id, $sync = true ) {
 		$types = self::requested_types( $user_id );
 		foreach ( $types as $type ) {
 			if ( ! self::upsert_role_grant( $user_id, $type, 'approved', $application_version, $actor_id ) ) {
 				return false;
 			}
 		}
-		return self::sync_wordpress_roles( $user_id );
+		return $sync ? self::sync_wordpress_roles( $user_id ) : true;
 	}
 
-	public static function set_all_roles_pending( $user_id, $application_version = 1 ) {
+	public static function set_all_roles_pending( $user_id, $application_version = 1, $sync = true ) {
 		$types = self::requested_types( $user_id );
 		foreach ( $types as $type ) {
 			if ( ! self::upsert_role_grant( $user_id, $type, 'pending', $application_version, 0 ) ) {
 				return false;
 			}
 		}
-		return self::sync_wordpress_roles( $user_id );
+		return $sync ? self::sync_wordpress_roles( $user_id ) : true;
 	}
 
 	/** Backward-compatible single-role mutation that preserves all other grants. */
@@ -550,9 +550,9 @@ final class SMC_Contracts {
 
 	public static function filter_profile_visibility( $allowed, $profile_user_id, $viewer_user_id ) {
 		$viewer = get_userdata( absint( $viewer_user_id ) );
-		if ( absint( $profile_user_id ) === absint( $viewer_user_id ) || ( $viewer && ( ! empty( $viewer->allcaps['smc_review_verification'] ) || ! empty( $viewer->allcaps['manage_options'] ) ) ) ) {
-			return true;
-		}
+		$privileged = $viewer && ( user_can( $viewer, 'smc_review_verification' ) || user_can( $viewer, 'manage_options' ) );
+		if ( absint( $profile_user_id ) === absint( $viewer_user_id ) ) { return true; }
+		if ( $privileged && absint( $viewer_user_id ) === get_current_user_id() && SMC_Security::session_is_verified( absint( $viewer_user_id ) ) && empty( SMC_Authorization::is_hard_blocked( absint( $viewer_user_id ) ) ) ) { return true; }
 		return self::assertions( $profile_user_id )['public_profile_allowed'];
 	}
 
