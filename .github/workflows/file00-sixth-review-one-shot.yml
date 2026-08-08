@@ -1,5 +1,5 @@
 name: File 00 Sixth Fresh Ten-Round Corrective Applicator
-# Final diagnostic rerun after current package-version regression synchronization.
+# Non-workflow reviewed changes are pushed by this temporary job; permanent workflow corrections use owner API.
 
 on:
   push:
@@ -23,12 +23,13 @@ jobs:
         run: |
           git config user.name "File 00 Review Bot"
           git config user.email "actions@users.noreply.github.com"
-      - name: Patch and compile-check final applicator
+      - name: Prepare non-workflow final applicator
         run: |
           python3 tools/file00_sixth_review_round10_patch.py
           python3 tools/file00_sixth_review_version_patch.py
-          python3 -m py_compile tools/file00_sixth_review_final.py
-      - name: Apply ten fresh review-fix-retest rounds
+          python3 tools/file00_sixth_review_pushable_patch.py
+          python3 -c "compile(open('tools/file00_sixth_review_final.py', encoding='utf-8').read(), 'tools/file00_sixth_review_final.py', 'exec')"
+      - name: Apply reviewed non-workflow corrections
         run: python3 tools/file00_sixth_review_final.py
       - name: Push reviewed commits
         run: git push origin HEAD:staging/file00-1.2.18-hostinger-acceptance
