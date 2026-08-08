@@ -1,0 +1,35 @@
+name: File 00 Eighth Fresh Ten-Round Corrective Applicator
+
+on:
+  push:
+    branches:
+      - codex/file00-eighth-fresh-ten-review-1.2.21
+    paths:
+      - .github/workflows/file00-eighth-review-one-shot.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: codex/file00-eighth-fresh-ten-review-1.2.21
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240
+        with:
+          php-version: '8.3'
+          coverage: none
+          tools: none
+      - name: Configure review identity
+        run: |
+          git config user.name "File 00 Review Bot"
+          git config user.email "actions@users.noreply.github.com"
+      - name: Apply ten independent review-fix-retest rounds
+        run: python3 tools/file00_eighth_review_bootstrap.py
