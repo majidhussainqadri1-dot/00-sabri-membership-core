@@ -40,7 +40,13 @@ jobs:
       - name: PHP syntax lint
         run: |
           set -euo pipefail
-          while IFS= read -r -d '' file; do php -l "$file"; done < <(find source qa -type f -name '*.php' -print0)
+          while IFS= read -r -d '' file; do
+            if ! php -l "$file"; then
+              echo "--- generated context for $file ---"
+              nl -ba "$file" | sed -n '90,160p'
+              exit 1
+            fi
+          done < <(find source qa -type f -name '*.php' -print0)
       - name: Repository whitespace check
         run: git diff --check
       - name: Existing regression suites
