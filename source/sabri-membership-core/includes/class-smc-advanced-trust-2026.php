@@ -190,37 +190,33 @@ final class SMC_Advanced_Trust_2026 {
 		$action = sanitize_key( $action );
 		$profile = self::assurance_profile( $user_id );
 		$requirements = array(
-			'default' => array( 2, 2, false ),
-			'profile_sensitive_change' => array( 3, 2, false ),
-			'identity_change' => array( 3, 2, false ),
-			'guardian_change' => array( 3, 2, false ),
-			'delegation_grant' => array( 3, 2, false ),
-			'account_merge' => array( 4, 2, false ),
-			'professional_approval' => array( 4, 2, false ),
-			'founder_recovery' => array( 4, 3, true ),
-			'break_glass' => array( 4, 3, true ),
+			'default' => array( 2, 2, false, false ),
+			'profile_sensitive_change' => array( 3, 2, false, false ),
+			'identity_change' => array( 3, 2, false, false ),
+			'guardian_change' => array( 3, 2, false, false ),
+			'delegation_grant' => array( 3, 2, false, false ),
+			'account_merge' => array( 4, 2, false, false ),
+			'professional_approval' => array( 4, 2, false, false ),
+			'founder_recovery' => array( 4, 3, true, true ),
+			'break_glass' => array( 4, 3, true, true ),
 		);
 		$required = isset( $requirements[ $action ] ) ? $requirements[ $action ] : $requirements['default'];
 		$risk = (array) apply_filters( 'smc_file24_step_up_context_v1', array(), absint( $user_id ), $action );
 		if ( ! empty( $risk['high_risk'] ) ) {
-			$required[0] = max( $required[0], 3 );
-			$required[1] = max( $required[1], 2 );
+			$required[0] = max( $required[0], 3 ); $required[1] = max( $required[1], 3 ); $required[3] = true;
 		}
 		$membership_operational = self::protected_actions_allowed( absint( $user_id ) );
 		$satisfied = $membership_operational
 			&& (int) $profile['identity_assurance_level'] >= $required[0]
 			&& (int) $profile['authentication_assurance_level'] >= $required[1]
-			&& ( ! $required[2] || ! empty( $profile['hardware_backed'] ) );
+			&& ( ! $required[2] || ! empty( $profile['hardware_backed'] ) )
+			&& ( ! $required[3] || ! empty( $profile['phishing_resistant'] ) );
 		return array(
-			'action' => $action,
-			'required_identity_level' => $required[0],
-			'required_authentication_level' => $required[1],
-			'hardware_backed_required' => (bool) $required[2],
-			'current_identity_level' => (int) $profile['identity_assurance_level'],
-			'current_authentication_level' => (int) $profile['authentication_assurance_level'],
-			'membership_operational' => (bool) $membership_operational,
-			'satisfied' => (bool) $satisfied,
-			'risk_context' => array( 'high_risk' => ! empty( $risk['high_risk'] ) ),
+			'action' => $action, 'required_identity_level' => $required[0], 'required_authentication_level' => $required[1],
+			'hardware_backed_required' => (bool) $required[2], 'phishing_resistant_required' => (bool) $required[3],
+			'current_identity_level' => (int) $profile['identity_assurance_level'], 'current_authentication_level' => (int) $profile['authentication_assurance_level'],
+			'current_phishing_resistant' => ! empty( $profile['phishing_resistant'] ), 'membership_operational' => (bool) $membership_operational,
+			'satisfied' => (bool) $satisfied, 'risk_context' => array( 'high_risk' => ! empty( $risk['high_risk'] ) ),
 		);
 	}
 
