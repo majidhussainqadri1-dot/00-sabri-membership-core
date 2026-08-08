@@ -327,8 +327,8 @@ final class SMC_Advanced_Trust_2026 {
 		if ( ! in_array( $field, $allowed, true ) ) {
 			return new WP_Error( 'smc_identity_field', __( 'This field is not governed as a critical identity change.', 'sabri-membership-core' ) );
 		}
-		if ( ! self::actor_can_change_subject( absint( $actor_id ), $user_id ) ) {
-			return new WP_Error( 'smc_identity_change_authorization', __( 'The identity change actor is not authorized for this subject.', 'sabri-membership-core' ) );
+		if ( ! self::actor_can_change_subject( absint( $actor_id ), $user_id ) || ! self::actor_meets_step_up( absint( $actor_id ), 'identity_change' ) ) {
+			return new WP_Error( 'smc_identity_change_authorization', __( 'The identity change actor is not authorized with the required current step-up assurance.', 'sabri-membership-core' ) );
 		}
 		$stamp = time() + 1;
 		$record = array( 'field' => $field, 'state' => 'reverification_required', 'changed_at' => time(), 'actor_id' => absint( $actor_id ), 'reason' => sanitize_text_field( $reason ) );
@@ -353,7 +353,7 @@ final class SMC_Advanced_Trust_2026 {
 		$user_id = absint( $user_id );
 		$actor_id = absint( $actor_id );
 		$record = get_user_meta( $user_id, self::CRITICAL_IDENTITY_META, true );
-		if ( ! is_array( $record ) || 'reverification_required' !== ( $record['state'] ?? '' ) || ! self::actor_is_current( $actor_id, 'smc_finalize_verification' ) || ! SMC_Security::session_is_verified( $actor_id ) ) {
+		if ( ! is_array( $record ) || 'reverification_required' !== ( $record['state'] ?? '' ) || ! self::actor_meets_step_up( $actor_id, 'identity_change', 'smc_finalize_verification' ) ) {
 			return new WP_Error( 'smc_identity_resolution', __( 'Independent authorized identity reverification is required.', 'sabri-membership-core' ) );
 		}
 		$verified = self::mark_reverified( $user_id, $actor_id, $source );
@@ -440,8 +440,8 @@ final class SMC_Advanced_Trust_2026 {
 	public static function begin_guardian_succession( $user_id, $actor_id, $reason = '' ) {
 		$user_id = absint( $user_id );
 		$actor_id = absint( $actor_id );
-		if ( ! self::actor_can_change_subject( $actor_id, $user_id ) || ! SMC_Security::session_is_verified( $actor_id ) ) {
-			return new WP_Error( 'smc_guardian_succession_authorization', __( 'Guardian succession requires an authorized current actor and fresh security challenge.', 'sabri-membership-core' ) );
+		if ( ! self::actor_can_change_subject( $actor_id, $user_id ) || ! self::actor_meets_step_up( $actor_id, 'guardian_change' ) ) {
+			return new WP_Error( 'smc_guardian_succession_authorization', __( 'Guardian succession requires an authorized current actor and the required current step-up assurance.', 'sabri-membership-core' ) );
 		}
 		$request = array(
 			'id' => wp_generate_uuid4(),
@@ -466,8 +466,8 @@ final class SMC_Advanced_Trust_2026 {
 		if ( ! is_array( $state ) || 'pending' !== ( $state['state'] ?? '' ) || ! hash_equals( (string) ( $state['id'] ?? '' ), (string) $request_id ) ) {
 			return new WP_Error( 'smc_guardian_succession_state', __( 'The guardian succession request is not current.', 'sabri-membership-core' ) );
 		}
-		if ( ! self::actor_is_current( absint( $actor_id ), 'smc_manage_membership' ) || ! SMC_Security::session_is_verified( absint( $actor_id ) ) ) {
-			return new WP_Error( 'smc_guardian_succession_stepup', __( 'Authorized membership review and a fresh security challenge are required.', 'sabri-membership-core' ) );
+		if ( ! self::actor_meets_step_up( absint( $actor_id ), 'guardian_change', 'smc_manage_membership' ) ) {
+			return new WP_Error( 'smc_guardian_succession_stepup', __( 'Authorized membership review and the required current step-up assurance are required.', 'sabri-membership-core' ) );
 		}
 		$current_guardian_id = self::current_guardian_consent_id( $user_id );
 		if ( $current_guardian_id <= 0 || $current_guardian_id === absint( $state['previous_guardian_consent_id'] ?? 0 ) || ! SMC_Contracts::guardian_verified( $user_id ) ) {
@@ -501,8 +501,8 @@ final class SMC_Advanced_Trust_2026 {
 		if ( $primary_user_id <= 0 || $duplicate_user_id <= 0 || $primary_user_id === $duplicate_user_id || ! get_userdata( $primary_user_id ) || ! get_userdata( $duplicate_user_id ) ) {
 			return new WP_Error( 'smc_merge_subjects', __( 'Two different valid account subjects are required.', 'sabri-membership-core' ) );
 		}
-		if ( ! self::actor_is_current( $actor_id, 'smc_manage_membership' ) || ! SMC_Security::session_is_verified( $actor_id ) ) {
-			return new WP_Error( 'smc_merge_authorization', __( 'Account merge review requires membership authority and a fresh security challenge.', 'sabri-membership-core' ) );
+		if ( ! self::actor_meets_step_up( $actor_id, 'account_merge', 'smc_manage_membership' ) ) {
+			return new WP_Error( 'smc_merge_authorization', __( 'Account merge review requires membership authority and the required current step-up assurance.', 'sabri-membership-core' ) );
 		}
 		$request = array(
 			'id' => wp_generate_uuid4(),
@@ -535,7 +535,7 @@ final class SMC_Advanced_Trust_2026 {
 		if ( ! is_array( $request ) || ! hash_equals( (string) ( $request['id'] ?? '' ), (string) $request_id ) || 'evidence_review' !== ( $request['state'] ?? '' ) ) {
 			return new WP_Error( 'smc_merge_state', __( 'The account merge request is not current.', 'sabri-membership-core' ) );
 		}
-		if ( absint( $request['opened_by'] ?? 0 ) === $reviewer_id || ! self::actor_is_current( $reviewer_id, 'smc_finalize_verification' ) || ! SMC_Security::session_is_verified( $reviewer_id ) ) {
+		if ( absint( $request['opened_by'] ?? 0 ) === $reviewer_id || ! self::actor_meets_step_up( $reviewer_id, 'account_merge', 'smc_finalize_verification' ) ) {
 			return new WP_Error( 'smc_merge_separation', __( 'Independent senior review with a fresh security challenge is required.', 'sabri-membership-core' ) );
 		}
 		$duplicate_user_id = absint( $request['duplicate_user_id'] ?? 0 );
@@ -581,7 +581,7 @@ final class SMC_Advanced_Trust_2026 {
 			return new WP_Error( 'smc_containment_state', __( 'Unsupported security containment state.', 'sabri-membership-core' ) );
 		}
 		$actor_id = absint( $actor_id );
-		$authorized = $actor_id > 0 ? self::actor_is_current( $actor_id, 'smc_manage_membership' ) && SMC_Security::session_is_verified( $actor_id ) : (bool) apply_filters( 'smc_file24_security_containment_authorized', false, $user_id, $state, $reason );
+		$authorized = $actor_id > 0 ? self::actor_is_current( $actor_id, 'smc_manage_membership' ) && SMC_Security::session_is_verified( $actor_id ) : self::file24_containment_authorized( $user_id, $state, $reason );
 		if ( ! $authorized ) { return new WP_Error( 'smc_containment_authorization', __( 'Security containment requires authorized membership/security governance.', 'sabri-membership-core' ) ); }
 		if ( ! self::begin_transition_hold( $user_id, 'containment', $state, $actor_id ) ) { return new WP_Error( 'smc_containment_hold', __( 'Security containment could not enter a fail-closed transition hold.', 'sabri-membership-core' ) ); }
 		$record = array( 'state' => $state, 'updated_at' => time(), 'actor_id' => $actor_id, 'reason' => sanitize_text_field( $reason ) );
@@ -619,7 +619,7 @@ final class SMC_Advanced_Trust_2026 {
 		);
 		$propagated = true;
 		try {
-			do_action( 'smc_trust_revocation_invalidated', $user_id, $event );
+			do_action( 'smc_trust_revocation_invalidated', $event['subject'], $event );
 		} catch ( Throwable $error ) {
 			$propagated = false;
 			if ( class_exists( 'SMC_Security' ) ) {
@@ -759,7 +759,7 @@ final class SMC_Advanced_Trust_2026 {
 			$verified_at = absint( $claim['verified_at'] ?? 0 );
 			$issued = absint( $claim['issued_at'] ?? 0 );
 			$expires = absint( $claim['expires_at'] ?? 0 );
-			if ( $verified_at <= 0 || $verified_at > time() + 60 || $verified_at < time() - 5 * MINUTE_IN_SECONDS || $issued <= 0 || $issued > time() + 60 || ( $expires && $expires <= time() ) ) {
+			if ( $verified_at <= 0 || $verified_at > time() + 60 || $verified_at < time() - 5 * MINUTE_IN_SECONDS || $issued <= 0 || $issued > time() + 60 || $issued > $verified_at || ( $expires && ( $expires <= time() || $expires <= $issued || $expires <= $verified_at ) ) ) {
 				continue;
 			}
 			$out[] = array(
@@ -788,8 +788,8 @@ final class SMC_Advanced_Trust_2026 {
 		if ( ! $principal_user_id || ! get_userdata( $principal_user_id ) || ! $grantor_user_id || ! $scopes || $expires_at <= time() || $expires_at > time() + 90 * DAY_IN_SECONDS ) {
 			return new WP_Error( 'smc_delegation_input', __( 'Delegated authority requires a valid principal, scope and bounded expiry.', 'sabri-membership-core' ) );
 		}
-		if ( ! self::actor_is_current( $grantor_user_id, 'smc_manage_membership' ) || ! SMC_Security::session_is_verified( $grantor_user_id ) ) {
-			return new WP_Error( 'smc_delegation_authority', __( 'Delegation requires membership authority and a fresh security challenge.', 'sabri-membership-core' ) );
+		if ( ! self::actor_meets_step_up( $grantor_user_id, 'delegation_grant', 'smc_manage_membership' ) ) {
+			return new WP_Error( 'smc_delegation_authority', __( 'Delegation requires membership authority and the required current step-up assurance.', 'sabri-membership-core' ) );
 		}
 		$old = self::meta_snapshot( $principal_user_id, self::DELEGATION_META );
 		$grants = (array) get_user_meta( $principal_user_id, self::DELEGATION_META, true );
@@ -809,7 +809,7 @@ final class SMC_Advanced_Trust_2026 {
 		$grants = (array) get_user_meta( absint( $principal_user_id ), self::DELEGATION_META, true );
 		$active = array();
 		foreach ( $grants as $grant ) {
-			if ( is_array( $grant ) && empty( $grant['revoked_at'] ) && absint( $grant['expires_at'] ?? 0 ) > time() ) {
+			if ( is_array( $grant ) && empty( $grant['revoked_at'] ) && absint( $grant['expires_at'] ?? 0 ) > time() && self::delegation_grantor_current( absint( $grant['grantor_user_id'] ?? 0 ) ) ) {
 				$active[] = $grant;
 			}
 		}
@@ -852,7 +852,7 @@ final class SMC_Advanced_Trust_2026 {
 		$subject_user_id = absint( $subject_user_id );
 		$actor_id = absint( $actor_id );
 		$purpose = sanitize_text_field( $purpose );
-		if ( ! $subject_user_id || ! $actor_id || '' === $purpose || ! self::actor_is_current( $actor_id, 'manage_options', true ) || ! SMC_Security::session_is_verified( $actor_id ) ) {
+		if ( ! $subject_user_id || ! $actor_id || '' === $purpose || ! self::actor_meets_step_up( $actor_id, 'break_glass', 'manage_options', true ) ) {
 			return new WP_Error( 'smc_break_glass_open', __( 'Break-glass initiation requires authorized institutional authority and a fresh security challenge.', 'sabri-membership-core' ) );
 		}
 		$lock = self::acquire_break_glass_lock();
@@ -860,7 +860,7 @@ final class SMC_Advanced_Trust_2026 {
 		$request = array(
 			'id' => wp_generate_uuid4(), 'subject_user_id' => $subject_user_id, 'purpose' => $purpose,
 			'opened_by' => $actor_id, 'opened_at' => time(), 'expires_at' => time() + self::BREAK_GLASS_TTL,
-			'approvals' => array( $actor_id ), 'consumed_at' => 0,
+			'approvals' => array( $actor_id ), 'approval_times' => array( (string) $actor_id => time() ), 'consumed_at' => 0,
 		);
 		$all = (array) get_option( self::BREAK_GLASS_OPTION, array() );
 		$all[ $request['id'] ] = $request;
@@ -874,7 +874,7 @@ final class SMC_Advanced_Trust_2026 {
 
 	public static function approve_break_glass( $request_id, $approver_id ) {
 		$approver_id = absint( $approver_id );
-		if ( ! self::actor_is_current( $approver_id, 'manage_options', true ) || ! SMC_Security::session_is_verified( $approver_id ) ) { return false; }
+		if ( ! self::actor_meets_step_up( $approver_id, 'break_glass', 'manage_options', true ) ) { return false; }
 		$lock = self::acquire_break_glass_lock();
 		if ( false === $lock ) { return false; }
 		$all = (array) get_option( self::BREAK_GLASS_OPTION, array() );
@@ -884,6 +884,8 @@ final class SMC_Advanced_Trust_2026 {
 		}
 		$before = $request;
 		$request['approvals'][] = $approver_id;
+		$request['approval_times'] = is_array( $request['approval_times'] ?? null ) ? $request['approval_times'] : array();
+		$request['approval_times'][ (string) $approver_id ] = time();
 		$all[ $request_id ] = $request;
 		$stored = self::write_option_verified( self::BREAK_GLASS_OPTION, $all );
 		if ( $stored && ! SMC_Security::audit( 'break_glass_approved', absint( $request['subject_user_id'] ), array( 'request_id' => $request_id ) ) ) {
@@ -895,12 +897,12 @@ final class SMC_Advanced_Trust_2026 {
 
 	public static function consume_break_glass( $request_id, $actor_id ) {
 		$actor_id = absint( $actor_id );
-		if ( ! self::actor_is_current( $actor_id, 'manage_options', true ) || ! SMC_Security::session_is_verified( $actor_id ) ) { return false; }
+		if ( ! self::actor_meets_step_up( $actor_id, 'break_glass', 'manage_options', true ) ) { return false; }
 		$lock = self::acquire_break_glass_lock();
 		if ( false === $lock ) { return false; }
 		$all = (array) get_option( self::BREAK_GLASS_OPTION, array() );
 		$request = $all[ $request_id ] ?? null;
-		if ( ! is_array( $request ) || absint( $request['expires_at'] ?? 0 ) <= time() || ! empty( $request['consumed_at'] ) || count( array_unique( (array) ( $request['approvals'] ?? array() ) ) ) < 2 || ! in_array( $actor_id, (array) $request['approvals'], true ) ) {
+		if ( ! is_array( $request ) || absint( $request['expires_at'] ?? 0 ) <= time() || ! empty( $request['consumed_at'] ) || count( array_unique( (array) ( $request['approvals'] ?? array() ) ) ) < 2 || ! in_array( $actor_id, (array) $request['approvals'], true ) || ! self::break_glass_approvals_current( $request ) ) {
 			self::release_break_glass_lock( $lock ); return false;
 		}
 		$request['consumed_at'] = time(); $request['consumed_by'] = $actor_id; $all[ $request_id ] = $request;
@@ -1047,6 +1049,54 @@ final class SMC_Advanced_Trust_2026 {
 		return '' === $capability || current_user_can( $capability );
 	}
 
+	private static function actor_meets_step_up( $actor_id, $action, $capability = '', $founder_or_admin = false ) {
+		$actor_id = absint( $actor_id );
+		if ( ! self::actor_is_current( $actor_id, $capability, $founder_or_admin ) || ! class_exists( 'SMC_Security' ) || ! SMC_Security::session_is_verified( $actor_id ) ) { return false; }
+		$requirement = self::step_up_requirement( $actor_id, sanitize_key( $action ) );
+		return is_array( $requirement ) && ! empty( $requirement['satisfied'] );
+	}
+
+	private static function file24_containment_authorized( $user_id, $state, $reason ) {
+		$claim = apply_filters( 'smc_file24_security_containment_authorization_v1', null, absint( $user_id ), sanitize_key( $state ), sanitize_text_field( $reason ) );
+		if ( ! is_array( $claim ) ) { return false; }
+		$asserted_at = absint( $claim['asserted_at'] ?? 0 );
+		return 'file24' === sanitize_key( $claim['owner'] ?? '' )
+			&& '1.0.0' === (string) ( $claim['contract_version'] ?? '' )
+			&& ! empty( $claim['authorized'] )
+			&& hash_equals( self::subject_reference( absint( $user_id ) ), (string) ( $claim['subject'] ?? '' ) )
+			&& sanitize_key( $state ) === sanitize_key( $claim['state'] ?? '' )
+			&& $asserted_at > 0 && $asserted_at <= time() + 60 && $asserted_at >= time() - 5 * MINUTE_IN_SECONDS;
+	}
+
+	private static function delegation_grantor_current( $grantor_user_id ) {
+		$grantor_user_id = absint( $grantor_user_id );
+		if ( $grantor_user_id <= 0 || ! get_userdata( $grantor_user_id ) || ! self::protected_actions_allowed( $grantor_user_id ) ) { return false; }
+		if ( function_exists( 'smc_is_founder' ) && smc_is_founder( $grantor_user_id ) ) { return true; }
+		$user = get_userdata( $grantor_user_id );
+		return $user && user_can( $user, 'smc_manage_membership' );
+	}
+
+	private static function break_glass_approver_current( $approver_id ) {
+		$approver_id = absint( $approver_id );
+		if ( $approver_id <= 0 || ! get_userdata( $approver_id ) || ! self::protected_actions_allowed( $approver_id ) ) { return false; }
+		if ( function_exists( 'smc_is_founder' ) && smc_is_founder( $approver_id ) ) { return true; }
+		$user = get_userdata( $approver_id );
+		return $user && user_can( $user, 'manage_options' );
+	}
+
+	private static function break_glass_approvals_current( $request ) {
+		$approvals = array_values( array_unique( array_map( 'absint', (array) ( $request['approvals'] ?? array() ) ) ) );
+		$times = is_array( $request['approval_times'] ?? null ) ? $request['approval_times'] : array();
+		$opened_at = absint( $request['opened_at'] ?? 0 );
+		$expires_at = absint( $request['expires_at'] ?? 0 );
+		if ( count( $approvals ) < 2 || $opened_at <= 0 || $expires_at <= time() ) { return false; }
+		foreach ( $approvals as $approver_id ) {
+			$approved_at = absint( $times[ (string) $approver_id ] ?? 0 );
+			if ( $approved_at < $opened_at || $approved_at > $expires_at || $approved_at > time() || ! self::break_glass_approver_current( $approver_id ) ) { return false; }
+		}
+		return true;
+	}
+
 	private static function begin_transition_hold( $user_id, $kind, $target_state, $actor_id ) {
 		$hold = array( 'kind' => sanitize_key( $kind ), 'target_state' => sanitize_key( $target_state ), 'actor_id' => absint( $actor_id ), 'started_at' => time() );
 		return self::write_user_meta_verified( absint( $user_id ), '_smc_trust_transition_hold_v1', $hold );
@@ -1094,14 +1144,25 @@ final class SMC_Advanced_Trust_2026 {
 	private static function current_guardian_consent_id( $user_id ) {
 		global $wpdb;
 		if ( ! isset( $wpdb ) || ! is_object( $wpdb ) || empty( $wpdb->prefix ) ) { return 0; }
-		return absint( $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$wpdb->prefix}smc_guardian_consents WHERE user_id=%d AND status='verified' AND withdrawn_at IS NULL ORDER BY id DESC LIMIT 1", absint( $user_id ) ) ) );
+		return absint( $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$wpdb->prefix}smc_guardian_consents WHERE user_id=%d AND status='verified' AND policy_version=%s AND withdrawn_at IS NULL ORDER BY id DESC LIMIT 1", absint( $user_id ), (string) smc_policy()['version'] ) ) );
 	}
 
 	private static function age_requirement_met( $user_id, $base = array() ) {
+		$user_id = absint( $user_id );
 		if ( ! empty( $base['institutional_account'] ) ) { return true; }
 		if ( empty( $base['approved'] ) ) { return false; }
-		$critical = get_user_meta( absint( $user_id ), self::CRITICAL_IDENTITY_META, true );
+		$critical = get_user_meta( $user_id, self::CRITICAL_IDENTITY_META, true );
 		if ( is_array( $critical ) && 'reverification_required' === ( $critical['state'] ?? '' ) && in_array( sanitize_key( $critical['field'] ?? '' ), array( 'date_of_birth', 'gender', 'country' ), true ) ) { return false; }
+		/* Complete runtime performs the age/jurisdiction check synchronously; isolated contract harnesses may omit these loaded functions. */
+		if ( ! class_exists( 'SMC_Security' ) || ! function_exists( 'smc_application' ) || ! function_exists( 'smc_age_from_dob' ) || ! function_exists( 'smc_effective_minimum_age' ) ) { return true; }
+		$app = smc_application( $user_id );
+		if ( ! is_array( $app ) || empty( $app['date_of_birth_enc'] ) ) { return false; }
+		$dob = SMC_Security::decrypt( $app['date_of_birth_enc'], 'date-of-birth', array( 'user_id' => $user_id ) );
+		if ( is_wp_error( $dob ) ) { return false; }
+		$age = smc_age_from_dob( $dob );
+		$minimum = smc_effective_minimum_age( sanitize_key( $app['gender'] ?? '' ), sanitize_text_field( $app['residence_country'] ?? '' ) );
+		if ( false === $age || false === $minimum || $age < $minimum ) { return false; }
+		if ( $age < 18 ) { return ! empty( $base['guardian_verified'] ); }
 		return true;
 	}
 

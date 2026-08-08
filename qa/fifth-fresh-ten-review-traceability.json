@@ -1,0 +1,114 @@
+{
+  "release": "1.2.18",
+  "database_schema": "1.3.0",
+  "public_membership_contract": "1.2.0",
+  "advanced_trust_contract": "1.0.0",
+  "baseline_main_sha": "40e411f291eb2949b7906b4c39b65577a7f490b6",
+  "review_complete": true,
+  "rounds_with_defects": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+  ],
+  "rounds_without_defects": [
+    9,
+    10
+  ],
+  "defects_found_total": 8,
+  "defects_corrected_total": 8,
+  "severity": {
+    "critical": 1,
+    "high": 4,
+    "medium": 3,
+    "low": 0
+  },
+  "known_unresolved_repository_defects": 0,
+  "rounds": [
+    {
+      "round": 1,
+      "defects": [
+        "F5R-R1-D01"
+      ],
+      "status": "corrected"
+    },
+    {
+      "round": 2,
+      "defects": [
+        "F5R-R2-D01"
+      ],
+      "status": "corrected"
+    },
+    {
+      "round": 3,
+      "defects": [
+        "F5R-R3-D01"
+      ],
+      "status": "corrected"
+    },
+    {
+      "round": 4,
+      "defects": [
+        "F5R-R4-D01"
+      ],
+      "status": "corrected"
+    },
+    {
+      "round": 5,
+      "defects": [
+        "F5R-R5-D01"
+      ],
+      "status": "corrected"
+    },
+    {
+      "round": 6,
+      "defects": [
+        "F5R-R6-D01"
+      ],
+      "status": "corrected"
+    },
+    {
+      "round": 7,
+      "defects": [
+        "F5R-R7-D01"
+      ],
+      "status": "corrected"
+    },
+    {
+      "round": 8,
+      "defects": [
+        "F5R-R8-D01"
+      ],
+      "status": "corrected"
+    },
+    {
+      "round": 9,
+      "defects": [],
+      "status": "no_reproducible_defect"
+    },
+    {
+      "round": 10,
+      "defects": [],
+      "status": "no_reproducible_defect"
+    }
+  ],
+  "guardrails": {
+    "single_free_tier": true,
+    "donor_advantage": false,
+    "paid_unlocks": false,
+    "commission_percent": 0,
+    "brand_primary": "#087A4E",
+    "self_mutating_ci": false,
+    "fifth_fresh_regressions_permanent": true,
+    "lockfile_matches_runtime": true
+  },
+  "external_status": {
+    "staging_accepted": false,
+    "live_deployed": false,
+    "operational": false
+  }
+}

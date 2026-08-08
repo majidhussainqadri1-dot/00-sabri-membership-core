@@ -3,7 +3,7 @@ Contributors: sabrihomeopathy
 Tags: membership, identity, guardian consent, two-factor authentication, privacy
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 1.2.17
+Stable tag: 1.2.18
 License: GPL-2.0-or-later
 
 Canonical membership eligibility, identity assurance, guardian consent, security assertions, and verification governance for the Sabri Social Homeopathy Platform.
@@ -69,6 +69,11 @@ File 19 receives membership notices through its canonical sabri_notify integrati
 Local source and GitHub checks do not authorize production. Test fresh activation, 1.0.1 upgrade, MySQL advisory locks, concurrent reviewers, authorization matrices, filesystem denial and rollback, scanner providers, email/mobile/guardian delivery, File 02 Google sign-in and passkey assurance adapter, CF-01 provider/consumer contracts, all named cross-file integrations, advanced trust containment/revocation/selective-disclosure workflows, privacy erasure, restore, browser accessibility, and mobile layouts on Hostinger staging.
 
 == Changelog ==
+
+= 1.2.18 =
+* Fifth completely fresh ten-round review: enforced the declared adaptive step-up policy on critical identity, guardian, merge, delegation and break-glass workflows; break-glass now requires current hardware-backed File 02 assurance and revalidates both privileged approvers at consumption.
+* Added synchronous age/jurisdiction re-evaluation, typed File 24 containment authorization, fully opaque revocation hook subjects, stricter verifiable-credential chronology, live delegation-grantor authority checks, and current-policy guardian succession binding.
+* Preserves DB 1.3.0, public membership contract 1.2.0, Advanced Trust contract 1.0.0, single free tier, donor neutrality, zero commission and canonical File 00 ownership boundaries.
 
 = 1.2.17 =
 * Fourth fresh ten-round corrective closure: institutional-admin MFA/hard-block enforcement, non-removable recovery allowlists, opaque assurance profiles, factual MFA provenance timestamps, institutional expiry fail-closed handling, deployment key-ID documentation, and release-QA provenance synchronization.
