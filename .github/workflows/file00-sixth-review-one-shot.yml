@@ -25,6 +25,7 @@ jobs:
       - name: Patch and compile-check final applicator
         run: |
           python3 tools/file00_sixth_review_round10_patch.py
+          python3 tools/file00_sixth_review_version_patch.py
           python3 -m py_compile tools/file00_sixth_review_final.py
       - name: Apply ten fresh review-fix-retest rounds
         run: python3 tools/file00_sixth_review_final.py
