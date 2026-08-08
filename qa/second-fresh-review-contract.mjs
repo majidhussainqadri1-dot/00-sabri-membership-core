@@ -6,6 +6,7 @@ const security=fs.readFileSync('source/sabri-membership-core/includes/class-smc-
 const events=fs.readFileSync('source/sabri-membership-core/includes/class-smc-events.php','utf8');
 const installer=fs.readFileSync('source/sabri-membership-core/includes/class-smc-installer.php','utf8');
 const workflow=fs.readFileSync('source/sabri-membership-core/includes/class-smc-workflow.php','utf8');
+const privacy=fs.readFileSync('source/sabri-membership-core/includes/class-smc-privacy.php','utf8');
 pass('restricted capability baseline cannot be removed by filter', auth.includes('array_merge( self::$restricted_caps, $filtered )'));
 pass('hard-block baseline is unioned back after filtering', auth.includes('array_merge( $baseline, $filtered )'));
 for (const state of ['rejected','suspended','expired','appeal_review','erasure_pending','invalid_application']) pass(`mandatory hard block retained: ${state}`, auth.includes(`'${state}'`));
@@ -15,4 +16,5 @@ pass('event inbox consumer uses canonical schema columns', events.includes('(con
 pass('event inbox idempotency matches unique consumer-event schema', installer.includes('UNIQUE KEY consumer_event (consumer,event_id)') && events.includes('WHERE consumer=%s AND event_id=%s'));
 pass('submission handler enforces lifecycle server-side', /handle_submit_application[\s\S]{0,650}existing_application[\s\S]{0,450}more_information[\s\S]{0,250}rejected/.test(workflow));
 pass('submission completion verifies idempotency persistence', workflow.includes('$last_key_ok = hash_equals') && workflow.includes('$receipt_ok = is_array') && workflow.includes('application_idempotency_receipt_failed'));
+pass('privacy exporter processes only requested page', privacy.includes('switch ( $page )') && !privacy.includes('1 => self::export_identity( $user->ID )'));
 console.log(`Second fresh static complete; failures: ${failed}`); process.exit(failed?1:0);

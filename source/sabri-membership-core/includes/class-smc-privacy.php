@@ -22,16 +22,23 @@ final class SMC_Privacy {
 			return array( 'data' => array(), 'done' => true );
 		}
 		$page = max( 1, absint( $page ) );
-		$groups = array(
-			1 => self::export_identity( $user->ID ),
-			2 => self::export_evidence( $user->ID ),
-			3 => self::export_workflow( $user->ID ),
-			4 => self::export_security( $user->ID ),
-		);
-		return array(
-			'data' => isset( $groups[ $page ] ) ? $groups[ $page ] : array(),
-			'done' => $page >= count( $groups ),
-		);
+		switch ( $page ) {
+			case 1:
+				$data = self::export_identity( $user->ID );
+				break;
+			case 2:
+				$data = self::export_evidence( $user->ID );
+				break;
+			case 3:
+				$data = self::export_workflow( $user->ID );
+				break;
+			case 4:
+				$data = self::export_security( $user->ID );
+				break;
+			default:
+				$data = array();
+		}
+		return array( 'data' => $data, 'done' => $page >= 4 );
 	}
 
 	private static function item( $group_id, $label, $item_id, $values ) {
