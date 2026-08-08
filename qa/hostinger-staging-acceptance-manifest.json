@@ -99,11 +99,16 @@
     },
     "file08": {
       "ref": "pull/6",
-      "sha": "97a6e3861306c119c3250d5881675d80691f9309",
-      "version": "1.0.0",
+      "sha": "6e9367430bc8f1ad956d4fe32b6223ba4eeb7727",
+      "version": "1.0.1",
       "required": true,
       "source_ref_status": "pinned",
-      "package_identity_state": "stale_receipt_pending_refresh"
+      "package_identity_state": "exact_head_package_pinned",
+      "exact_head_ci_run": 31100693352,
+      "artifact_id": 8967334843,
+      "artifact_wrapper_sha256": "ab251525231fe09f0633374faabf5b4f3514035ac9ea62ae5cc645f83801fa56",
+      "package_sha256": "54f639530807f945d4198913c1ce7da900a098339310fd8b97e4a33b8d7bb6f3",
+      "artifact_expires_at": "2026-09-05T12:16:56Z"
     },
     "file12": {
       "ref": "pull/2",
@@ -117,12 +122,16 @@
     },
     "file18": {
       "ref": "pull/3",
-      "sha": "60191944dde0bb7df5e2057ba462d747883f8717",
+      "sha": "c402d872fd00a0400b4718e47c02cb9d404bcd9d",
       "version": "2.1.0",
       "required": true,
       "source_ref_status": "pinned",
       "package_sha256": "17a9d7dc35137341fe14cfc84ac78987da74f9e4ee585e44bc0f673552b4b58f",
-      "package_identity_state": "stale_head_receipt_pending_refresh"
+      "package_identity_state": "exact_head_package_pinned",
+      "exact_head_ci_run": 31202785221,
+      "artifact_id": 9003493144,
+      "artifact_wrapper_sha256": "12017d3ea171462f0f8495b353ef8b19049f9545c9a2fa722bf9ae7bd900861c",
+      "artifact_expires_at": "2026-08-21T17:33:01Z"
     }
   },
   "mandatory_unpinned_companions": [],

@@ -17,11 +17,11 @@ Repository/code completion, deterministic packaging and automated QA are not sta
 | 01 Platform Foundation | PR #3 `ad34ecf316261666769d33a8ce3acac9c019ab73`, `2.0.0` | exact-head QA/package candidate | mandatory current candidate |
 | 02 Authentication | PR #7 `c895ec17c631e6a28c86aa659bf947f9d326dc4d`, `1.2.0` | exact-head QA/package candidate; governing-plan freshness reviewed separately | mandatory auth dependency |
 | 03 Profiles & Doctors | `main` `0db6161b7f8906e65387f1db9bb4fc6f215d00ef`, `1.0.0-rc3` | merged candidate | mandatory |
-| 08 Clinic & Appointments | PR #6 `97a6e3861306c119c3250d5881675d80691f9309`, `1.0.0` | source candidate; exact-head drift review follows | mandatory |
+| 08 Clinic & Appointments | PR #6 `6e9367430bc8f1ad956d4fe32b6223ba4eeb7727`, `1.0.1` | exact-head CI `31100693352` green; ZIP `54f639…bb6f3` | mandatory |
 | 09 Doctor Verification | PR #6 `f58b04f4282c1f907a9cf3043d2f9394fbccd640`, `1.2.0-rc3` | exact-head QA/package candidate | mandatory |
 | 12 PDF Library | PR #2 `1ddc48e0271c896f32dbaa6d53a41711c22031ed`, `0.2.0` | corrective QA-green candidate | mandatory |
 | 17 Communication Network | `main` `c4bb3d399b309d6f7f4f77f8bb376df25ccad558`, `2.0.3` | merged | mandatory |
-| 18 Marketplace | PR #3 `60191944dde0bb7df5e2057ba462d747883f8717`, `2.1.0` | source candidate; exact-head drift review follows | mandatory |
+| 18 Marketplace | PR #3 `c402d872fd00a0400b4718e47c02cb9d404bcd9d`, `2.1.0` | exact-head CI `31202785221` green; ZIP `17a9d7…b58f` | mandatory |
 | 19 Notifications | `main` `5cb83d399f35ae1636415fb83373b6ba282e3685`, `3.0.0` | merged; QA green | mandatory |
 | 20 Unified Shell | `main` `178606ed1599c88dce7ef45cb69e2e90081cd519`, `1.4.3` | merged; QA green | mandatory |
 | 21 Home/News | `main` `ac83c987ab39d599ec4f5f092f1a1dedcaeaa1ee`, package/runtime `1.0.5/1.0.3` | merged | mandatory |
