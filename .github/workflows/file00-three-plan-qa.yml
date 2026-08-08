@@ -1,10 +1,10 @@
-name: File 00 1.2.18 Fifth-Fresh-Ten-Review QA
+name: File 00 1.2.19 Sixth-Fresh-Ten-Review QA
 
 on:
   pull_request:
     branches: [main]
   push:
-    branches: [main, 'codex/**']
+    branches: [main, 'codex/**', 'staging/**']
   workflow_dispatch:
 
 permissions:
@@ -33,56 +33,81 @@ jobs:
           php-version: '8.3'
           coverage: none
           tools: none
-      - run: npm ci --ignore-scripts
-      - run: npm run verify
-      - name: Exact fifth-fresh review and governing traceability
+      - name: Enforce final workflow allowlist
+        shell: bash
         run: |
           set -euo pipefail
-          grep -Fq 'Version: 1.2.18' source/sabri-membership-core/sabri-membership-core.php
-          grep -Fq '"version": "1.2.18"' package.json
-          test "$(node -p "require('./package-lock.json').version")" = '1.2.18'
-          test "$(node -p "require('./package-lock.json').packages[''].version")" = '1.2.18'
+          mapfile -t flows < <(find .github/workflows -maxdepth 1 -type f -printf '%f\n' | sort)
+          expected=(cf01-contract.yml file00-three-plan-qa.yml)
+          test "${flows[*]}" = "${expected[*]}"
+          ! grep -R --line-number --include='*.yml' --include='*.yaml' 'contents: write' .github/workflows
+      - run: npm ci --ignore-scripts
+      - run: npm run verify
+      - name: Exact sixth-fresh review and governing traceability
+        run: |
+          set -euo pipefail
+          grep -Fq 'Version: 1.2.19' source/sabri-membership-core/sabri-membership-core.php
+          grep -Fq '"version": "1.2.19"' package.json
+          test "$(node -p "require('./package-lock.json').version")" = '1.2.19'
+          test "$(node -p "require('./package-lock.json').packages[''].version")" = '1.2.19'
           grep -Fq "define( 'SMC_CONTRACT_VERSION', '1.2.0' )" source/sabri-membership-core/sabri-membership-core.php
           grep -Fq "define( 'SMC_ADVANCED_TRUST_CONTRACT_VERSION', '1.0.0' )" source/sabri-membership-core/sabri-membership-core.php
           node qa/fifth-fresh-review-contract.mjs
           php qa/fifth-fresh-review-runtime.php
-          test -f dist/00-sabri-membership-core-1.2.18.zip
+          node qa/hostinger-staging-acceptance-contract.mjs
+          php qa/sixth-fresh-review-runtime.php
+          test -f dist/00-sabri-membership-core-1.2.19.zip
           test -z "$(git ls-files 'dist/*')"
-          grep -Fq 'Runtime implementation release: `1.2.18`' docs/FILE-00-MASTER-PLAN-2026.md
+          grep -Fq 'Runtime implementation release: `1.2.19`' docs/FILE-00-MASTER-PLAN-2026.md
           grep -Fq 'Total: **10 unique defects; corrected 10/10**.' docs/FILE-00-FIFTH-FRESH-TEN-ROUND-REVIEW-1.2.18.md
+          grep -Fq '10 fresh rounds; defects in 10/10 rounds; 10 unique defects corrected.' docs/FILE-00-SIXTH-FRESH-TEN-ROUND-REVIEW-1.2.19.md
+          test -f docs/HOSTINGER-STAGING-ACCEPTANCE-1.2.19.md
+          test -f qa/hostinger-staging-evidence.schema.json
           test -f docs/FILE-00-FOURTH-FRESH-TEN-ROUND-REVIEW-1.2.17.md
           python3 - <<'PY'
           import json
-          d=json.load(open('qa/fifth-fresh-ten-review-traceability.json'))
-          assert d['release']=='1.2.18'
-          assert d['review_complete'] is True
-          assert d['rounds_with_defects']==[1,2,3,4,5,6,7,8,9,10]
-          assert d['rounds_without_defects']==[]
-          assert d['defects_found_total']==10 and d['defects_corrected_total']==10
-          assert d['severity']=={'critical':1,'high':4,'medium':5,'low':0}
-          assert d['known_unresolved_repository_defects']==0
-          assert d['guardrails']['self_mutating_ci'] is False
-          assert d['guardrails']['fifth_fresh_regressions_permanent'] is True
-          assert d['guardrails']['lockfile_matches_runtime'] is True
-          assert d['external_status']=={'staging_accepted':False,'live_deployed':False,'operational':False}
+          old=json.load(open('qa/fifth-fresh-ten-review-traceability.json'))
+          assert old['release']=='1.2.18'
+          assert old['review_complete'] is True
+          assert old['rounds_with_defects']==[1,2,3,4,5,6,7,8,9,10]
+          assert old['rounds_without_defects']==[]
+          assert old['defects_found_total']==10 and old['defects_corrected_total']==10
+          assert old['known_unresolved_repository_defects']==0
+          s=json.load(open('qa/sixth-fresh-ten-review-traceability.json'))
+          assert s['release']=='1.2.19'
+          assert s['review_complete'] is True
+          assert s['rounds']==10
+          assert s['defect_rounds']==[1,2,3,4,5,6,7,8,9,10]
+          assert s['clean_rounds']==[]
+          assert s['defect_count']==10 and s['defects_corrected_total']==10
+          assert s['severity']=={'critical':1,'high':5,'medium':3,'low':1}
+          assert s['known_unresolved_repository_defects']==0
+          assert s['external_status']=={'staging_accepted':False,'live_deployed':False,'operational':False}
+          assert s['file02_current_plan_blocker'] is True
+          stage=json.load(open('qa/hostinger-staging-acceptance-manifest.json'))
+          assert stage['release']=='1.2.19'
+          assert stage['external_status']=={'staging_accepted':False,'live_deployed':False,'operational':False}
+          assert stage['candidate_matrix']['file02']['staging_usable_for_final_integrated_acceptance'] is False
           PY
           grep -Fq '#087A4E' source/sabri-membership-core/assets/membership.css
+          test "$(find .github/workflows -maxdepth 1 -type f | wc -l)" -eq 2
           ! grep -RInE '^\s*contents:\s*write\s*$' .github/workflows
-          test ! -e tools/apply-fifth-fresh-ten-review.py
-          test ! -e tools/apply-fifth-fresh-ten-review.py.gz.b64
-          test ! -e tools/fifth-fresh-payload.part0
-          test ! -e tools/fifth-fresh-payload.part1
-          test ! -e tools/fifth-fresh-payload.part2
-          test ! -e tools/fifth-fresh-payload.part3
-          test ! -e .github/workflows/apply-fifth-fresh-ten-review.yml
-          test ! -e .github/workflows/apply-fifth-round9-fix.yml
-          test ! -e .github/workflows/apply-fifth-round10-fix.yml
+          test ! -e .github/workflows/apply-fresh-ten-review.yml
+          test ! -e .github/workflows/file00-sixth-review-one-shot.yml
+          test -z "$(find tools -maxdepth 1 -type f -name 'file00_sixth_review_*' -print)"
+          test ! -d tools/__pycache__
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: 00-sabri-membership-core-1.2.18-${{ github.sha }}
+          name: 00-sabri-membership-core-1.2.19-${{ github.sha }}
           path: |
-            dist/00-sabri-membership-core-1.2.18.zip
+            dist/00-sabri-membership-core-1.2.19.zip
             dist/CHECKSUMS.sha256
+            docs/RELEASE-1.2.19-SIXTH-FRESH-TEN-REVIEW.md
+            docs/FILE-00-SIXTH-FRESH-TEN-ROUND-REVIEW-1.2.19.md
+            docs/HOSTINGER-STAGING-ACCEPTANCE-1.2.19.md
+            qa/sixth-fresh-ten-review-traceability.json
+            qa/hostinger-staging-acceptance-manifest.json
+            qa/hostinger-staging-evidence.schema.json
             docs/RELEASE-1.2.18-FIFTH-FRESH-TEN-REVIEW.md
             docs/FILE-00-FIFTH-FRESH-TEN-ROUND-REVIEW-1.2.18.md
             docs/FILE-00-FOURTH-FRESH-TEN-ROUND-REVIEW-1.2.17.md
