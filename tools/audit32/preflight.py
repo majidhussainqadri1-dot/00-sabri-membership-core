@@ -5,8 +5,9 @@ text = path.read_text(encoding='utf-8')
 
 def swap(old: str, new: str, label: str) -> None:
     global text
-    if old not in text:
-        raise SystemExit(f'preflight: {label} stanza not found')
+    count = text.count(old)
+    if count != 1:
+        raise SystemExit(f'preflight: {label} expected 1 match, found {count}')
     text = text.replace(old, new, 1)
 
 swap('''replace_once(
@@ -39,13 +40,16 @@ swap('''replace_once(
     "$minimum_age = smc_effective_minimum_age( $app['gender'], $app['residence_country'] ?? '' );",
 )''','effective age')
 
-# Exact baseline signature is restrict($app,$reason,$status='suspended').
-text = text.replace(
-    r"r\"\\n\\tprivate static function restrict\\( \\$app, \\$status, \\$reason \\) \\{.*?\\n\\t\\}\\n\\n\\tprivate static function cleanup_database\"",
-    r"r\"\\n\\tprivate static function restrict\\( \\$app, \\$reason, \\$status = 'suspended' \\) \\{.*?\\n\\t\\}\\n\\n\\tprivate static function cleanup_database\"",
-    1,
+swap(
+    '''    r"\\n\\tprivate static function restrict\\( \\$app, \\$status, \\$reason \\) \\{.*?\\n\\t\\}\\n\\n\\tprivate static function cleanup_database",''',
+    '''    r"\\n\\tprivate static function restrict\\( \\$app, \\$reason, \\$status = 'suspended' \\) \\{.*?\\n\\t\\}\\n\\n\\tprivate static function cleanup_database",''',
+    'restrict regex',
 )
-# The replacement body itself already consumes $status/$reason by name, so no other ordering change is needed.
+swap(
+    '''\tprivate static function restrict( $app, $status, $reason ) {''',
+    '''\tprivate static function restrict( $app, $reason, $status = 'suspended' ) {''',
+    'restrict replacement signature',
+)
 
 swap('''replace_once(
     lifecycle,
