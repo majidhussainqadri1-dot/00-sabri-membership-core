@@ -14,12 +14,20 @@
     "file00": {"ref": "main", "sha": "3a84c32a6ddad151f2ed09d244fa8aa536a58108", "version": "1.2.18", "required": true},
     "file01": {"ref": "pull/3", "sha": "ad34ecf316261666769d33a8ce3acac9c019ab73", "version": "2.0.0", "required": true, "main_is_current_candidate": false},
     "file02": {"ref": "pull/7", "sha": "c895ec17c631e6a28c86aa659bf947f9d326dc4d", "version": "1.2.0", "required": true, "main_is_current_candidate": false},
+    "file03": {"ref": "main", "sha": "0db6161b7f8906e65387f1db9bb4fc6f215d00ef", "version": "1.0.0-rc3", "required": true},
+    "file09": {"ref": "pull/6", "sha": "f58b04f4282c1f907a9cf3043d2f9394fbccd640", "version": "1.2.0-rc3", "required": true, "main_is_current_candidate": false},
+    "file17": {"ref": "main", "sha": "c4bb3d399b309d6f7f4f77f8bb376df25ccad558", "version": "2.0.3", "required": true},
     "file19": {"ref": "main", "sha": "5cb83d399f35ae1636415fb83373b6ba282e3685", "version": "3.0.0", "required": true},
     "file20": {"ref": "main", "sha": "178606ed1599c88dce7ef45cb69e2e90081cd519", "version": "1.4.3", "required": true},
     "file21": {"ref": "main", "sha": "ac83c987ab39d599ec4f5f092f1a1dedcaeaa1ee", "package_version": "1.0.5", "runtime_version": "1.0.3", "schema_version": "1.0.0", "required": true},
-    "file24": {"ref": "main", "sha": "3c5ea8ef342983630a7973274d3409c34409f86c", "version": "0.99.0", "schema_version": "0.25.5", "required": true}
+    "file22": {"ref": "pull/24", "sha": "ce3dc881395cf22e5b33a538cbb7e104d1a51931", "version": "1.0.0-rc.2", "required": true, "main_is_current_candidate": false},
+    "file23": {"ref": "main", "sha": "a8a8c805f4730998ccb44bd95c87591836561759", "version": "1.2.0", "required": true},
+    "file24": {"ref": "main", "sha": "3c5ea8ef342983630a7973274d3409c34409f86c", "version": "0.99.0", "schema_version": "0.25.5", "required": true},
+    "file25": {"ref": "pull/1", "sha": "64ccd17ca7c2055dd7f31365a91861b6aa28139c", "version": "0.14.0", "required": true, "main_is_current_candidate": false}
   },
-  "mandatory_unpinned_companions": ["03", "09", "17", "22", "23", "25"],
+  "mandatory_unpinned_companions": [],
+  "candidate_pinning_status": "complete_for_file00_plan_named_integrations",
+  "candidate_pinning_note": "Pinned means exact source candidate selected for staging. It does not mean merged, staging-accepted, production-approved or mutually compatible until the real integrated environment tests pass.",
   "gates": {
     "environment_and_backup": "pending",
     "fresh_install": "pending",
