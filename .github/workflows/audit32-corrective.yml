@@ -35,6 +35,7 @@ jobs:
           python3 tools/audit32/privacyfix.py
           python3 tools/audit32/latepreflight.py
           python3 tools/audit32/apply.py
+          python3 tools/audit32/securityblockfix.py
           python3 tools/audit32/sourcefix.py
           python3 tools/audit32/sourcefix2.py
       - name: PHP syntax lint
@@ -43,7 +44,7 @@ jobs:
           while IFS= read -r -d '' file; do
             if ! php -l "$file"; then
               echo "--- generated context for $file ---"
-              nl -ba "$file" | sed -n '90,160p'
+              nl -ba "$file" | sed -n '1,220p'
               exit 1
             fi
           done < <(find source qa -type f -name '*.php' -print0)
