@@ -202,7 +202,9 @@ final class SMC_Advanced_Trust_2026 {
 		);
 		$required = isset( $requirements[ $action ] ) ? $requirements[ $action ] : $requirements['default'];
 		$risk = (array) apply_filters( 'smc_file24_step_up_context_v1', array(), absint( $user_id ), $action );
-		if ( ! empty( $risk['high_risk'] ) ) {
+		$authentication_risk = sanitize_key( $profile['authentication_risk'] ?? 'unknown' );
+		$high_risk = ! empty( $risk['high_risk'] ) || in_array( $authentication_risk, array( 'elevated', 'high' ), true );
+		if ( $high_risk ) {
 			$required[0] = max( $required[0], 3 ); $required[1] = max( $required[1], 3 ); $required[3] = true;
 		}
 		$membership_operational = self::protected_actions_allowed( absint( $user_id ) );
@@ -215,8 +217,8 @@ final class SMC_Advanced_Trust_2026 {
 			'action' => $action, 'required_identity_level' => $required[0], 'required_authentication_level' => $required[1],
 			'hardware_backed_required' => (bool) $required[2], 'phishing_resistant_required' => (bool) $required[3],
 			'current_identity_level' => (int) $profile['identity_assurance_level'], 'current_authentication_level' => (int) $profile['authentication_assurance_level'],
-			'current_phishing_resistant' => ! empty( $profile['phishing_resistant'] ), 'membership_operational' => (bool) $membership_operational,
-			'satisfied' => (bool) $satisfied, 'risk_context' => array( 'high_risk' => ! empty( $risk['high_risk'] ) ),
+			'current_phishing_resistant' => ! empty( $profile['phishing_resistant'] ), 'authentication_risk' => $authentication_risk, 'membership_operational' => (bool) $membership_operational,
+			'satisfied' => (bool) $satisfied, 'risk_context' => array( 'high_risk' => (bool) $high_risk ),
 		);
 	}
 
