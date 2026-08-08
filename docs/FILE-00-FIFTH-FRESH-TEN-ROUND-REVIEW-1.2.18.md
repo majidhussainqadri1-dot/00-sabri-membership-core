@@ -12,9 +12,9 @@ Baseline: `40e411f291eb2949b7906b4c39b65577a7f490b6` (1.2.17). Earlier review cy
 | 6 | Defect | F5R-R6-D01 — High: delegation could survive loss of grantor authority | Active delegation revalidates grantor existence, protected state and current File00 membership authority |
 | 7 | Defect | F5R-R7-D01 — High: break-glass approvals were IDs without approval time/current-authority revalidation at consume | Persist approval timestamps and revalidate both distinct privileged approvers at consumption |
 | 8 | Defect | F5R-R8-D01 — Medium: guardian succession successor lookup did not bind to current consent-policy version | Current verified guardian lookup now requires current `smc_policy()['version']` |
-| 9 | Clean | No new reproducible repository defect | Cross-file/privacy/ownership/fail-safe re-review clean after corrections |
-| 10 | Clean | No new reproducible repository defect | Release identity, package/CI/traceability closure; external gates remain separate |
+| 9 | Defect | F5R-R9-D01 — Medium: hardening regression test encoded a stale File00 assurance-level assumption and falsely treated a correctly rejected File02 elevation as failure | Preserve the current File00 MFA baseline while asserting that stale File02 passkey/hardware elevation is rejected; regression now checks owner plus absence of elevated passkey/hardware claims |
+| 10 | Clean | No new reproducible repository defect | Fresh corrected-source closure, release identity, package/CI/traceability review; external gates remain separate |
 
-Total: **8 unique defects; corrected 8/8**. Severity: **1 Critical, 4 High, 3 Medium, 0 Low**. Known unresolved repository defects after corrected-source closure: **0**.
+Total: **9 unique defects; corrected 9/9**. Severity: **1 Critical, 4 High, 4 Medium, 0 Low**. Known unresolved repository defects after corrected-source closure: **0**.
 
 Staging-Accepted, Live-Deployed and Operational remain pending external acceptance gates and are not inferred from repository QA.

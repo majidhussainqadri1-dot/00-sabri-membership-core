@@ -21,7 +21,7 @@ const checks=[
  ['age is recomputed synchronously',adv.includes("SMC_Security::decrypt( $app['date_of_birth_enc']")&&adv.includes('smc_age_from_dob( $dob )')&&adv.includes('smc_effective_minimum_age(')],
  ['release docs current',readme.includes('Stable tag: 1.2.18')&&readme.includes('= 1.2.18 =')],
  ['contracts preserved',main.includes("SMC_CONTRACT_VERSION', '1.2.0")&&main.includes("SMC_ADVANCED_TRUST_CONTRACT_VERSION', '1.0.0")],
- ['ten-round trace closed honestly',trace.review_complete===true&&JSON.stringify(trace.rounds_with_defects)===JSON.stringify([1,2,3,4,5,6,7,8])&&JSON.stringify(trace.rounds_without_defects)===JSON.stringify([9,10])&&trace.defects_found_total===8&&trace.defects_corrected_total===8&&trace.known_unresolved_repository_defects===0],
+ ['ten-round trace closed honestly',trace.review_complete===true&&JSON.stringify(trace.rounds_with_defects)===JSON.stringify([1,2,3,4,5,6,7,8,9])&&JSON.stringify(trace.rounds_without_defects)===JSON.stringify([10])&&trace.defects_found_total===9&&trace.defects_corrected_total===9&&trace.known_unresolved_repository_defects===0],
  ['external gates remain pending',trace.external_status.staging_accepted===false&&trace.external_status.live_deployed===false&&trace.external_status.operational===false],
 ];
 let fail=0;for(const [n,ok] of checks){console.log(`${ok?'PASS':'FAIL'} ${n}`);if(!ok)fail++;}console.log(`Fifth fresh static: ${checks.length-fail} PASS / ${fail} FAIL`);if(fail)process.exit(1);
