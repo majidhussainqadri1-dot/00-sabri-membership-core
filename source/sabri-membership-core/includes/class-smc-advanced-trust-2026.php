@@ -1086,7 +1086,7 @@ final class SMC_Advanced_Trust_2026 {
 
 	private static function actor_meets_step_up( $actor_id, $action, $capability = '', $founder_or_admin = false ) {
 		$actor_id = absint( $actor_id );
-		if ( ! self::actor_is_current( $actor_id, $capability, $founder_or_admin ) || ! class_exists( 'SMC_Security' ) || ! SMC_Security::session_is_verified( $actor_id ) ) { return false; }
+		if ( ! self::actor_is_current( $actor_id, $capability, $founder_or_admin ) ) { return false; }
 		$requirement = self::step_up_requirement( $actor_id, sanitize_key( $action ) );
 		return is_array( $requirement ) && ! empty( $requirement['satisfied'] );
 	}
