@@ -1,0 +1,54 @@
+name: File 00 Audit-32 Corrective Apply and Verify
+
+on:
+  push:
+    branches: ['fix/code-only-audit-32-2026-08-08']
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-verify:
+    if: ${{ !contains(github.event.head_commit.message, '[audit32-bot]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout corrective branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Set up PHP 8.3
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240
+        with:
+          php-version: '8.3'
+          coverage: none
+          tools: none
+      - name: Install locked test dependency
+        run: npm ci --ignore-scripts
+      - name: Apply exact-baseline corrective patch
+        run: python3 tools/audit32/apply.py
+      - name: PHP syntax lint
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' file; do php -l "$file"; done < <(find source qa -type f -name '*.php' -print0)
+      - name: Repository whitespace check
+        run: git diff --check
+      - name: Existing regression suites
+        run: npm test
+      - name: Deterministic package build
+        run: |
+          npm run build
+          python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.19.zip
+      - name: Commit verified corrective source
+        run: |
+          set -euo pipefail
+          git config user.name 'File00 Audit32 Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add source package.json STATUS.md RELEASE-1.2.19.md
+          if git diff --cached --quiet; then
+            echo 'No corrective source changes to commit.'
+            exit 1
+          fi
+          git commit -m '[audit32-bot] Apply and verify 32 code-only audit corrections'
+          git push origin HEAD:fix/code-only-audit-32-2026-08-08
