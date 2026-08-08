@@ -76,3 +76,15 @@ jobs:
           set -euo pipefail
           php /tmp/wp-cli.phar eval 'echo SMC_VERSION," / ",SMC_DB_VERSION," / ",SMC_CONTRACT_VERSION,"\n";' --path=/tmp/wordpress
           php /tmp/wp-cli.phar db query "SELECT TABLE_NAME,ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME LIKE 'wp_smc_%' ORDER BY TABLE_NAME" --path=/tmp/wordpress
+      - name: Build installable File 00 ZIP
+        run: |
+          set -euo pipefail
+          python3 tools/build.py
+          python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.19.zip
+      - name: Upload installable File 00 ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: File-00-Sabri-Membership-Core-1.2.19-Test
+          path: dist/00-sabri-membership-core-1.2.19.zip
+          if-no-files-found: error
+          retention-days: 30
