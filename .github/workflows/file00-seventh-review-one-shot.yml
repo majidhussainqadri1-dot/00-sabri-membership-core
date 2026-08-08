@@ -33,5 +33,22 @@ jobs:
         run: |
           git config user.name "File 00 Review Bot"
           git config user.email "actions@users.noreply.github.com"
-      - name: Apply seventh fresh review
-        run: python3 tools/file00_seventh_review_bootstrap.py
+      - name: Apply seventh fresh review from repository root
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import base64, pathlib, re, zlib
+          wrapper = pathlib.Path('tools/file00_seventh_review_bootstrap.py').read_text(encoding='utf-8')
+          match = re.search(r"b64decode\('([^']+)'\)", wrapper)
+          if not match:
+              raise SystemExit('embedded review payload not found')
+          code = zlib.decompress(base64.b64decode(match.group(1))).decode('utf-8')
+          old = 'Path(__file__).resolve().parents[1]'
+          if old not in code:
+              raise SystemExit('review payload root marker not found')
+          code = code.replace(old, 'Path.cwd()', 1)
+          target = pathlib.Path('/tmp/file00_seventh_review_apply.py')
+          target.write_text(code, encoding='utf-8')
+          scope = {'__name__': '__main__', '__file__': str(target)}
+          exec(compile(code, str(target), 'exec'), scope)
+          PY
