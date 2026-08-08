@@ -1,6 +1,6 @@
 # File 00 — Hostinger Staging Acceptance Execution Packet
 
-**Release under test:** File 00 `1.2.18`  
+**Release under test:** File 00 `1.2.19`  
 **Immutable File 00 baseline:** `3a84c32a6ddad151f2ed09d244fa8aa536a58108`  
 **Prepared:** 2026-08-08  
 **Status:** EXECUTION READY — **not Staging-Accepted until real Hostinger evidence is attached and every mandatory gate is closed**.
@@ -13,7 +13,7 @@ Repository/code completion, deterministic packaging and automated QA are not sta
 
 | File | Candidate to stage | Evidence state | Staging instruction |
 |---|---|---|---|
-| 00 Membership Core | `main` `3a84c32a6ddad151f2ed09d244fa8aa536a58108`, runtime `1.2.18` | merged; exact-main QA green | mandatory |
+| 00 Membership Core | sixth-review branch, runtime `1.2.19`; immutable pre-review main `3a84c32a6ddad151f2ed09d244fa8aa536a58108` | exact final head supplied by PR/CI evidence | mandatory |
 | 01 Platform Foundation | PR #3 `ad34ecf316261666769d33a8ce3acac9c019ab73`, `2.0.0` | exact-head QA/package candidate | mandatory current candidate |
 | 02 Authentication | PR #7 `c895ec17c631e6a28c86aa659bf947f9d326dc4d`, `1.2.0` | exact-head QA/package candidate; governing-plan freshness reviewed separately | mandatory auth dependency |
 | 03 Profiles & Doctors | `main` `0db6161b7f8906e65387f1db9bb4fc6f215d00ef`, `1.0.0-rc3` | merged candidate | mandatory |
@@ -34,7 +34,7 @@ All File 00-plan-named integrations are now represented. Source-ref pinning is n
 
 ## File 00 package identity
 
-- Runtime: `1.2.18`
+- Runtime: `1.2.19`
 - DB schema: `1.3.0`
 - Public membership contract: `1.2.0`
 - Advanced Trust contract: `1.0.0`
@@ -59,7 +59,7 @@ The latest approved File 02 plan is v2.2 and defines an additive `1.3.0` scope w
 
 On a clean staging database/site clone:
 
-- [ ] Install File 00 `1.2.18` exact package and activate.
+- [ ] Install File 00 `1.2.19` exact package and activate.
 - [ ] Schema `1.3.0` is created idempotently; roles/capabilities/pages/storage/cron/outbox health is green.
 - [ ] No PHP fatal, database error, rewrite loop, public sensitive data or unexpected role mutation.
 - [ ] Deactivate/reactivate is non-destructive.

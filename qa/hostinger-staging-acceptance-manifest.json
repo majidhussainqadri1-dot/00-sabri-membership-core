@@ -1,6 +1,6 @@
 {
   "file": "00",
-  "release": "1.2.18",
+  "release": "1.2.19",
   "baseline_main_sha": "3a84c32a6ddad151f2ed09d244fa8aa536a58108",
   "database_schema": "1.3.0",
   "public_membership_contract": "1.2.0",
@@ -12,10 +12,11 @@
   },
   "candidate_matrix": {
     "file00": {
-      "ref": "main",
+      "ref": "staging/file00-1.2.18-hostinger-acceptance",
       "sha": "3a84c32a6ddad151f2ed09d244fa8aa536a58108",
-      "version": "1.2.18",
-      "required": true
+      "version": "1.2.19",
+      "required": true,
+      "sha_role": "immutable pre-review main baseline; final exact branch head is external CI/PR evidence"
     },
     "file01": {
       "ref": "pull/3",
@@ -179,5 +180,6 @@
   ],
   "candidate_source_pinning_status": "complete_for_file00_plan_named_integrations",
   "package_pinning_status": "partial_pending_external_artifact_receipts",
-  "preflight_status": "blocked_waiting_for_current_file02_1.3.0_candidate"
+  "preflight_status": "blocked_waiting_for_current_file02_1.3.0_candidate_and_real_hostinger_evidence",
+  "release_review": "sixth_fresh_ten_round"
 }
