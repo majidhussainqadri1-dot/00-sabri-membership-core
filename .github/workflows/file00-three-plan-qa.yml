@@ -40,6 +40,8 @@ jobs:
           set -euo pipefail
           grep -Fq 'Version: 1.2.16' source/sabri-membership-core/sabri-membership-core.php
           grep -Fq '"version": "1.2.16"' package.json
+          test "$(node -p "require('./package-lock.json').version")" = '1.2.16'
+          test "$(node -p "require('./package-lock.json').packages[''].version")" = '1.2.16'
           grep -Fq "define( 'SMC_CONTRACT_VERSION', '1.2.0' )" source/sabri-membership-core/sabri-membership-core.php
           grep -Fq "define( 'SMC_ADVANCED_TRUST_CONTRACT_VERSION', '1.0.0' )" source/sabri-membership-core/sabri-membership-core.php
           node qa/third-fresh-review-contract.mjs
@@ -48,6 +50,7 @@ jobs:
           test -z "$(git ls-files 'dist/*')"
           grep -Fq 'Runtime implementation release: `1.2.16`' docs/FILE-00-MASTER-PLAN-2026.md
           grep -Fq 'Third fresh ten-round review complete: **Yes**' docs/FILE-00-THIRD-FRESH-TEN-ROUND-REVIEW-1.2.16.md
+          grep -Fq '**Unique defects:** 14.' docs/FILE-00-THIRD-FRESH-TEN-ROUND-REVIEW-1.2.16.md
           python3 - <<'PY'
           import json
           d=json.load(open('qa/third-fresh-ten-review-traceability.json'))
@@ -55,11 +58,12 @@ jobs:
           assert d['review_complete'] is True
           assert d['rounds_with_defects']==[1,2,3,4,5,7,8,9,10]
           assert d['rounds_without_defects']==[6]
-          assert d['defects_found_total']==13 and d['defects_corrected_total']==13
-          assert d['severity']=={'critical':1,'high':7,'medium':5,'low':0}
+          assert d['defects_found_total']==14 and d['defects_corrected_total']==14
+          assert d['severity']=={'critical':1,'high':7,'medium':6,'low':0}
           assert d['known_unresolved_repository_defects']==0
           assert d['guardrails']['self_mutating_ci'] is False
           assert d['guardrails']['third_fresh_regressions_permanent'] is True
+          assert d['guardrails']['lockfile_matches_runtime'] is True
           assert d['external_status']=={'staging_accepted':False,'live_deployed':False,'operational':False}
           PY
           grep -Fq '#087A4E' source/sabri-membership-core/assets/membership.css
