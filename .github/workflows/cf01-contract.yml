@@ -34,6 +34,7 @@ jobs:
           set -euo pipefail
           git diff --check
           test ! -f .gitmodules
+          test -z "$(git ls-files 'dist/*')"
           if git ls-files -s | awk '$1 == "120000" { found=1 } END { exit !found }'; then exit 1; fi
           if grep -RIl --exclude-dir=.git '^version https://git-lfs.github.com/spec/v1$' . | grep -q .; then exit 1; fi
           test "$(sha256sum 'source-archive/00 sabri-membership-core-1.0.1.zip' | awk '{print $1}')" = "1418dff3410ebd66f6d440453f4bc4fe487828920d8fdaf8190df42844d426af"
@@ -60,7 +61,7 @@ jobs:
           mapfile -t php_files < <(find source qa -type f -name '*.php' -print | sort)
           test "${#php_files[@]}" -ge 15
           for file in "${php_files[@]}"; do php -l "$file"; done
-      - name: Run inherited, CF-01 and forty-round suites
+      - name: Run inherited, CF-01, forty-round and second-fresh suites
         run: npm test
-      - name: Build and verify deterministic 1.2.14 package
+      - name: Build and verify deterministic 1.2.15 package
         run: npm run verify
