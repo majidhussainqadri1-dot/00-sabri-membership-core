@@ -56,8 +56,9 @@ final class SMC_Installer {
 		if ( SMC_DB_VERSION === get_option( 'smc_db_version', '' ) ) {
 			return;
 		}
-		$lock = self::acquire_lock( 1 );
+		$lock = null;
 		try {
+			$lock = self::acquire_lock( 1 );
 			self::create_tables();
 			self::create_roles();
 			self::create_pages();
@@ -68,7 +69,9 @@ final class SMC_Installer {
 		} catch ( Throwable $error ) {
 			self::record_failure( 'upgrade', $error );
 		} finally {
-			self::release_lock( $lock );
+			if ( is_array( $lock ) ) {
+				self::release_lock( $lock );
+			}
 		}
 	}
 
