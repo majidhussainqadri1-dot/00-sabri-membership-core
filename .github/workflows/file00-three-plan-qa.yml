@@ -1,4 +1,4 @@
-name: File 00 1.2.14 Fresh-Ten-Review QA
+name: File 00 1.2.15 Second-Fresh-Ten-Review QA
 
 on:
   pull_request:
@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   verify:
-    name: Build, test and verify advanced-trust source
+    name: Build, test and verify File 00 source
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -35,10 +35,10 @@ jobs:
           tools: none
       - run: npm ci --ignore-scripts
       - run: npm run verify
-      - name: Exact latest-central and fresh-review traceability
+      - name: Exact second-fresh review and governing traceability
         run: |
           set -euo pipefail
-          grep -Fq 'Version: 1.2.14' source/sabri-membership-core/sabri-membership-core.php
+          grep -Fq 'Version: 1.2.15' source/sabri-membership-core/sabri-membership-core.php
           grep -Fq "define( 'SMC_CONTRACT_VERSION', '1.2.0' )" source/sabri-membership-core/sabri-membership-core.php
           grep -Fq "define( 'SMC_ADVANCED_TRUST_CONTRACT_VERSION', '1.0.0' )" source/sabri-membership-core/sabri-membership-core.php
           node qa/three-plan-runtime-completion-contract.mjs
@@ -49,49 +49,48 @@ jobs:
           php qa/advanced-trust-runtime.php
           php qa/advanced-trust-review-hardening-runtime.php
           php qa/file09-professional-claim-runtime.php
-          test -f dist/00-sabri-membership-core-1.2.14.zip
-          ! grep -Fq 'VERSION = "1.2.13"' tools/build.py
+          node qa/second-fresh-review-contract.mjs
+          php qa/second-fresh-review-runtime.php
+          test -f dist/00-sabri-membership-core-1.2.15.zip
           grep -Fq 'version = release_version()' tools/build.py
+          test -z "$(git ls-files 'dist/*')"
           test "$(grep -Ec '^\| F00-R[0-9]{3} \|' docs/FILE-00-IMPLEMENTATION-TRACEABILITY-1.2.11.md)" -eq 100
           grep -Fq 'F00-CEN-01' docs/FILE-00-LATEST-CENTRAL-TRACEABILITY-1.2.12.md
           grep -Fq 'F00-CEN-02' docs/FILE-00-LATEST-CENTRAL-TRACEABILITY-1.2.12.md
           grep -Fq 'F00-CEN-03' docs/FILE-00-LATEST-CENTRAL-TRACEABILITY-1.2.12.md
           grep -Fq 'F00-EXT-001' docs/FILE-00-ADVANCED-TRUST-EXTENSIONS-1.2.13.md
           grep -Fq 'F00-EXT-020' docs/FILE-00-ADVANCED-TRUST-EXTENSIONS-1.2.13.md
-          grep -Fq 'Fresh ten-round review complete: **Yes**' docs/FILE-00-FRESH-TEN-ROUND-REVIEW-1.2.14.md
-          grep -Fq '**Unique product/repository defects found:** 16.' docs/FILE-00-FRESH-TEN-ROUND-REVIEW-1.2.14.md
+          grep -Fq 'Second fresh ten-round review complete: **Yes**' docs/FILE-00-SECOND-FRESH-TEN-ROUND-REVIEW-1.2.15.md
           python3 - <<'PY'
           import json
-          d=json.load(open('qa/fresh-ten-review-traceability.json'))
-          assert d['release']=='1.2.14'
+          d=json.load(open('qa/second-fresh-ten-review-traceability.json'))
+          assert d['release']=='1.2.15'
           assert d['review_complete'] is True
           assert d['rounds_with_defects']==[1,2,3,4,5,6,7,8,9,10]
           assert d['rounds_without_defects']==[]
-          assert d['defects_found_total']==16 and d['defects_corrected_total']==16
-          assert d['severity']=={'critical':1,'high':12,'medium':3,'low':0}
+          assert d['defects_found_total']==13 and d['defects_corrected_total']==13
+          assert d['severity']=={'critical':1,'high':8,'medium':4,'low':0}
           assert d['known_unresolved_repository_defects']==0
-          assert d['guardrails']['package_version_derived_from_runtime'] is True
+          assert d['guardrails']['generated_release_artifacts_tracked'] is False
           assert d['guardrails']['self_mutating_ci'] is False
+          assert d['guardrails']['second_fresh_regressions_permanent'] is True
           assert d['external_status']=={'staging_accepted':False,'live_deployed':False,'operational':False}
           PY
           grep -Fq '#087A4E' source/sabri-membership-core/assets/membership.css
-          test "$(find .github/workflows -maxdepth 1 -type f | wc -l)" -eq 3
           ! grep -RInE '^\s*contents:\s*write\s*$' .github/workflows
-          grep -Fq 'Retired File 00 Fresh-Review Mutator Sentinel' .github/workflows/apply-fresh-ten-review.yml
-          grep -Fq 'contents: read' .github/workflows/apply-fresh-ten-review.yml
-          test ! -e tools/apply-fresh-ten-review-round.py
+          test ! -e tools/apply-second-fresh-ten-review-round.py
+          test ! -e .github/workflows/apply-second-fresh-ten-review.yml
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: 00-sabri-membership-core-1.2.14-${{ github.sha }}
+          name: 00-sabri-membership-core-1.2.15-${{ github.sha }}
           path: |
-            dist/00-sabri-membership-core-1.2.14.zip
+            dist/00-sabri-membership-core-1.2.15.zip
             dist/CHECKSUMS.sha256
-            docs/RELEASE-1.2.14-FRESH-TEN-REVIEW.md
+            docs/RELEASE-1.2.15-SECOND-FRESH-TEN-REVIEW.md
+            docs/FILE-00-SECOND-FRESH-TEN-ROUND-REVIEW-1.2.15.md
             docs/FILE-00-FRESH-TEN-ROUND-REVIEW-1.2.14.md
-            docs/RELEASE-1.2.13-ADVANCED-TRUST.md
-            docs/FILE-00-ADVANCED-TRUST-EXTENSIONS-1.2.13.md
-            docs/FILE-00-ADVANCED-TRUST-TEN-ROUND-REVIEW-1.2.13.md
             docs/FILE-00-LATEST-CENTRAL-TRACEABILITY-1.2.12.md
+            qa/second-fresh-ten-review-traceability.json
             qa/fresh-ten-review-traceability.json
             qa/advanced-trust-traceability.json
             qa/latest-central-traceability.json
