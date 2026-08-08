@@ -532,7 +532,7 @@ final class SMC_Contracts {
 	}
 
 	public static function enforce_admin_state() {
-		if ( ! is_user_logged_in() || current_user_can( 'manage_options' ) || self::request_is_membership_recovery() ) {
+		if ( ! is_user_logged_in() || self::request_is_membership_recovery() ) {
 			return;
 		}
 		$a = self::assertions( get_current_user_id() );
@@ -543,7 +543,7 @@ final class SMC_Contracts {
 	}
 
 	public static function enforce_rest_state( $result ) {
-		if ( ! empty( $result ) || ! is_user_logged_in() || current_user_can( 'manage_options' ) ) {
+		if ( ! empty( $result ) || ! is_user_logged_in() ) {
 			return $result;
 		}
 		$a = self::assertions( get_current_user_id() );
