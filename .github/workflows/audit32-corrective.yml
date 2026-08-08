@@ -30,6 +30,7 @@ jobs:
         run: |
           python3 tools/audit32/regexfix.py
           python3 tools/audit32/preflight.py
+          python3 tools/audit32/postpreflight.py
           python3 tools/audit32/apply.py
       - name: PHP syntax lint
         run: |
