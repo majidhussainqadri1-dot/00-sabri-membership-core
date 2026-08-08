@@ -61,5 +61,21 @@ swap('''replace_once(
     "\\t\\t$expired_sessions = $wpdb->get_results( \\\"SELECT id,user_id,token_hash FROM {$wpdb->prefix}smc_auth_sessions WHERE expires_at<UTC_TIMESTAMP() - INTERVAL 30 DAY OR revoked_at<UTC_TIMESTAMP() - INTERVAL 30 DAY LIMIT 500\\\", ARRAY_A );\\n\\t\\tforeach ( (array) $expired_sessions as $session ) {\\n\\t\\t\\tif ( SMC_Security::delete_session_token_envelope( (int) $session['user_id'], (string) $session['token_hash'] ) ) { $wpdb->delete( $wpdb->prefix . 'smc_auth_sessions', array( 'id' => (int) $session['id'] ), array( '%d' ) ); }\\n\\t\\t}\\n\\t\\t$session_users = array_values( array_unique( array_map( 'absint', array_column( (array) $expired_sessions, 'user_id' ) ) ) );\\n\\t\\tforeach ( $session_users as $session_user_id ) { $live = $wpdb->get_col( $wpdb->prepare( \\\"SELECT token_hash FROM {$wpdb->prefix}smc_auth_sessions WHERE user_id=%d AND revoked_at IS NULL AND expires_at>UTC_TIMESTAMP()\\\", $session_user_id ) ); SMC_Security::sweep_session_token_envelopes( $session_user_id, $live ); }",
 )''','session cleanup')
 
+# Both the shortcode and POST handler must stop treating `rejected` as editable/re-applicable.
+swap(
+    '''replace_once(workflow, "array( 'draft', 'more_information', 'rejected' )", "array( 'draft', 'more_information' )")''',
+    '''text = read(workflow)\nold_reapply = "array( 'draft', 'more_information', 'rejected' )"\nif text.count(old_reapply) != 2:\n    raise SystemExit(f"{workflow}: expected two rejected-reapply guards, found {text.count(old_reapply)}")\nwrite(workflow, text.replace(old_reapply, "array( 'draft', 'more_information' )"))''',
+    'rejected reapplication guards',
+)
+
+# The baseline already has a server-side `$existing_application` guard; after the two-status replacement above
+# it blocks rejected/suspended/appeal states. Remove the redundant, non-matching synthetic guard stanza.
+swap('''# Server-side submit guard against rejected/suspended/appeal bypass.
+replace_once(
+    workflow,
+    "\\t\\t$app = smc_application( $user_id );\\n\\t\\tif ( ! $app ) {",
+    "\\t\\t$app = smc_application( $user_id );\\n\\t\\tif ( $app && in_array( sanitize_key( $app['status'] ?? '' ), array( 'rejected','suspended','appeal_review' ), true ) ) { self::redirect( 'status', 'appeal_required' ); }\\n\\t\\tif ( ! $app ) {",
+)''','''# Server-side rejected/suspended/appeal bypass is blocked by the existing application-state guard above.''','redundant submit guard')
+
 path.write_text(text, encoding='utf-8', newline='\n')
 print('audit32 driver preflight adjusted')
