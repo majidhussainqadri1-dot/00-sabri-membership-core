@@ -1017,7 +1017,7 @@ final class SMC_Advanced_Trust_2026 {
 	public static function trust_timeline( $user_id, $limit = 50 ) {
 		$user_id = absint( $user_id ); $limit = max( 1, min( 100, absint( $limit ) ) );
 		$current = function_exists( 'get_current_user_id' ) ? absint( get_current_user_id() ) : 0;
-		if ( $current <= 0 || ( $current !== $user_id && ! current_user_can( 'smc_manage_membership' ) ) ) { return array(); }
+		if ( $current <= 0 || ( $current !== $user_id && ! self::trust_timeline_cross_subject_authorized( $current, $user_id ) ) ) { return array(); }
 		if ( ! class_exists( 'SMC_Security' ) ) { return array(); }
 		$subject_hash = SMC_Security::subject_hash( $user_id ); if ( '' === $subject_hash ) { return array(); }
 		global $wpdb; if ( ! isset( $wpdb ) || ! is_object( $wpdb ) ) { return array(); }
@@ -1137,6 +1137,17 @@ final class SMC_Advanced_Trust_2026 {
 		return 'file00' === sanitize_key( $claim['owner'] ?? '' ) && '1.0.0' === (string) ( $claim['contract_version'] ?? '' ) && ! empty( $claim['authorized'] )
 			&& '' !== $source && hash_equals( $source, sanitize_key( $claim['source'] ?? '' ) )
 			&& hash_equals( self::subject_reference( $user_id ), (string) ( $claim['subject'] ?? '' ) )
+			&& $asserted_at > 0 && $asserted_at <= time() + 60 && $asserted_at >= time() - 60;
+	}
+
+	private static function trust_timeline_cross_subject_authorized( $actor_id, $subject_user_id ) {
+		$actor_id = absint( $actor_id ); $subject_user_id = absint( $subject_user_id );
+		if ( $actor_id <= 0 || $subject_user_id <= 0 || ! self::actor_is_current( $actor_id, 'smc_manage_membership' ) || ! SMC_Security::session_is_verified( $actor_id ) ) { return false; }
+		$claim = apply_filters( 'smc_trust_timeline_access_v1', null, $actor_id, $subject_user_id );
+		if ( ! is_array( $claim ) ) { return false; }
+		$asserted_at = absint( $claim['asserted_at'] ?? 0 ); $purpose = sanitize_key( $claim['purpose'] ?? '' );
+		return 'file00' === sanitize_key( $claim['owner'] ?? '' ) && '1.0.0' === (string) ( $claim['contract_version'] ?? '' ) && ! empty( $claim['authorized'] ) && '' !== $purpose
+			&& hash_equals( self::subject_reference( $actor_id ), (string) ( $claim['actor_subject'] ?? '' ) ) && hash_equals( self::subject_reference( $subject_user_id ), (string) ( $claim['subject'] ?? '' ) )
 			&& $asserted_at > 0 && $asserted_at <= time() + 60 && $asserted_at >= time() - 60;
 	}
 
