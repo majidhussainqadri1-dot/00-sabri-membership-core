@@ -56,15 +56,15 @@ final class SMC_Authorization {
 	}
 
 	private static function restricted_capabilities() {
-		$caps = (array) apply_filters( 'smc_restricted_capabilities', self::$restricted_caps );
+		$filtered = (array) apply_filters( 'smc_restricted_capabilities', self::$restricted_caps );
+		$caps = array_merge( self::$restricted_caps, $filtered );
 		return array_values( array_unique( array_filter( array_map( 'sanitize_key', $caps ) ) ) );
 	}
 
 	public static function hard_block_statuses() {
-		return (array) apply_filters(
-			'smc_hard_block_statuses',
-			array( 'rejected', 'suspended', 'expired', 'appeal_review', 'erasure_pending', 'invalid_application' )
-		);
+		$baseline = array( 'rejected', 'suspended', 'expired', 'appeal_review', 'erasure_pending', 'invalid_application' );
+		$filtered = (array) apply_filters( 'smc_hard_block_statuses', $baseline );
+		return array_values( array_unique( array_filter( array_map( 'sanitize_key', array_merge( $baseline, $filtered ) ) ) ) );
 	}
 
 	public static function is_hard_blocked( $user_id ) {

@@ -539,8 +539,9 @@ final class SMC_Security {
 	}
 
 	public static function serve_document() {
-		if ( ! current_user_can( 'smc_view_private_documents' ) && ! current_user_can( 'manage_options' ) ) {
-			wp_die( esc_html__( 'Not authorized.', 'sabri-membership-core' ), '', array( 'response' => 403 ) );
+		$user_id = get_current_user_id();
+		if ( ( ! current_user_can( 'smc_view_private_documents' ) && ! current_user_can( 'manage_options' ) ) || ! self::session_is_verified( $user_id ) ) {
+			wp_die( esc_html__( 'A current two-factor session and private-document capability are required.', 'sabri-membership-core' ), '', array( 'response' => 403 ) );
 		}
 		$id = isset( $_GET['document_id'] ) ? absint( $_GET['document_id'] ) : 0;
 		check_admin_referer( 'smc_document_' . $id );

@@ -21,7 +21,7 @@ const js = read('source/sabri-membership-core/assets/membership.js');
 const css = read('source/sabri-membership-core/assets/membership.css');
 const registry = JSON.parse(read('qa/requirements-traceability.json'));
 
-assert(plugin.includes('Version: 1.2.14') && plugin.includes("define( 'SMC_VERSION', '1.2.14' )"), 'Runtime version 1.2.14');
+assert(plugin.includes('Version: 1.2.15') && plugin.includes("define( 'SMC_VERSION', '1.2.15' )"), 'Runtime version 1.2.15');
 assert(plugin.includes("define( 'SMC_DB_VERSION', '1.3.0' )"), 'Schema version 1.3.0');
 assert(plugin.includes("require_once SMC_PATH . 'includes/class-smc-events.php'") && plugin.includes("require_once SMC_PATH . 'includes/class-smc-completion.php'"), 'Completion and events services load');
 assert(plugin.includes('SMC_Events::init()') && plugin.includes('SMC_Completion::init()'), 'Completion and events services initialize');

@@ -14,8 +14,8 @@ function assert(condition, name) {
   else failures.push(name);
 }
 
-assert(main.includes('Version: 1.2.14'), 'Plugin header is 1.2.14');
-assert(main.includes("define( 'SMC_VERSION', '1.2.14' )"), 'Runtime version is 1.2.14');
+assert(main.includes('Version: 1.2.15'), 'Plugin header is 1.2.15');
+assert(main.includes("define( 'SMC_VERSION', '1.2.15' )"), 'Runtime version is 1.2.15');
 assert(main.includes("define( 'SMC_DB_VERSION', '1.3.0' )"), 'Database version is 1.3.0');
 assert(main.includes("define( 'SMC_CONTRACT_VERSION', '1.2.0' )"), 'Contract version is 1.2.0');
 assert(main.includes("SMC_Lifecycle::repair_institutional_accounts()"), 'Release path invokes bounded institutional repair');
@@ -35,7 +35,7 @@ assert(lifecycle.includes("if ( self::is_institutional_user( $user_id ) )"), 'In
 assert(lifecycle.includes("self::restrict( $app, self::AUTOMATED_AGE_REASON )"), 'Ordinary accounts remain subject to age enforcement');
 assert(lifecycle.includes("WHERE id=%d AND row_version=%d AND status='suspended'"), 'Repair uses optimistic and state-specific update');
 assert(lifecycle.includes("$restored_status = in_array( $request_status, $restorable, true ) ? $request_status : 'draft'"), 'Repair restores only allowlisted non-disciplinary state');
-assert(readme.includes('Stable tag: 1.2.14'), 'WordPress readme stable tag is 1.2.14');
+assert(readme.includes('Stable tag: 1.2.15'), 'WordPress readme stable tag is 1.2.15');
 
 if (failures.length) {
   console.error(`institutional lifecycle contract: ${passed} PASS, ${failures.length} FAIL`);
