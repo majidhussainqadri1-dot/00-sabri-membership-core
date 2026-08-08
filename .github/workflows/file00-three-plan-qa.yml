@@ -40,7 +40,7 @@ jobs:
           mapfile -t flows < <(find .github/workflows -maxdepth 1 -type f -printf '%f\n' | sort)
           expected=(cf01-contract.yml file00-three-plan-qa.yml)
           test "${flows[*]}" = "${expected[*]}"
-          ! grep -R --line-number --include='*.yml' --include='*.yaml' 'contents: write' .github/workflows
+          ! grep -RInE --include='*.yml' --include='*.yaml' '^[[:space:]]*contents:[[:space:]]+write[[:space:]]*$' .github/workflows
       - run: npm ci --ignore-scripts
       - run: npm run verify
       - name: Exact sixth-fresh review and governing traceability
@@ -91,7 +91,7 @@ jobs:
           PY
           grep -Fq '#087A4E' source/sabri-membership-core/assets/membership.css
           test "$(find .github/workflows -maxdepth 1 -type f | wc -l)" -eq 2
-          ! grep -RInE '^\s*contents:\s*write\s*$' .github/workflows
+          ! grep -RInE '^[[:space:]]*contents:[[:space:]]+write[[:space:]]*$' .github/workflows
           test ! -e .github/workflows/apply-fresh-ten-review.yml
           test ! -e .github/workflows/file00-sixth-review-one-shot.yml
           test -z "$(find tools -maxdepth 1 -type f -name 'file00_sixth_review_*' -print)"
