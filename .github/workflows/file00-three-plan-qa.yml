@@ -49,17 +49,17 @@ jobs:
           test -f dist/00-sabri-membership-core-1.2.18.zip
           test -z "$(git ls-files 'dist/*')"
           grep -Fq 'Runtime implementation release: `1.2.18`' docs/FILE-00-MASTER-PLAN-2026.md
-          grep -Fq 'Total: **9 unique defects; corrected 9/9**.' docs/FILE-00-FIFTH-FRESH-TEN-ROUND-REVIEW-1.2.18.md
+          grep -Fq 'Total: **10 unique defects; corrected 10/10**.' docs/FILE-00-FIFTH-FRESH-TEN-ROUND-REVIEW-1.2.18.md
           test -f docs/FILE-00-FOURTH-FRESH-TEN-ROUND-REVIEW-1.2.17.md
           python3 - <<'PY'
           import json
           d=json.load(open('qa/fifth-fresh-ten-review-traceability.json'))
           assert d['release']=='1.2.18'
           assert d['review_complete'] is True
-          assert d['rounds_with_defects']==[1,2,3,4,5,6,7,8,9]
-          assert d['rounds_without_defects']==[10]
-          assert d['defects_found_total']==9 and d['defects_corrected_total']==9
-          assert d['severity']=={'critical':1,'high':4,'medium':4,'low':0}
+          assert d['rounds_with_defects']==[1,2,3,4,5,6,7,8,9,10]
+          assert d['rounds_without_defects']==[]
+          assert d['defects_found_total']==10 and d['defects_corrected_total']==10
+          assert d['severity']=={'critical':1,'high':4,'medium':5,'low':0}
           assert d['known_unresolved_repository_defects']==0
           assert d['guardrails']['self_mutating_ci'] is False
           assert d['guardrails']['fifth_fresh_regressions_permanent'] is True
@@ -76,6 +76,7 @@ jobs:
           test ! -e tools/fifth-fresh-payload.part3
           test ! -e .github/workflows/apply-fifth-fresh-ten-review.yml
           test ! -e .github/workflows/apply-fifth-round9-fix.yml
+          test ! -e .github/workflows/apply-fifth-round10-fix.yml
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: 00-sabri-membership-core-1.2.18-${{ github.sha }}
