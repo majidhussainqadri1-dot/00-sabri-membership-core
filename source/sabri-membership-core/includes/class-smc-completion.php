@@ -25,7 +25,9 @@ final class SMC_Completion {
 
 	public static function safe_mode() {
 		$constant = defined( 'SMC_SAFE_MODE' ) && SMC_SAFE_MODE;
-		return (bool) apply_filters( 'smc_safe_mode', $constant || (bool) get_option( 'smc_safe_mode', false ) );
+		$declared = $constant || (bool) get_option( 'smc_safe_mode', false );
+		$filtered = (bool) apply_filters( 'smc_safe_mode', $declared );
+		return $declared || $filtered;
 	}
 
 	public static function enforce_safe_mode() {
