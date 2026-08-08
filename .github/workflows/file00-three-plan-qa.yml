@@ -1,4 +1,4 @@
-name: File 00 1.2.17 Fourth-Fresh-Ten-Review QA
+name: File 00 1.2.18 Fifth-Fresh-Ten-Review QA
 
 on:
   pull_request:
@@ -35,52 +35,61 @@ jobs:
           tools: none
       - run: npm ci --ignore-scripts
       - run: npm run verify
-      - name: Exact fourth-fresh review and governing traceability
+      - name: Exact fifth-fresh review and governing traceability
         run: |
           set -euo pipefail
-          grep -Fq 'Version: 1.2.17' source/sabri-membership-core/sabri-membership-core.php
-          grep -Fq '"version": "1.2.17"' package.json
-          test "$(node -p "require('./package-lock.json').version")" = '1.2.17'
-          test "$(node -p "require('./package-lock.json').packages[''].version")" = '1.2.17'
+          grep -Fq 'Version: 1.2.18' source/sabri-membership-core/sabri-membership-core.php
+          grep -Fq '"version": "1.2.18"' package.json
+          test "$(node -p "require('./package-lock.json').version")" = '1.2.18'
+          test "$(node -p "require('./package-lock.json').packages[''].version")" = '1.2.18'
           grep -Fq "define( 'SMC_CONTRACT_VERSION', '1.2.0' )" source/sabri-membership-core/sabri-membership-core.php
           grep -Fq "define( 'SMC_ADVANCED_TRUST_CONTRACT_VERSION', '1.0.0' )" source/sabri-membership-core/sabri-membership-core.php
-          node qa/fourth-fresh-review-contract.mjs
-          test -f dist/00-sabri-membership-core-1.2.17.zip
+          node qa/fifth-fresh-review-contract.mjs
+          php qa/fifth-fresh-review-runtime.php
+          test -f dist/00-sabri-membership-core-1.2.18.zip
           test -z "$(git ls-files 'dist/*')"
-          grep -Fq 'Runtime implementation release: `1.2.17`' docs/FILE-00-MASTER-PLAN-2026.md
-          grep -Fq 'Total: **8 unique defects; corrected 8/8**.' docs/FILE-00-FOURTH-FRESH-TEN-ROUND-REVIEW-1.2.17.md
-          test -f docs/FILE-00-THIRD-FRESH-TEN-ROUND-REVIEW-1.2.16.md
+          grep -Fq 'Runtime implementation release: `1.2.18`' docs/FILE-00-MASTER-PLAN-2026.md
+          grep -Fq 'Total: **10 unique defects; corrected 10/10**.' docs/FILE-00-FIFTH-FRESH-TEN-ROUND-REVIEW-1.2.18.md
+          test -f docs/FILE-00-FOURTH-FRESH-TEN-ROUND-REVIEW-1.2.17.md
           python3 - <<'PY'
           import json
-          d=json.load(open('qa/fourth-fresh-ten-review-traceability.json'))
-          assert d['release']=='1.2.17'
+          d=json.load(open('qa/fifth-fresh-ten-review-traceability.json'))
+          assert d['release']=='1.2.18'
           assert d['review_complete'] is True
-          assert d['rounds_with_defects']==[1,2,3,4,5,9,10]
-          assert d['rounds_without_defects']==[6,7,8]
-          assert d['defects_found_total']==8 and d['defects_corrected_total']==8
-          assert d['severity']=={'critical':1,'high':3,'medium':4,'low':0}
+          assert d['rounds_with_defects']==[1,2,3,4,5,6,7,8,9,10]
+          assert d['rounds_without_defects']==[]
+          assert d['defects_found_total']==10 and d['defects_corrected_total']==10
+          assert d['severity']=={'critical':1,'high':4,'medium':5,'low':0}
           assert d['known_unresolved_repository_defects']==0
           assert d['guardrails']['self_mutating_ci'] is False
-          assert d['guardrails']['fourth_fresh_regressions_permanent'] is True
+          assert d['guardrails']['fifth_fresh_regressions_permanent'] is True
           assert d['guardrails']['lockfile_matches_runtime'] is True
           assert d['external_status']=={'staging_accepted':False,'live_deployed':False,'operational':False}
           PY
           grep -Fq '#087A4E' source/sabri-membership-core/assets/membership.css
           ! grep -RInE '^\s*contents:\s*write\s*$' .github/workflows
-          test ! -e tools/apply-fourth-fresh-ten-review.py
-          test ! -e tools/fix-fourth-static.py
-          test ! -e .github/workflows/apply-fourth-fresh-ten-review.yml
+          test ! -e tools/apply-fifth-fresh-ten-review.py
+          test ! -e tools/apply-fifth-fresh-ten-review.py.gz.b64
+          test ! -e tools/fifth-fresh-payload.part0
+          test ! -e tools/fifth-fresh-payload.part1
+          test ! -e tools/fifth-fresh-payload.part2
+          test ! -e tools/fifth-fresh-payload.part3
+          test ! -e .github/workflows/apply-fifth-fresh-ten-review.yml
+          test ! -e .github/workflows/apply-fifth-round9-fix.yml
+          test ! -e .github/workflows/apply-fifth-round10-fix.yml
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: 00-sabri-membership-core-1.2.17-${{ github.sha }}
+          name: 00-sabri-membership-core-1.2.18-${{ github.sha }}
           path: |
-            dist/00-sabri-membership-core-1.2.17.zip
+            dist/00-sabri-membership-core-1.2.18.zip
             dist/CHECKSUMS.sha256
-            docs/RELEASE-1.2.17-FOURTH-FRESH-TEN-REVIEW.md
+            docs/RELEASE-1.2.18-FIFTH-FRESH-TEN-REVIEW.md
+            docs/FILE-00-FIFTH-FRESH-TEN-ROUND-REVIEW-1.2.18.md
             docs/FILE-00-FOURTH-FRESH-TEN-ROUND-REVIEW-1.2.17.md
             docs/FILE-00-THIRD-FRESH-TEN-ROUND-REVIEW-1.2.16.md
             docs/FILE-00-SECOND-FRESH-TEN-ROUND-REVIEW-1.2.15.md
             docs/FILE-00-LATEST-CENTRAL-TRACEABILITY-1.2.12.md
+            qa/fifth-fresh-ten-review-traceability.json
             qa/fourth-fresh-ten-review-traceability.json
             qa/third-fresh-ten-review-traceability.json
             qa/second-fresh-ten-review-traceability.json
