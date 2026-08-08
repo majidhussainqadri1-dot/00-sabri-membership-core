@@ -19,6 +19,7 @@ current_replacements=[
     ('Version: 1.2.18','Version: 1.2.19'),
     ("SMC_VERSION', '1.2.18","SMC_VERSION', '1.2.19"),
     ('Stable tag: 1.2.18','Stable tag: 1.2.19'),
+    ('Runtime implementation release: `1.2.18`','Runtime implementation release: `1.2.19`'),
     ("pkg.version==='1.2.18'","pkg.version==='1.2.19'"),
     ("pkg.version === '1.2.18'","pkg.version === '1.2.19'"),
     ("lock.version==='1.2.18'","lock.version==='1.2.19'"),
