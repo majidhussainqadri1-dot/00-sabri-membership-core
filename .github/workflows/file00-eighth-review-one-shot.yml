@@ -32,4 +32,18 @@ jobs:
           git config user.name "File 00 Review Bot"
           git config user.email "actions@users.noreply.github.com"
       - name: Apply ten independent review-fix-retest rounds
-        run: python3 tools/file00_eighth_review_bootstrap.py
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import base64, pathlib, re, zlib
+          wrapper=pathlib.Path('tools/file00_eighth_review_bootstrap.py').read_text(encoding='utf-8')
+          m=re.search(r"b64decode\('([^']+)'\)",wrapper)
+          if not m: raise SystemExit('embedded review payload not found')
+          code=zlib.decompress(base64.b64decode(m.group(1))).decode('utf-8')
+          start=code.find('# R6 — retry overdue audit/revocation propagation even when hold is already present.')
+          end=code.find('# R7 — Founder/Admin authority never bypasses operational state; service-identity change uses adaptive step-up.')
+          if start < 0 or end <= start: raise SystemExit('round-six applicator section not found')
+          corrected='''# R6 — retry overdue audit/revocation propagation even when hold is already present.\nold="""\\t\\t\\t$status = self::reverification_status( $user_id );\\n\\t\\t\\tif ( ! empty( $status['overdue'] ) && ! get_user_meta( $user_id, '_smc_reverification_required', true ) ) {\\n\\t\\t\\t\\tif ( ! self::write_user_meta_verified( $user_id, '_smc_reverification_required', 1 )\\n\\t\\t\\t\\t\\t|| ! SMC_Security::audit( 'membership_reverification_overdue', $user_id, array( 'due_at' => absint( $status['due_at'] ?? 0 ) ) )\\n\\t\\t\\t\\t\\t|| false === self::bump_revocation_epoch( $user_id, 'membership_reverification_overdue' ) ) {\\n\\t\\t\\t\\t\\tself::write_option_verified( self::REVERIFY_CURSOR_OPTION, $cursor );\\n\\t\\t\\t\\t\\treturn;\\n\\t\\t\\t\\t}\\n\\t\\t\\t}\\n"""\nnew="""\\t\\t\\t$status = self::reverification_status( $user_id );\\n\\t\\t\\tif ( ! empty( $status['overdue'] ) ) {\\n\\t\\t\\t\\t$due_at = absint( $status['due_at'] ?? 0 );\\n\\t\\t\\t\\t$propagated_due_at = absint( get_user_meta( $user_id, '_smc_reverification_overdue_propagated_due_at', true ) );\\n\\t\\t\\t\\tif ( ! get_user_meta( $user_id, '_smc_reverification_required', true ) && ! self::write_user_meta_verified( $user_id, '_smc_reverification_required', 1 ) ) { self::write_option_verified( self::REVERIFY_CURSOR_OPTION, $cursor ); return; }\\n\\t\\t\\t\\tif ( $due_at > 0 && $propagated_due_at < $due_at ) {\\n\\t\\t\\t\\t\\tif ( ! SMC_Security::audit( 'membership_reverification_overdue', $user_id, array( 'due_at' => $due_at ) ) || false === self::bump_revocation_epoch( $user_id, 'membership_reverification_overdue' ) || ! self::write_user_meta_verified( $user_id, '_smc_reverification_overdue_propagated_due_at', $due_at ) ) { self::write_option_verified( self::REVERIFY_CURSOR_OPTION, $cursor ); return; }\\n\\t\\t\\t\\t}\\n\\t\\t\\t}\\n"""\nrepl(A,old,new)\nlint(A); assert_text(A,present=("_smc_reverification_overdue_propagated_due_at","$propagated_due_at < $due_at"))\ncommit('Review 6: make overdue reverification propagation retryable',[str(A.relative_to(ROOT))])\n\n'''
+          code=code[:start]+corrected+code[end:]
+          exec(compile(code,'file00_eighth_review_apply.py','exec'),{'__name__':'__main__'})
+          PY
