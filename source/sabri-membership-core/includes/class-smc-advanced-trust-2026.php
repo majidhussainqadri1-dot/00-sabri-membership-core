@@ -841,6 +841,8 @@ final class SMC_Advanced_Trust_2026 {
 		$principal_user_id = absint( $principal_user_id );
 		$scope = sanitize_key( $scope );
 		if ( $principal_user_id <= 0 || ! self::protected_actions_allowed( $principal_user_id ) ) { return false; }
+		$membership = class_exists( 'SMC_Contracts' ) ? SMC_Contracts::assertions( $principal_user_id ) : array();
+		if ( empty( $membership['approved'] ) || ! empty( $membership['suspended'] ) || empty( $membership['eligible'] ) ) { return false; }
 		foreach ( self::delegated_authorities( $principal_user_id ) as $grant ) {
 			if ( in_array( $scope, (array) ( $grant['scopes'] ?? array() ), true ) ) { return true; }
 		}
@@ -862,7 +864,8 @@ final class SMC_Advanced_Trust_2026 {
 			'opened_by' => $actor_id, 'opened_at' => time(), 'expires_at' => time() + self::BREAK_GLASS_TTL,
 			'approvals' => array( $actor_id ), 'approval_times' => array( (string) $actor_id => time() ), 'consumed_at' => 0,
 		);
-		$all = (array) get_option( self::BREAK_GLASS_OPTION, array() );
+		$all = self::prune_break_glass_requests( (array) get_option( self::BREAK_GLASS_OPTION, array() ) );
+		if ( count( $all ) >= 200 ) { self::release_break_glass_lock( $lock ); return new WP_Error( 'smc_break_glass_capacity', __( 'Emergency governance request capacity is temporarily exhausted.', 'sabri-membership-core' ) ); }
 		$all[ $request['id'] ] = $request;
 		$stored = self::write_option_verified( self::BREAK_GLASS_OPTION, $all );
 		if ( $stored && ! SMC_Security::audit( 'break_glass_opened', $subject_user_id, array( 'request_id' => $request['id'], 'purpose' => $request['purpose'] ) ) ) {
@@ -877,7 +880,7 @@ final class SMC_Advanced_Trust_2026 {
 		if ( ! self::actor_meets_step_up( $approver_id, 'break_glass', 'manage_options', true ) ) { return false; }
 		$lock = self::acquire_break_glass_lock();
 		if ( false === $lock ) { return false; }
-		$all = (array) get_option( self::BREAK_GLASS_OPTION, array() );
+		$all = self::prune_break_glass_requests( (array) get_option( self::BREAK_GLASS_OPTION, array() ) );
 		$request = $all[ $request_id ] ?? null;
 		if ( ! is_array( $request ) || absint( $request['expires_at'] ?? 0 ) <= time() || ! empty( $request['consumed_at'] ) || in_array( $approver_id, (array) ( $request['approvals'] ?? array() ), true ) ) {
 			self::release_break_glass_lock( $lock ); return false;
@@ -900,16 +903,23 @@ final class SMC_Advanced_Trust_2026 {
 		if ( ! self::actor_meets_step_up( $actor_id, 'break_glass', 'manage_options', true ) ) { return false; }
 		$lock = self::acquire_break_glass_lock();
 		if ( false === $lock ) { return false; }
-		$all = (array) get_option( self::BREAK_GLASS_OPTION, array() );
+		$all = self::prune_break_glass_requests( (array) get_option( self::BREAK_GLASS_OPTION, array() ) );
 		$request = $all[ $request_id ] ?? null;
 		if ( ! is_array( $request ) || absint( $request['expires_at'] ?? 0 ) <= time() || ! empty( $request['consumed_at'] ) || count( array_unique( (array) ( $request['approvals'] ?? array() ) ) ) < 2 || ! in_array( $actor_id, (array) $request['approvals'], true ) || ! self::break_glass_approvals_current( $request ) ) {
 			self::release_break_glass_lock( $lock ); return false;
 		}
+		$before = $request;
 		$request['consumed_at'] = time(); $request['consumed_by'] = $actor_id; $all[ $request_id ] = $request;
 		$stored = self::write_option_verified( self::BREAK_GLASS_OPTION, $all );
-		$audit = $stored && SMC_Security::audit( 'break_glass_consumed', absint( $request['subject_user_id'] ), array( 'request_id' => $request_id ) );
+		if ( ! $stored ) { self::release_break_glass_lock( $lock ); return false; }
+		$audit = SMC_Security::audit( 'break_glass_consumed', absint( $request['subject_user_id'] ), array( 'request_id' => $request_id ) );
+		if ( ! $audit ) {
+			$all[ $request_id ] = $before;
+			self::write_option_verified( self::BREAK_GLASS_OPTION, $all );
+			self::release_break_glass_lock( $lock );
+			return false;
+		}
 		self::release_break_glass_lock( $lock );
-		if ( ! $stored || ! $audit ) { return false; }
 		return array( 'authorized' => true, 'request_id' => $request_id, 'subject' => self::subject_reference( absint( $request['subject_user_id'] ) ), 'purpose' => sanitize_text_field( $request['purpose'] ?? '' ), 'expires_at' => min( absint( $request['expires_at'] ), time() + 300 ) );
 	}
 
@@ -1045,7 +1055,13 @@ final class SMC_Advanced_Trust_2026 {
 		$actor_id = absint( $actor_id );
 		if ( $actor_id <= 0 ) { return false; }
 		if ( function_exists( 'get_current_user_id' ) && get_current_user_id() > 0 && get_current_user_id() !== $actor_id ) { return false; }
-		if ( $founder_or_admin && function_exists( 'smc_is_founder' ) && smc_is_founder( $actor_id ) ) { return true; }
+		$is_founder = function_exists( 'smc_is_founder' ) && smc_is_founder( $actor_id );
+		$is_admin = current_user_can( 'manage_options' );
+		if ( $founder_or_admin && ( $is_founder || $is_admin ) ) { return true; }
+		if ( ! $is_founder && ! $is_admin && class_exists( 'SMC_Contracts' ) ) {
+			$membership = SMC_Contracts::assertions( $actor_id );
+			if ( empty( $membership['approved'] ) || ! empty( $membership['suspended'] ) || empty( $membership['eligible'] ) || ! self::protected_actions_allowed( $actor_id ) ) { return false; }
+		}
 		return '' === $capability || current_user_can( $capability );
 	}
 
@@ -1074,6 +1090,18 @@ final class SMC_Advanced_Trust_2026 {
 		if ( function_exists( 'smc_is_founder' ) && smc_is_founder( $grantor_user_id ) ) { return true; }
 		$user = get_userdata( $grantor_user_id );
 		return $user && user_can( $user, 'smc_manage_membership' );
+	}
+
+	private static function prune_break_glass_requests( $all ) {
+		$all = is_array( $all ) ? $all : array();
+		$now = time();
+		foreach ( $all as $request_id => $request ) {
+			if ( ! is_array( $request ) ) { unset( $all[ $request_id ] ); continue; }
+			$expired_at = absint( $request['expires_at'] ?? 0 );
+			$consumed_at = absint( $request['consumed_at'] ?? 0 );
+			if ( ( $consumed_at > 0 && $consumed_at < $now - DAY_IN_SECONDS ) || ( $consumed_at <= 0 && $expired_at > 0 && $expired_at < $now - DAY_IN_SECONDS ) ) { unset( $all[ $request_id ] ); }
+		}
+		return $all;
 	}
 
 	private static function break_glass_approver_current( $approver_id ) {

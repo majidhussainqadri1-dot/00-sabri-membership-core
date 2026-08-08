@@ -1,0 +1,39 @@
+{
+  "release": "1.2.19",
+  "series": "sixth-fresh-ten-round",
+  "review_complete": true,
+  "rounds": 10,
+  "defect_rounds": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10
+  ],
+  "clean_rounds": [],
+  "defect_count": 10,
+  "defects_corrected_total": 10,
+  "known_unresolved_repository_defects": 0,
+  "severity": {
+    "critical": 1,
+    "high": 5,
+    "medium": 3,
+    "low": 1
+  },
+  "guardrails": {
+    "temporary_mutators_removed_at_final_head": true,
+    "staging_contract_permanent": true,
+    "sixth_runtime_regressions_permanent": true
+  },
+  "external_status": {
+    "staging_accepted": false,
+    "live_deployed": false,
+    "operational": false
+  },
+  "file02_current_plan_blocker": true
+}
