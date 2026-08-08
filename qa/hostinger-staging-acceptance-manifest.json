@@ -1,0 +1,203 @@
+{
+  "file": "00",
+  "release": "1.2.21",
+  "baseline_main_sha": "3a84c32a6ddad151f2ed09d244fa8aa536a58108",
+  "database_schema": "1.3.0",
+  "public_membership_contract": "1.2.0",
+  "advanced_trust_contract": "1.0.0",
+  "plugin_zip_sha256": "f0361f45583b2f23db252d3a5eb2b6b95e08499555af256d5902f32db3d8435c",
+  "exact_main_artifact": {
+    "id": 9020924990,
+    "wrapper_sha256": "aa4bc3b845506685fa39ed705053d82b3fe774f5fb0fe7a16f838770374fbf6d",
+    "role": "historical main baseline only; not the current candidate artifact"
+  },
+  "candidate_matrix": {
+    "file00": {
+      "ref": "codex/file00-eighth-fresh-ten-review-1.2.21",
+      "sha": "c0d04a67fb2c24319d34defc23d534e0546445e0",
+      "version": "1.2.21",
+      "required": true,
+      "sha_role": "immutable 1.2.20 exact-head baseline; eighth-review final head is external CI/PR evidence",
+      "package_sha256": "f0361f45583b2f23db252d3a5eb2b6b95e08499555af256d5902f32db3d8435c",
+      "package_identity_state": "deterministic_local_and_ci_rebuilt"
+    },
+    "file01": {
+      "ref": "pull/3",
+      "sha": "ad34ecf316261666769d33a8ce3acac9c019ab73",
+      "version": "2.0.0",
+      "required": true,
+      "main_is_current_candidate": false
+    },
+    "file02": {
+      "ref": "pull/7",
+      "sha": "c895ec17c631e6a28c86aa659bf947f9d326dc4d",
+      "version": "1.2.0",
+      "required": true,
+      "main_is_current_candidate": false,
+      "governing_plan_version": "2.3",
+      "governing_target_runtime": "1.3.2",
+      "staging_usable_for_final_integrated_acceptance": false,
+      "blocker": "Latest approved File 02 v2.3 is locally reviewed at runtime 1.3.2 with Authentication Assurance v2 contract 2.0.0, but GitHub PR #7 remains runtime 1.2.0. Do not assert final integrated staging acceptance until the v2.3/1.3.2 source is synchronized and exact-head CI/package evidence is pinned.",
+      "governing_authentication_assurance_v2_contract": "2.0.0",
+      "current_reviewed_local_package_sha256": "fe995c75e017909d15a118cb04b8c6570a7138406183119025add699178016a1",
+      "current_reviewed_local_evidence_only": true,
+      "current_plan_github_exact_head_synced": false
+    },
+    "file03": {
+      "ref": "main",
+      "sha": "0db6161b7f8906e65387f1db9bb4fc6f215d00ef",
+      "version": "1.0.0-rc3",
+      "required": true
+    },
+    "file09": {
+      "ref": "pull/6",
+      "sha": "f58b04f4282c1f907a9cf3043d2f9394fbccd640",
+      "version": "1.2.0-rc3",
+      "required": true,
+      "main_is_current_candidate": false
+    },
+    "file17": {
+      "ref": "main",
+      "sha": "c4bb3d399b309d6f7f4f77f8bb376df25ccad558",
+      "version": "2.0.3",
+      "required": true
+    },
+    "file19": {
+      "ref": "main",
+      "sha": "5cb83d399f35ae1636415fb83373b6ba282e3685",
+      "version": "3.0.0",
+      "required": true
+    },
+    "file20": {
+      "ref": "main",
+      "sha": "178606ed1599c88dce7ef45cb69e2e90081cd519",
+      "version": "1.4.3",
+      "required": true
+    },
+    "file21": {
+      "ref": "main",
+      "sha": "ac83c987ab39d599ec4f5f092f1a1dedcaeaa1ee",
+      "package_version": "1.0.5",
+      "runtime_version": "1.0.3",
+      "schema_version": "1.0.0",
+      "required": true
+    },
+    "file22": {
+      "ref": "pull/24",
+      "sha": "ce3dc881395cf22e5b33a538cbb7e104d1a51931",
+      "version": "1.0.0-rc.2",
+      "required": true,
+      "main_is_current_candidate": false
+    },
+    "file23": {
+      "ref": "main",
+      "sha": "a8a8c805f4730998ccb44bd95c87591836561759",
+      "version": "1.2.0",
+      "required": true
+    },
+    "file24": {
+      "ref": "main",
+      "sha": "3c5ea8ef342983630a7973274d3409c34409f86c",
+      "version": "0.99.0",
+      "schema_version": "0.25.5",
+      "required": true
+    },
+    "file25": {
+      "ref": "pull/1",
+      "sha": "64ccd17ca7c2055dd7f31365a91861b6aa28139c",
+      "version": "0.14.0",
+      "required": true,
+      "main_is_current_candidate": false
+    },
+    "file08": {
+      "ref": "pull/6",
+      "sha": "6e9367430bc8f1ad956d4fe32b6223ba4eeb7727",
+      "version": "1.0.1",
+      "required": true,
+      "source_ref_status": "pinned",
+      "package_identity_state": "exact_head_package_pinned",
+      "exact_head_ci_run": 31100693352,
+      "artifact_id": 8967334843,
+      "artifact_wrapper_sha256": "ab251525231fe09f0633374faabf5b4f3514035ac9ea62ae5cc645f83801fa56",
+      "package_sha256": "54f639530807f945d4198913c1ce7da900a098339310fd8b97e4a33b8d7bb6f3",
+      "artifact_expires_at": "2026-09-05T12:16:56Z"
+    },
+    "file12": {
+      "ref": "pull/2",
+      "sha": "1ddc48e0271c896f32dbaa6d53a41711c22031ed",
+      "version": "0.2.0",
+      "required": true,
+      "source_ref_status": "pinned",
+      "artifact_id": 8738191320,
+      "artifact_wrapper_sha256": "6eac003469a811ba7caa7cdabbc2ca6bd2e0e3fdaf2d43a17bac474ebdadae51",
+      "package_identity_state": "artifact_wrapper_pinned_inner_zip_pending"
+    },
+    "file18": {
+      "ref": "pull/3",
+      "sha": "c402d872fd00a0400b4718e47c02cb9d404bcd9d",
+      "version": "2.1.0",
+      "required": true,
+      "source_ref_status": "pinned",
+      "package_sha256": "17a9d7dc35137341fe14cfc84ac78987da74f9e4ee585e44bc0f673552b4b58f",
+      "package_identity_state": "exact_head_package_pinned",
+      "exact_head_ci_run": 31202785221,
+      "artifact_id": 9003493144,
+      "artifact_wrapper_sha256": "12017d3ea171462f0f8495b353ef8b19049f9545c9a2fa722bf9ae7bd900861c",
+      "artifact_expires_at": "2026-08-21T17:33:01Z"
+    }
+  },
+  "mandatory_unpinned_companions": [
+    "02-current-plan-1.3.2-exact-head"
+  ],
+  "candidate_pinning_status": "blocked_current_plan_file02_exact_head_missing",
+  "candidate_pinning_note": "Older exact source candidates remain useful compatibility baselines, but current-plan pinning is incomplete while File 02 v2.3/runtime 1.3.2 has no synchronized GitHub exact-head candidate. Pinned never means staging-accepted or mutually compatible.",
+  "gates": {
+    "environment_and_backup": "pending",
+    "fresh_install": "pending",
+    "upgrade_and_migration": "pending",
+    "file02_authentication_passkey": "pending",
+    "membership_guardian_identity": "pending",
+    "file19_notifications": "pending",
+    "file20_shell_file24_assurance": "pending",
+    "privacy_export_erasure_retention": "pending",
+    "security_adversarial": "pending",
+    "browser_accessibility_rtl_low_bandwidth": "pending",
+    "backup_restore_rollback": "pending",
+    "founder_acceptance": "pending"
+  },
+  "external_status": {
+    "staging_accepted": false,
+    "live_deployed": false,
+    "operational": false
+  },
+  "acceptance_rule": "Staging-Accepted may become true only after every mandatory real-environment gate is evidenced, all required companion candidates are pinned and compatible, zero known unresolved defects remain or an explicit time-bounded Founder risk acceptance exists, backup/restore and rollback rehearsal pass, and Founder acceptance is dated.",
+  "required_file00_plan_integrations": [
+    "02",
+    "03",
+    "08",
+    "09",
+    "12",
+    "17",
+    "18",
+    "19",
+    "20",
+    "21",
+    "22",
+    "23",
+    "24",
+    "25"
+  ],
+  "candidate_source_pinning_status": "partial_current_plan_file02_exact_head_missing",
+  "package_pinning_status": "partial_pending_file02_current_plan_and_file12_inner_package_receipts",
+  "preflight_status": "blocked_waiting_for_current_file02_1.3.2_exact_head_candidate_and_real_hostinger_evidence",
+  "release_review": "eighth_fresh_ten_round",
+  "prior_exact_candidate_artifact": {
+    "release": "1.2.19",
+    "head_sha": "c0d04a67fb2c24319d34defc23d534e0546445e0",
+    "id": 9022343881,
+    "wrapper_sha256": "014876db2b7a13671bf32de81841e5d3b7341de107c0ba96467f9e40f09949ab",
+    "plugin_zip_sha256": "8d79c0a1fc67d7b9f8600da52f7323811739a05c1c3793eacbcdea446214b616",
+    "role": "immutable sixth-review exact-head baseline before the seventh fresh review"
+  },
+  "staging_ledger_review": "eighth_fresh_review_complete_repository_scope"
+}

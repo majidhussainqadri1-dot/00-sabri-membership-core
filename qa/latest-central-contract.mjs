@@ -10,7 +10,7 @@ const latest = load('source/sabri-membership-core/includes/class-smc-latest-cent
 const css = load('source/sabri-membership-core/assets/membership.css');
 const doc = load('docs/FILE-00-LATEST-CENTRAL-TRACEABILITY-1.2.12.md');
 const checks = [
-  ['runtime 1.2.18', plugin.includes("define( 'SMC_VERSION', '1.2.18' );")],
+  ['runtime 1.2.18', plugin.includes("define( 'SMC_VERSION', '1.2.21' );")],
   ['latest central layer loaded', plugin.includes('class-smc-latest-central-2026.php') && plugin.includes('SMC_Latest_Central_2026::init()')],
   ['F00-CEN-01 single free tier', functions.includes("'single_free_tier'        => true") && functions.includes("'paid_unlocks_enabled'    => false") && functions.includes("'legacy_pricing_enabled'  => false")],
   ['F00-CEN-02 donor neutral', functions.includes("'donation_affects_rank'    => false") && functions.includes("'donation_affects_entitlement' => false") && functions.includes("'donation_affects_support'     => false")],

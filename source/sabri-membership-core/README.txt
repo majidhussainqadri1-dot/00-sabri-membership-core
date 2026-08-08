@@ -3,7 +3,7 @@ Contributors: sabrihomeopathy
 Tags: membership, identity, guardian consent, two-factor authentication, privacy
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 1.2.18
+Stable tag: 1.2.21
 License: GPL-2.0-or-later
 
 Canonical membership eligibility, identity assurance, guardian consent, security assertions, and verification governance for the Sabri Social Homeopathy Platform.
@@ -69,6 +69,19 @@ File 19 receives membership notices through its canonical sabri_notify integrati
 Local source and GitHub checks do not authorize production. Test fresh activation, 1.0.1 upgrade, MySQL advisory locks, concurrent reviewers, authorization matrices, filesystem denial and rollback, scanner providers, email/mobile/guardian delivery, File 02 Google sign-in and passkey assurance adapter, CF-01 provider/consumer contracts, all named cross-file integrations, advanced trust containment/revocation/selective-disclosure workflows, privacy erasure, restore, browser accessibility, and mobile layouts on Hostinger staging.
 
 == Changelog ==
+
+= 1.2.21 =
+* Eighth fresh ten-round corrective closure: explicit recovery allowlist; institutional state gates; assignment-scoped private profile access; typed system reverification; bounded reverification cadence and retryable overdue propagation; hardened service identities; privacy-minimal trust/merge outputs; break-glass corruption pruning; purpose-bound trust timeline access.
+
+= 1.2.20 =
+* Seventh fresh ten-round Review → Fix → Retest closure against the latest governing File 02 v2.3 / runtime 1.3.2 evidence.
+* Adds fail-closed Authentication Assurance Receipt v2 consumption while preserving v1 compatibility only when v2 is absent.
+* Propagates privacy-minimal UV/phishing-resistance/risk/binding provenance and binds high-risk step-up to phishing-resistant assurance.
+* Removes the duplicate local-MFA ceremony gate, bounds authentication-claim freshness to the source receipt, and hardens staging candidate truthfulness.
+* Hostinger staging, live deployment, and operational acceptance remain separate external evidence gates.
+
+= 1.2.19 =
+* Sixth fresh ten-round corrective review: staging ledger, exact-head pinning, dependency preflight, CI hardening, delegation/current-actor security, break-glass atomicity and bounded retention.
 
 = 1.2.18 =
 * Fifth completely fresh ten-round review: enforced the declared adaptive step-up policy on critical identity, guardian, merge, delegation and break-glass workflows; break-glass now requires current hardware-backed File 02 assurance and revalidates both privileged approvers at consumption.

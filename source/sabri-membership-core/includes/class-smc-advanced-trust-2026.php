@@ -75,8 +75,15 @@ final class SMC_Advanced_Trust_2026 {
 			'subject' => self::subject_reference( $user_id ),
 			'identity_assurance_level' => $identity_level,
 			'authentication_assurance_level' => (int) $auth['level'],
+			'authentication_contract_version' => (string) ( $auth['contract_version'] ?? '1.0.0' ),
 			'authentication_owner' => (string) $auth['owner'],
 			'authentication_method' => (string) $auth['method'],
+			'authentication_verified_at' => absint( $auth['verified_at'] ?? 0 ),
+			'authentication_risk' => sanitize_key( $auth['risk'] ?? 'unknown' ),
+			'user_verified' => ! empty( $auth['user_verified'] ),
+			'phishing_resistant' => ! empty( $auth['phishing_resistant'] ),
+			'session_bound' => ! empty( $auth['session_bound'] ),
+			'fingerprint_bound' => ! empty( $auth['fingerprint_bound'] ),
 			'hardware_backed' => ! empty( $auth['hardware_backed'] ),
 			'passkey_asserted' => ! empty( $auth['passkey_asserted'] ),
 			'membership_current' => $membership,
@@ -98,8 +105,15 @@ final class SMC_Advanced_Trust_2026 {
 			'subject' => '',
 			'identity_assurance_level' => 0,
 			'authentication_assurance_level' => 0,
+			'authentication_contract_version' => 'none',
 			'authentication_owner' => 'none',
 			'authentication_method' => 'none',
+			'authentication_verified_at' => 0,
+			'authentication_risk' => 'unknown',
+			'user_verified' => false,
+			'phishing_resistant' => false,
+			'session_bound' => false,
+			'fingerprint_bound' => false,
 			'hardware_backed' => false,
 			'passkey_asserted' => false,
 			'membership_current' => false,
@@ -119,46 +133,55 @@ final class SMC_Advanced_Trust_2026 {
 		$user_id = absint( $user_id );
 		$session_mfa = class_exists( 'SMC_Security' ) && SMC_Security::session_is_verified( $user_id );
 		$session_verified_at = $session_mfa && method_exists( 'SMC_Security', 'session_verified_at' ) ? absint( SMC_Security::session_verified_at( $user_id ) ) : 0;
-		if ( $session_mfa && $session_verified_at <= 0 ) {
-			$session_mfa = false;
-		}
+		if ( $session_mfa && $session_verified_at <= 0 ) { $session_mfa = false; }
 		$baseline = array(
-			'contract_version' => '1.0.0',
-			'owner' => 'file00',
-			'level' => $session_mfa ? 2 : 1,
+			'contract_version' => '1.0.0', 'owner' => 'file00', 'level' => $session_mfa ? 2 : 1,
 			'method' => $session_mfa ? 'file00_totp_or_recovery' : 'primary_authentication_unasserted',
-			'passkey_asserted' => false,
-			'hardware_backed' => false,
-			'verified_at' => $session_verified_at,
+			'passkey_asserted' => false, 'hardware_backed' => false, 'user_verified' => false,
+			'phishing_resistant' => false, 'risk' => 'unknown', 'session_bound' => false,
+			'fingerprint_bound' => false, 'verified_at' => $session_verified_at,
 		);
-		$claim = apply_filters( 'smc_file02_authentication_assurance_v1', $baseline, $user_id );
-		if ( ! is_array( $claim ) ) {
-			return $baseline;
+		$required_after = absint( get_user_meta( $user_id, '_smc_revalidation_required_at', true ) );
+		$v2 = apply_filters( 'smc_file02_authentication_assurance_v2', null, $user_id );
+		if ( is_array( $v2 ) ) {
+			$verified_at = absint( $v2['verified_at'] ?? 0 );
+			$level = max( (int) $baseline['level'], min( 4, absint( $v2['level'] ?? 0 ) ) );
+			$risk = sanitize_key( $v2['risk'] ?? 'unknown' );
+			if ( ! in_array( $risk, array( 'unknown', 'low', 'normal', 'elevated', 'high' ), true ) ) { $risk = 'unknown'; }
+			$owner_ok = 'file02' === sanitize_key( $v2['owner'] ?? '' );
+			$contract_ok = '2.0.0' === (string) ( $v2['contract_version'] ?? '' );
+			$fresh = $verified_at > 0 && $verified_at <= time() + 60 && $verified_at >= time() - 5 * MINUTE_IN_SECONDS;
+			$fresh_after_revalidation = 0 === $required_after || $verified_at >= $required_after;
+			$session_bound = ! empty( $v2['session_bound'] );
+			$fingerprint_bound = ! empty( $v2['fingerprint_bound'] );
+			if ( ! $owner_ok || ! $contract_ok || ! $fresh || ! $fresh_after_revalidation || ! $session_bound || ! $fingerprint_bound ) { return $baseline; }
+			return array(
+				'contract_version' => '2.0.0', 'owner' => 'file02', 'level' => $level,
+				'method' => sanitize_key( $v2['method'] ?? 'file02_authentication_assurance_v2' ) ?: 'file02_authentication_assurance_v2',
+				'passkey_asserted' => ! empty( $v2['passkey_asserted'] ), 'hardware_backed' => ! empty( $v2['hardware_backed'] ),
+				'user_verified' => ! empty( $v2['user_verified'] ), 'phishing_resistant' => ! empty( $v2['phishing_resistant'] ),
+				'risk' => $risk, 'session_bound' => true, 'fingerprint_bound' => true, 'verified_at' => $verified_at,
+			);
 		}
+		$claim = apply_filters( 'smc_file02_authentication_assurance_v1', $baseline, $user_id );
+		if ( ! is_array( $claim ) ) { return $baseline; }
 		$level = max( 0, min( 4, absint( $claim['level'] ?? $baseline['level'] ) ) );
 		$method = sanitize_key( $claim['method'] ?? $baseline['method'] );
 		$verified_at = absint( $claim['verified_at'] ?? 0 );
 		$owner = sanitize_key( $claim['owner'] ?? '' );
 		$owner_ok = 'file02' === $owner;
 		$contract_ok = '1.0.0' === (string) ( $claim['contract_version'] ?? '' );
-		$required_after = absint( get_user_meta( $user_id, '_smc_revalidation_required_at', true ) );
 		$fresh = $verified_at > 0 && $verified_at <= time() + 60 && $verified_at >= time() - 5 * MINUTE_IN_SECONDS;
 		$fresh_after_revalidation = 0 === $required_after || $verified_at >= $required_after;
 		$elevated = $level > (int) $baseline['level'] || ! empty( $claim['passkey_asserted'] ) || ! empty( $claim['hardware_backed'] );
-		if ( $verified_at > time() + 60 || ( $elevated && ( ! $owner_ok || ! $contract_ok || ! $fresh || ! $fresh_after_revalidation ) ) ) {
-			return $baseline;
-		}
-		if ( ! $elevated ) {
-			return $baseline;
-		}
+		if ( $verified_at > time() + 60 || ( $elevated && ( ! $owner_ok || ! $contract_ok || ! $fresh || ! $fresh_after_revalidation ) ) ) { return $baseline; }
+		if ( ! $elevated ) { return $baseline; }
 		return array(
-			'contract_version' => '1.0.0',
-			'owner' => 'file02',
-			'level' => $level,
-			'method' => $method ?: 'file02_authentication_assurance',
-			'passkey_asserted' => ! empty( $claim['passkey_asserted'] ),
-			'hardware_backed' => ! empty( $claim['hardware_backed'] ),
-			'verified_at' => $verified_at,
+			'contract_version' => '1.0.0', 'owner' => 'file02', 'level' => $level,
+			'method' => $method ?: 'file02_authentication_assurance', 'passkey_asserted' => ! empty( $claim['passkey_asserted'] ),
+			'hardware_backed' => ! empty( $claim['hardware_backed'] ), 'user_verified' => false,
+			'phishing_resistant' => false, 'risk' => 'unknown', 'session_bound' => false,
+			'fingerprint_bound' => false, 'verified_at' => $verified_at,
 		);
 	}
 
@@ -167,37 +190,36 @@ final class SMC_Advanced_Trust_2026 {
 		$action = sanitize_key( $action );
 		$profile = self::assurance_profile( $user_id );
 		$requirements = array(
-			'default' => array( 2, 2, false ),
-			'profile_sensitive_change' => array( 3, 2, false ),
-			'identity_change' => array( 3, 2, false ),
-			'guardian_change' => array( 3, 2, false ),
-			'delegation_grant' => array( 3, 2, false ),
-			'account_merge' => array( 4, 2, false ),
-			'professional_approval' => array( 4, 2, false ),
-			'founder_recovery' => array( 4, 3, true ),
-			'break_glass' => array( 4, 3, true ),
+			'default' => array( 2, 2, false, false ),
+			'profile_sensitive_change' => array( 3, 2, false, false ),
+			'identity_change' => array( 3, 2, false, false ),
+			'guardian_change' => array( 3, 2, false, false ),
+			'delegation_grant' => array( 3, 2, false, false ),
+			'account_merge' => array( 4, 2, false, false ),
+			'professional_approval' => array( 4, 2, false, false ),
+			'service_identity_change' => array( 3, 3, false, true ),
+			'founder_recovery' => array( 4, 3, true, true ),
+			'break_glass' => array( 4, 3, true, true ),
 		);
 		$required = isset( $requirements[ $action ] ) ? $requirements[ $action ] : $requirements['default'];
 		$risk = (array) apply_filters( 'smc_file24_step_up_context_v1', array(), absint( $user_id ), $action );
-		if ( ! empty( $risk['high_risk'] ) ) {
-			$required[0] = max( $required[0], 3 );
-			$required[1] = max( $required[1], 2 );
+		$authentication_risk = sanitize_key( $profile['authentication_risk'] ?? 'unknown' );
+		$high_risk = ! empty( $risk['high_risk'] ) || in_array( $authentication_risk, array( 'elevated', 'high' ), true );
+		if ( $high_risk ) {
+			$required[0] = max( $required[0], 3 ); $required[1] = max( $required[1], 3 ); $required[3] = true;
 		}
 		$membership_operational = self::protected_actions_allowed( absint( $user_id ) );
 		$satisfied = $membership_operational
 			&& (int) $profile['identity_assurance_level'] >= $required[0]
 			&& (int) $profile['authentication_assurance_level'] >= $required[1]
-			&& ( ! $required[2] || ! empty( $profile['hardware_backed'] ) );
+			&& ( ! $required[2] || ! empty( $profile['hardware_backed'] ) )
+			&& ( ! $required[3] || ! empty( $profile['phishing_resistant'] ) );
 		return array(
-			'action' => $action,
-			'required_identity_level' => $required[0],
-			'required_authentication_level' => $required[1],
-			'hardware_backed_required' => (bool) $required[2],
-			'current_identity_level' => (int) $profile['identity_assurance_level'],
-			'current_authentication_level' => (int) $profile['authentication_assurance_level'],
-			'membership_operational' => (bool) $membership_operational,
-			'satisfied' => (bool) $satisfied,
-			'risk_context' => array( 'high_risk' => ! empty( $risk['high_risk'] ) ),
+			'action' => $action, 'required_identity_level' => $required[0], 'required_authentication_level' => $required[1],
+			'hardware_backed_required' => (bool) $required[2], 'phishing_resistant_required' => (bool) $required[3],
+			'current_identity_level' => (int) $profile['identity_assurance_level'], 'current_authentication_level' => (int) $profile['authentication_assurance_level'],
+			'current_phishing_resistant' => ! empty( $profile['phishing_resistant'] ), 'authentication_risk' => $authentication_risk, 'membership_operational' => (bool) $membership_operational,
+			'satisfied' => (bool) $satisfied, 'risk_context' => array( 'high_risk' => (bool) $high_risk ),
 		);
 	}
 
@@ -206,8 +228,7 @@ final class SMC_Advanced_Trust_2026 {
 		$user_id = absint( $user_id );
 		$state = get_user_meta( $user_id, self::REVERIFY_META, true );
 		$state = is_array( $state ) ? $state : array();
-		$interval = absint( apply_filters( 'smc_reverification_interval_seconds', YEAR_IN_SECONDS, $user_id ) );
-		$interval = max( DAY_IN_SECONDS, $interval );
+		$interval = self::reverification_interval_seconds( $user_id );
 		$verified_at = absint( $state['verified_at'] ?? 0 );
 		$applicable = $verified_at > 0;
 		$source = sanitize_key( $state['source'] ?? '' );
@@ -217,7 +238,11 @@ final class SMC_Advanced_Trust_2026 {
 			$verified_at = absint( $baseline['verified_at'] ?? 0 );
 			$source = sanitize_key( $baseline['source'] ?? '' );
 		}
-		$due_at = absint( $state['due_at'] ?? ( $verified_at ? $verified_at + $interval : 0 ) );
+		$policy_due_at = $verified_at > 0 ? $verified_at + $interval : 0;
+		if ( $verified_at > 0 && array_key_exists( 'due_at', $state ) ) {
+			$stored_due_at = absint( $state['due_at'] );
+			$due_at = $stored_due_at > $verified_at ? min( $stored_due_at, $policy_due_at ) : $verified_at;
+		} else { $due_at = $policy_due_at; }
 		$current = ! $applicable || ( $verified_at > 0 && $due_at > time() );
 		return array(
 			'applicable' => (bool) $applicable,
@@ -269,12 +294,12 @@ final class SMC_Advanced_Trust_2026 {
 		if ( $user_id <= 0 || ! get_userdata( $user_id ) ) {
 			return new WP_Error( 'smc_reverify_subject', __( 'A valid membership subject is required.', 'sabri-membership-core' ) );
 		}
-		$authorized = $actor_id > 0 ? self::actor_is_current( $actor_id, 'smc_finalize_verification' ) && SMC_Security::session_is_verified( $actor_id ) : (bool) apply_filters( 'smc_system_reverification_authorized', false, $user_id, sanitize_key( $source ) );
+		$authorized = $actor_id > 0 ? self::actor_is_current( $actor_id, 'smc_finalize_verification' ) && SMC_Security::session_is_verified( $actor_id ) : self::system_reverification_authorized( $user_id, $source );
 		if ( ! $authorized ) {
 			return new WP_Error( 'smc_reverify_authorization', __( 'Reverification requires an authorized reviewer or explicitly authorized system adapter.', 'sabri-membership-core' ) );
 		}
 		$now = time();
-		$interval = max( DAY_IN_SECONDS, absint( apply_filters( 'smc_reverification_interval_seconds', YEAR_IN_SECONDS, $user_id ) ) );
+		$interval = self::reverification_interval_seconds( $user_id );
 		$state = array( 'verified_at' => $now, 'due_at' => $now + $interval, 'source' => sanitize_key( $source ), 'actor_id' => $actor_id );
 		if ( ! self::write_user_meta_verified( $user_id, self::REVERIFY_META, $state ) ) {
 			return new WP_Error( 'smc_reverify_store', __( 'Reverification could not be committed safely.', 'sabri-membership-core' ) );
@@ -305,12 +330,12 @@ final class SMC_Advanced_Trust_2026 {
 		foreach ( (array) $ids as $user_id ) {
 			$user_id = absint( $user_id );
 			$status = self::reverification_status( $user_id );
-			if ( ! empty( $status['overdue'] ) && ! get_user_meta( $user_id, '_smc_reverification_required', true ) ) {
-				if ( ! self::write_user_meta_verified( $user_id, '_smc_reverification_required', 1 )
-					|| ! SMC_Security::audit( 'membership_reverification_overdue', $user_id, array( 'due_at' => absint( $status['due_at'] ?? 0 ) ) )
-					|| false === self::bump_revocation_epoch( $user_id, 'membership_reverification_overdue' ) ) {
-					self::write_option_verified( self::REVERIFY_CURSOR_OPTION, $cursor );
-					return;
+			if ( ! empty( $status['overdue'] ) ) {
+				$due_at = absint( $status['due_at'] ?? 0 );
+				$propagated_due_at = absint( get_user_meta( $user_id, '_smc_reverification_overdue_propagated_due_at', true ) );
+				if ( ! get_user_meta( $user_id, '_smc_reverification_required', true ) && ! self::write_user_meta_verified( $user_id, '_smc_reverification_required', 1 ) ) { self::write_option_verified( self::REVERIFY_CURSOR_OPTION, $cursor ); return; }
+				if ( $due_at > 0 && $propagated_due_at < $due_at ) {
+					if ( ! SMC_Security::audit( 'membership_reverification_overdue', $user_id, array( 'due_at' => $due_at ) ) || false === self::bump_revocation_epoch( $user_id, 'membership_reverification_overdue' ) || ! self::write_user_meta_verified( $user_id, '_smc_reverification_overdue_propagated_due_at', $due_at ) ) { self::write_option_verified( self::REVERIFY_CURSOR_OPTION, $cursor ); return; }
 				}
 			}
 			$cursor = $user_id;
@@ -387,7 +412,20 @@ final class SMC_Advanced_Trust_2026 {
 				'identity' => array( 'owner' => 'file00', 'current' => ! empty( $profile['identity_current'] ), 'issued_at' => $now, 'expires_at' => $now + 120 ),
 				'guardian' => array( 'owner' => 'file00', 'current' => ! empty( $profile['guardian_current'] ), 'issued_at' => $now, 'expires_at' => $now + 120 ),
 				'professional' => array( 'owner' => 'file09', 'current' => ! empty( $profile['professional_current'] ), 'issued_at' => $now, 'expires_at' => $now + 120 ),
-				'authentication' => array( 'owner' => sanitize_key( $auth['owner'] ?? 'file00' ), 'level' => (int) $profile['authentication_assurance_level'], 'method' => sanitize_key( $auth['method'] ?? '' ), 'issued_at' => $now, 'expires_at' => $now + 120 ),
+				'authentication' => array(
+					'owner' => sanitize_key( $auth['owner'] ?? 'file00' ),
+					'contract_version' => (string) ( $auth['contract_version'] ?? '1.0.0' ),
+					'level' => (int) $profile['authentication_assurance_level'],
+					'method' => sanitize_key( $auth['method'] ?? '' ),
+					'verified_at' => absint( $auth['verified_at'] ?? 0 ),
+					'user_verified' => ! empty( $auth['user_verified'] ),
+					'phishing_resistant' => ! empty( $auth['phishing_resistant'] ),
+					'risk' => sanitize_key( $auth['risk'] ?? 'unknown' ),
+					'session_bound' => ! empty( $auth['session_bound'] ),
+					'fingerprint_bound' => ! empty( $auth['fingerprint_bound'] ),
+					'issued_at' => $now,
+					'expires_at' => absint( $auth['verified_at'] ?? 0 ) > 0 ? min( $now + 120, absint( $auth['verified_at'] ) + 5 * MINUTE_IN_SECONDS ) : $now + 120,
+				),
 			),
 			'revocation_epoch' => self::revocation_epoch( $user_id ),
 			'issued_at' => $now,
@@ -564,7 +602,8 @@ final class SMC_Advanced_Trust_2026 {
 		if ( false === $primary_revocation || false === $duplicate_revocation ) {
 			return new WP_Error( 'smc_merge_revocation', __( 'Account merge approval could not be propagated to all consumers.', 'sabri-membership-core' ) );
 		}
-		do_action( 'smc_account_merge_approved', $request );
+		$event = array( 'event_version' => '2.0.0', 'request_id' => sanitize_text_field( (string) $request_id ), 'primary_subject' => self::subject_reference( $primary_user_id ), 'duplicate_subject' => self::subject_reference( $duplicate_user_id ), 'state' => 'approved_for_domain_transfer', 'approved_at' => absint( $request['approved_at'] ?? time() ) );
+		try { do_action( 'smc_account_merge_approved', $event ); } catch ( Throwable $error ) { SMC_Security::audit( 'account_merge_observer_failed', $primary_user_id, array( 'request_id' => sanitize_text_field( (string) $request_id ) ) ); }
 		return $request;
 	}
 
@@ -682,7 +721,7 @@ final class SMC_Advanced_Trust_2026 {
 			'guardian_requirement_met' => ! empty( $base['guardian_verified'] ),
 			'identity_current' => ! empty( $profile['identity_current'] ),
 			'professional_current' => ! empty( $profile['professional_current'] ),
-			'session_step_up_current' => (int) $profile['authentication_assurance_level'] >= 2,
+			'session_step_up_current' => self::protected_actions_allowed( $user_id ) && (int) $profile['authentication_assurance_level'] >= 2 && ( 0 === absint( get_user_meta( $user_id, '_smc_revalidation_required_at', true ) ) || absint( $profile['authentication_verified_at'] ?? 0 ) >= absint( get_user_meta( $user_id, '_smc_revalidation_required_at', true ) ) ),
 			'public_index_allowed' => ! empty( $base['public_profile_allowed'] ) && self::protected_actions_allowed( $user_id ),
 			'revocation_epoch' => self::revocation_epoch( $user_id ),
 			'issued_at' => $now,
@@ -841,6 +880,8 @@ final class SMC_Advanced_Trust_2026 {
 		$principal_user_id = absint( $principal_user_id );
 		$scope = sanitize_key( $scope );
 		if ( $principal_user_id <= 0 || ! self::protected_actions_allowed( $principal_user_id ) ) { return false; }
+		$membership = class_exists( 'SMC_Contracts' ) ? SMC_Contracts::assertions( $principal_user_id ) : array();
+		if ( empty( $membership['approved'] ) || ! empty( $membership['suspended'] ) || empty( $membership['eligible'] ) ) { return false; }
 		foreach ( self::delegated_authorities( $principal_user_id ) as $grant ) {
 			if ( in_array( $scope, (array) ( $grant['scopes'] ?? array() ), true ) ) { return true; }
 		}
@@ -862,7 +903,8 @@ final class SMC_Advanced_Trust_2026 {
 			'opened_by' => $actor_id, 'opened_at' => time(), 'expires_at' => time() + self::BREAK_GLASS_TTL,
 			'approvals' => array( $actor_id ), 'approval_times' => array( (string) $actor_id => time() ), 'consumed_at' => 0,
 		);
-		$all = (array) get_option( self::BREAK_GLASS_OPTION, array() );
+		$all = self::prune_break_glass_requests( (array) get_option( self::BREAK_GLASS_OPTION, array() ) );
+		if ( count( $all ) >= 200 ) { self::release_break_glass_lock( $lock ); return new WP_Error( 'smc_break_glass_capacity', __( 'Emergency governance request capacity is temporarily exhausted.', 'sabri-membership-core' ) ); }
 		$all[ $request['id'] ] = $request;
 		$stored = self::write_option_verified( self::BREAK_GLASS_OPTION, $all );
 		if ( $stored && ! SMC_Security::audit( 'break_glass_opened', $subject_user_id, array( 'request_id' => $request['id'], 'purpose' => $request['purpose'] ) ) ) {
@@ -877,7 +919,7 @@ final class SMC_Advanced_Trust_2026 {
 		if ( ! self::actor_meets_step_up( $approver_id, 'break_glass', 'manage_options', true ) ) { return false; }
 		$lock = self::acquire_break_glass_lock();
 		if ( false === $lock ) { return false; }
-		$all = (array) get_option( self::BREAK_GLASS_OPTION, array() );
+		$all = self::prune_break_glass_requests( (array) get_option( self::BREAK_GLASS_OPTION, array() ) );
 		$request = $all[ $request_id ] ?? null;
 		if ( ! is_array( $request ) || absint( $request['expires_at'] ?? 0 ) <= time() || ! empty( $request['consumed_at'] ) || in_array( $approver_id, (array) ( $request['approvals'] ?? array() ), true ) ) {
 			self::release_break_glass_lock( $lock ); return false;
@@ -900,16 +942,23 @@ final class SMC_Advanced_Trust_2026 {
 		if ( ! self::actor_meets_step_up( $actor_id, 'break_glass', 'manage_options', true ) ) { return false; }
 		$lock = self::acquire_break_glass_lock();
 		if ( false === $lock ) { return false; }
-		$all = (array) get_option( self::BREAK_GLASS_OPTION, array() );
+		$all = self::prune_break_glass_requests( (array) get_option( self::BREAK_GLASS_OPTION, array() ) );
 		$request = $all[ $request_id ] ?? null;
 		if ( ! is_array( $request ) || absint( $request['expires_at'] ?? 0 ) <= time() || ! empty( $request['consumed_at'] ) || count( array_unique( (array) ( $request['approvals'] ?? array() ) ) ) < 2 || ! in_array( $actor_id, (array) $request['approvals'], true ) || ! self::break_glass_approvals_current( $request ) ) {
 			self::release_break_glass_lock( $lock ); return false;
 		}
+		$before = $request;
 		$request['consumed_at'] = time(); $request['consumed_by'] = $actor_id; $all[ $request_id ] = $request;
 		$stored = self::write_option_verified( self::BREAK_GLASS_OPTION, $all );
-		$audit = $stored && SMC_Security::audit( 'break_glass_consumed', absint( $request['subject_user_id'] ), array( 'request_id' => $request_id ) );
+		if ( ! $stored ) { self::release_break_glass_lock( $lock ); return false; }
+		$audit = SMC_Security::audit( 'break_glass_consumed', absint( $request['subject_user_id'] ), array( 'request_id' => $request_id ) );
+		if ( ! $audit ) {
+			$all[ $request_id ] = $before;
+			self::write_option_verified( self::BREAK_GLASS_OPTION, $all );
+			self::release_break_glass_lock( $lock );
+			return false;
+		}
 		self::release_break_glass_lock( $lock );
-		if ( ! $stored || ! $audit ) { return false; }
 		return array( 'authorized' => true, 'request_id' => $request_id, 'subject' => self::subject_reference( absint( $request['subject_user_id'] ) ), 'purpose' => sanitize_text_field( $request['purpose'] ?? '' ), 'expires_at' => min( absint( $request['expires_at'] ), time() + 300 ) );
 	}
 
@@ -928,7 +977,7 @@ final class SMC_Advanced_Trust_2026 {
 
 	public static function set_service_identity( $user_id, $actor_id, $purpose, $approved = true ) {
 		$user_id = absint( $user_id ); $actor_id = absint( $actor_id ); $purpose = sanitize_key( $purpose );
-		if ( ! $user_id || ! get_userdata( $user_id ) || '' === $purpose || ! self::actor_is_current( $actor_id, 'manage_options', true ) || ! SMC_Security::session_is_verified( $actor_id ) ) { return false; }
+		if ( ! $user_id || ! get_userdata( $user_id ) || '' === $purpose || ! self::actor_meets_step_up( $actor_id, 'service_identity_change', 'manage_options', true ) ) { return false; }
 		if ( function_exists( 'smc_is_founder' ) && smc_is_founder( $user_id ) ) { return false; }
 		if ( function_exists( 'smc_is_institutional_ai' ) && smc_is_institutional_ai( $user_id ) ) { return false; }
 		$existing = get_user_meta( $user_id, self::SERVICE_IDENTITY_META, true );
@@ -968,7 +1017,7 @@ final class SMC_Advanced_Trust_2026 {
 	public static function trust_timeline( $user_id, $limit = 50 ) {
 		$user_id = absint( $user_id ); $limit = max( 1, min( 100, absint( $limit ) ) );
 		$current = function_exists( 'get_current_user_id' ) ? absint( get_current_user_id() ) : 0;
-		if ( $current <= 0 || ( $current !== $user_id && ! current_user_can( 'smc_manage_membership' ) ) ) { return array(); }
+		if ( $current <= 0 || ( $current !== $user_id && ! self::trust_timeline_cross_subject_authorized( $current, $user_id ) ) ) { return array(); }
 		if ( ! class_exists( 'SMC_Security' ) ) { return array(); }
 		$subject_hash = SMC_Security::subject_hash( $user_id ); if ( '' === $subject_hash ) { return array(); }
 		global $wpdb; if ( ! isset( $wpdb ) || ! is_object( $wpdb ) ) { return array(); }
@@ -1045,13 +1094,19 @@ final class SMC_Advanced_Trust_2026 {
 		$actor_id = absint( $actor_id );
 		if ( $actor_id <= 0 ) { return false; }
 		if ( function_exists( 'get_current_user_id' ) && get_current_user_id() > 0 && get_current_user_id() !== $actor_id ) { return false; }
-		if ( $founder_or_admin && function_exists( 'smc_is_founder' ) && smc_is_founder( $actor_id ) ) { return true; }
+		$is_founder = function_exists( 'smc_is_founder' ) && smc_is_founder( $actor_id );
+		$is_admin = current_user_can( 'manage_options' );
+		if ( $founder_or_admin && ( $is_founder || $is_admin ) ) { return self::protected_actions_allowed( $actor_id ) && ( '' === $capability || current_user_can( $capability ) ); }
+		if ( ! $is_founder && ! $is_admin && class_exists( 'SMC_Contracts' ) ) {
+			$membership = SMC_Contracts::assertions( $actor_id );
+			if ( empty( $membership['approved'] ) || ! empty( $membership['suspended'] ) || empty( $membership['eligible'] ) || ! self::protected_actions_allowed( $actor_id ) ) { return false; }
+		}
 		return '' === $capability || current_user_can( $capability );
 	}
 
 	private static function actor_meets_step_up( $actor_id, $action, $capability = '', $founder_or_admin = false ) {
 		$actor_id = absint( $actor_id );
-		if ( ! self::actor_is_current( $actor_id, $capability, $founder_or_admin ) || ! class_exists( 'SMC_Security' ) || ! SMC_Security::session_is_verified( $actor_id ) ) { return false; }
+		if ( ! self::actor_is_current( $actor_id, $capability, $founder_or_admin ) ) { return false; }
 		$requirement = self::step_up_requirement( $actor_id, sanitize_key( $action ) );
 		return is_array( $requirement ) && ! empty( $requirement['satisfied'] );
 	}
@@ -1068,12 +1123,53 @@ final class SMC_Advanced_Trust_2026 {
 			&& $asserted_at > 0 && $asserted_at <= time() + 60 && $asserted_at >= time() - 5 * MINUTE_IN_SECONDS;
 	}
 
+	private static function reverification_interval_seconds( $user_id ) {
+		$requested = absint( apply_filters( 'smc_reverification_interval_seconds', YEAR_IN_SECONDS, absint( $user_id ) ) );
+		if ( $requested <= 0 ) { $requested = YEAR_IN_SECONDS; }
+		return max( DAY_IN_SECONDS, min( YEAR_IN_SECONDS, $requested ) );
+	}
+
+	private static function system_reverification_authorized( $user_id, $source ) {
+		$user_id = absint( $user_id ); $source = sanitize_key( $source );
+		$claim = apply_filters( 'smc_system_reverification_authorization_v1', null, $user_id, $source );
+		if ( ! is_array( $claim ) ) { return false; }
+		$asserted_at = absint( $claim['asserted_at'] ?? 0 );
+		return 'file00' === sanitize_key( $claim['owner'] ?? '' ) && '1.0.0' === (string) ( $claim['contract_version'] ?? '' ) && ! empty( $claim['authorized'] )
+			&& '' !== $source && hash_equals( $source, sanitize_key( $claim['source'] ?? '' ) )
+			&& hash_equals( self::subject_reference( $user_id ), (string) ( $claim['subject'] ?? '' ) )
+			&& $asserted_at > 0 && $asserted_at <= time() + 60 && $asserted_at >= time() - 60;
+	}
+
+	private static function trust_timeline_cross_subject_authorized( $actor_id, $subject_user_id ) {
+		$actor_id = absint( $actor_id ); $subject_user_id = absint( $subject_user_id );
+		if ( $actor_id <= 0 || $subject_user_id <= 0 || ! self::actor_is_current( $actor_id, 'smc_manage_membership' ) || ! SMC_Security::session_is_verified( $actor_id ) ) { return false; }
+		$claim = apply_filters( 'smc_trust_timeline_access_v1', null, $actor_id, $subject_user_id );
+		if ( ! is_array( $claim ) ) { return false; }
+		$asserted_at = absint( $claim['asserted_at'] ?? 0 ); $purpose = sanitize_key( $claim['purpose'] ?? '' );
+		return 'file00' === sanitize_key( $claim['owner'] ?? '' ) && '1.0.0' === (string) ( $claim['contract_version'] ?? '' ) && ! empty( $claim['authorized'] ) && '' !== $purpose
+			&& hash_equals( self::subject_reference( $actor_id ), (string) ( $claim['actor_subject'] ?? '' ) ) && hash_equals( self::subject_reference( $subject_user_id ), (string) ( $claim['subject'] ?? '' ) )
+			&& $asserted_at > 0 && $asserted_at <= time() + 60 && $asserted_at >= time() - 60;
+	}
+
 	private static function delegation_grantor_current( $grantor_user_id ) {
 		$grantor_user_id = absint( $grantor_user_id );
 		if ( $grantor_user_id <= 0 || ! get_userdata( $grantor_user_id ) || ! self::protected_actions_allowed( $grantor_user_id ) ) { return false; }
 		if ( function_exists( 'smc_is_founder' ) && smc_is_founder( $grantor_user_id ) ) { return true; }
 		$user = get_userdata( $grantor_user_id );
 		return $user && user_can( $user, 'smc_manage_membership' );
+	}
+
+	private static function prune_break_glass_requests( $all ) {
+		$all = is_array( $all ) ? $all : array();
+		$now = time();
+		foreach ( $all as $request_id => $request ) {
+			if ( ! is_array( $request ) ) { unset( $all[ $request_id ] ); continue; }
+			$record_id = sanitize_text_field( (string) ( $request['id'] ?? '' ) ); $subject_user_id = absint( $request['subject_user_id'] ?? 0 );
+			$opened_at = absint( $request['opened_at'] ?? 0 ); $expired_at = absint( $request['expires_at'] ?? 0 ); $consumed_at = absint( $request['consumed_at'] ?? 0 );
+			$malformed = '' === $record_id || ! hash_equals( (string) $request_id, $record_id ) || $subject_user_id <= 0 || $opened_at <= 0 || $expired_at <= $opened_at || $expired_at - $opened_at > self::BREAK_GLASS_TTL + 60;
+			if ( $malformed || ( $consumed_at > 0 && $consumed_at < $now - DAY_IN_SECONDS ) || ( $consumed_at <= 0 && $expired_at < $now - DAY_IN_SECONDS ) ) { unset( $all[ $request_id ] ); }
+		}
+		return $all;
 	}
 
 	private static function break_glass_approver_current( $approver_id ) {

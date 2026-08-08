@@ -8,7 +8,7 @@ const ai = load('source/sabri-membership-core/includes/class-smc-three-plan.php'
 const css = load('source/sabri-membership-core/assets/membership.css');
 const trace = JSON.parse(load('qa/requirements-traceability.json'));
 const checks = [
-  ['runtime 1.2.18', plugin.includes("define( 'SMC_VERSION', '1.2.18' );")],
+  ['runtime 1.2.18', plugin.includes("define( 'SMC_VERSION', '1.2.21' );")],
   ['contract 1.2.0', plugin.includes("define( 'SMC_CONTRACT_VERSION', '1.2.0' );")],
   ['three-plan class loaded', plugin.includes('class-smc-three-plan.php') && plugin.includes('SMC_Three_Plan::init()')],
   ['free baseline', functions.includes("'free_baseline'           => true") && functions.includes("'paid_unlocks_enabled'    => false")],

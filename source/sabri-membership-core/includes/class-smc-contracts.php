@@ -498,14 +498,19 @@ final class SMC_Contracts {
 	}
 
 	private static function request_is_membership_recovery() {
-		if ( smc_is_membership_page() ) {
-			return true;
-		}
-		if ( wp_doing_cron() ) {
+		if ( smc_is_membership_page() || wp_doing_cron() ) {
 			return true;
 		}
 		$action = isset( $_REQUEST['action'] ) ? sanitize_key( wp_unslash( $_REQUEST['action'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		return 0 === strpos( $action, 'smc_' ) || 0 === strpos( $action, 'sa_' );
+		$baseline = array(
+			'smc_submit_application', 'smc_request_contact_otp', 'smc_verify_contact_otp',
+			'smc_start_2fa', 'smc_finish_2fa', 'smc_challenge_2fa', 'smc_rotate_recovery', 'smc_revoke_session',
+			'smc_verify_guardian', 'smc_resubmit', 'smc_appeal', 'smc_withdraw_guardian',
+			'smc_save_application_draft', 'smc_clear_application_draft',
+		);
+		$filtered = array_values( array_unique( array_map( 'sanitize_key', (array) apply_filters( 'smc_membership_recovery_actions', $baseline ) ) ) );
+		$allowed = array_values( array_unique( array_merge( $baseline, $filtered ) ) );
+		return '' !== $action && in_array( $action, $allowed, true );
 	}
 
 	public static function enforce_frontend_state() {
@@ -527,7 +532,7 @@ final class SMC_Contracts {
 	}
 
 	public static function enforce_admin_state() {
-		if ( ! is_user_logged_in() || current_user_can( 'manage_options' ) || self::request_is_membership_recovery() ) {
+		if ( ! is_user_logged_in() || self::request_is_membership_recovery() ) {
 			return;
 		}
 		$a = self::assertions( get_current_user_id() );
@@ -538,7 +543,7 @@ final class SMC_Contracts {
 	}
 
 	public static function enforce_rest_state( $result ) {
-		if ( ! empty( $result ) || ! is_user_logged_in() || current_user_can( 'manage_options' ) ) {
+		if ( ! empty( $result ) || ! is_user_logged_in() ) {
 			return $result;
 		}
 		$a = self::assertions( get_current_user_id() );
@@ -549,11 +554,24 @@ final class SMC_Contracts {
 	}
 
 	public static function filter_profile_visibility( $allowed, $profile_user_id, $viewer_user_id ) {
-		$viewer = get_userdata( absint( $viewer_user_id ) );
-		if ( absint( $profile_user_id ) === absint( $viewer_user_id ) || ( $viewer && ( ! empty( $viewer->allcaps['smc_review_verification'] ) || ! empty( $viewer->allcaps['manage_options'] ) ) ) ) {
-			return true;
-		}
+		$profile_user_id = absint( $profile_user_id );
+		$viewer_user_id = absint( $viewer_user_id );
+		if ( $profile_user_id > 0 && $profile_user_id === $viewer_user_id ) { return true; }
+		if ( self::viewer_can_access_private_profile( $viewer_user_id, $profile_user_id ) ) { return true; }
 		return self::assertions( $profile_user_id )['public_profile_allowed'];
+	}
+
+	private static function viewer_can_access_private_profile( $viewer_user_id, $profile_user_id ) {
+		$viewer_user_id = absint( $viewer_user_id ); $profile_user_id = absint( $profile_user_id );
+		$current_user_id = function_exists( 'get_current_user_id' ) ? absint( get_current_user_id() ) : 0;
+		$viewer = get_userdata( $viewer_user_id );
+		if ( $viewer_user_id <= 0 || $profile_user_id <= 0 || $current_user_id !== $viewer_user_id || ! $viewer || ! class_exists( 'SMC_Security' ) || ! SMC_Security::session_is_verified( $viewer_user_id ) ) { return false; }
+		if ( class_exists( 'SMC_Advanced_Trust_2026' ) && ! SMC_Advanced_Trust_2026::protected_actions_allowed( $viewer_user_id ) ) { return false; }
+		if ( user_can( $viewer, 'manage_options' ) && user_can( $viewer, 'smc_manage_membership' ) ) { return true; }
+		if ( ! user_can( $viewer, 'smc_review_verification' ) ) { return false; }
+		global $wpdb; if ( ! isset( $wpdb ) || ! is_object( $wpdb ) || empty( $wpdb->prefix ) ) { return false; }
+		$assigned = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$wpdb->prefix}smc_verification_requests WHERE user_id=%d AND assigned_reviewer=%d AND conflict_status='none' AND status IN ('submitted','resubmitted','under_review','approval_pending','more_information','appeal_review') LIMIT 1", $profile_user_id, $viewer_user_id ) );
+		return absint( $assigned ) > 0;
 	}
 
 	private static function invalidate_contact_assertion( $user_id, $channel, $reason ) {
