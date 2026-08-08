@@ -1,0 +1,66 @@
+name: Apply File 00 Fifth-Fresh Round-10 Manifest Correction
+
+on:
+  push:
+    branches: ['codex/file00-fifth-fresh-ten-review-1.2.18']
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: ${{ !contains(github.event.head_commit.message, '[round10-fixed]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: codex/file00-fifth-fresh-ten-review-1.2.18
+          fetch-depth: 0
+      - name: Regenerate committed manifest and close round 10
+        run: |
+          set -euo pipefail
+          python3 tools/build.py >/tmp/file00-build.txt
+          rm -rf dist
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+
+          p=Path('qa/fifth-fresh-ten-review-traceability.json')
+          d=json.loads(p.read_text())
+          d['rounds_with_defects']=[1,2,3,4,5,6,7,8,9,10]
+          d['rounds_without_defects']=[]
+          d['defects_found_total']=10
+          d['defects_corrected_total']=10
+          d['severity']={'critical':1,'high':4,'medium':5,'low':0}
+          for r in d['rounds']:
+              if r['round']==10:
+                  r['defects']=['F5R-R10-D01']; r['status']='corrected'
+          d['known_unresolved_repository_defects']=0
+          p.write_text(json.dumps(d,indent=2)+"\n")
+
+          p=Path('qa/fifth-fresh-review-contract.mjs')
+          s=p.read_text()
+          s=s.replace("JSON.stringify([1,2,3,4,5,6,7,8,9])&&JSON.stringify(trace.rounds_without_defects)===JSON.stringify([10])&&trace.defects_found_total===9&&trace.defects_corrected_total===9", "JSON.stringify([1,2,3,4,5,6,7,8,9,10])&&JSON.stringify(trace.rounds_without_defects)===JSON.stringify([])&&trace.defects_found_total===10&&trace.defects_corrected_total===10")
+          p.write_text(s)
+
+          p=Path('docs/FILE-00-FIFTH-FRESH-TEN-ROUND-REVIEW-1.2.18.md')
+          s=p.read_text()
+          s=s.replace('| 10 | Clean | No new reproducible repository defect | Fresh corrected-source closure, release identity, package/CI/traceability review; external gates remain separate |', '| 10 | Defect | F5R-R10-D01 — Medium: committed plugin `MANIFEST.sha256` still contained pre-1.2.18 digests for changed release files, causing the clean exact-head contract gate to fail | Regenerated the committed manifest from the exact 1.2.18 source and retained deterministic package/source integrity verification |')
+          s=s.replace('Total: **9 unique defects; corrected 9/9**. Severity: **1 Critical, 4 High, 4 Medium, 0 Low**.', 'Total: **10 unique defects; corrected 10/10**. Severity: **1 Critical, 4 High, 5 Medium, 0 Low**.')
+          p.write_text(s)
+
+          p=Path('docs/RELEASE-1.2.18-FIFTH-FRESH-TEN-REVIEW.md')
+          s=p.read_text()
+          s=s.replace('Nine repository defects were found and corrected: rounds 1–9 each found one defect; round 10 found no new reproducible defect after corrected-source closure. Round 9 corrected a stale hardening-test assumption without weakening File02 anti-replay/revalidation enforcement.', 'Ten repository defects were found and corrected: each fresh round 1–10 found one defect. Round 9 corrected a stale hardening-test assumption without weakening File02 anti-replay/revalidation enforcement; round 10 regenerated stale committed package-manifest digests exposed by the clean exact-head contract gate.')
+          p.write_text(s)
+          PY
+          git diff --check
+      - name: Commit non-workflow correction
+        run: |
+          set -euo pipefail
+          git config user.name 'majidhussainqadri1-dot'
+          git config user.email 'majidhussainqadri1@gmail.com'
+          git add source/sabri-membership-core/MANIFEST.sha256 qa/fifth-fresh-ten-review-traceability.json qa/fifth-fresh-review-contract.mjs docs/FILE-00-FIFTH-FRESH-TEN-ROUND-REVIEW-1.2.18.md docs/RELEASE-1.2.18-FIFTH-FRESH-TEN-REVIEW.md
+          git commit -m 'Correct fifth-fresh round 10 committed manifest integrity [round10-fixed]'
+          git push origin HEAD:codex/file00-fifth-fresh-ten-review-1.2.18
