@@ -176,11 +176,13 @@ final class SMC_Contracts {
 		$is_admin = $user && user_can( $user, 'manage_options' );
 		$is_ai = smc_is_institutional_ai( $user_id );
 		$is_doctor = in_array( 'doctor', $approved_types, true ) && ! empty( $base['professional_verified'] );
-		$trusted = (array) apply_filters( 'smc_external_publishing_claims', array(), absint( $user_id ) );
-		$is_trusted = ! empty( $trusted['trusted_publisher'] );
+		/* Publishing authority is a File 00 capability fact, never an arbitrary filter-provided badge. */
+		$is_trusted = $user && user_can( $user, 'smc_trusted_publisher' );
+		$trusted_direct = $is_trusted && user_can( $user, 'smc_direct_publish' );
+		$doctor_direct = $is_doctor && $user && user_can( $user, 'smc_doctor_direct_publish' );
 		$ai_policy = $is_ai ? smc_institutional_ai_policy() : array();
 		$can_submit = ! empty( $base['eligible'] ) && ! empty( $base['session_two_factor'] ) && ( $is_founder || $is_admin || $is_doctor || $is_trusted || $is_ai || array_intersect( array( 'teacher', 'researcher', 'publisher' ), $approved_types ) );
-		$direct = $can_submit && ( $is_founder || $is_admin || ( $is_trusted && ! empty( $trusted['direct_publish'] ) ) || ( $is_doctor && (bool) apply_filters( 'smc_doctor_direct_publish_allowed', false, $user_id ) ) || ( $is_ai && ! empty( $ai_policy['low_risk_auto_publish'] ) ) );
+		$direct = $can_submit && ( $is_founder || $is_admin || $trusted_direct || $doctor_direct || ( $is_ai && ! empty( $ai_policy['low_risk_auto_publish'] ) ) );
 		$authority = $is_founder ? 'founder' : ( $is_admin ? 'administrator' : ( $is_ai ? 'institutional_ai_publisher' : ( $is_trusted ? 'trusted_publisher' : ( $is_doctor ? 'verified_doctor' : 'submission_only' ) ) ) );
 		return array(
 			'policy_version'       => 'CHAT-AI-001/RCD-020-v2.1',

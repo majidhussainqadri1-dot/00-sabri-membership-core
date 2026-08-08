@@ -22,6 +22,14 @@ final class SMC_Security {
 	}
 
 	public static function key_id() {
+		if ( ! defined( 'SMC_MASTER_KEY_ID' ) || ! is_string( SMC_MASTER_KEY_ID ) ) {
+			return '';
+		}
+		$key_id = trim( SMC_MASTER_KEY_ID );
+		return preg_match( '/^[A-Za-z0-9][A-Za-z0-9._:-]{2,63}$/', $key_id ) ? $key_id : '';
+	}
+
+	private static function legacy_key_id() {
 		$key = self::key();
 		return is_wp_error( $key ) ? '' : substr( hash( 'sha256', $key ), 0, 16 );
 	}
@@ -52,12 +60,16 @@ final class SMC_Security {
 		if ( is_wp_error( $key ) ) {
 			return $key;
 		}
+		$key_id = self::key_id();
+		if ( '' === $key_id ) {
+			return new WP_Error( 'smc_key_id_missing', __( 'SMC_MASTER_KEY_ID must be configured as a stable non-secret identifier before new sensitive data can be encrypted.', 'sabri-membership-core' ) );
+		}
 		$nonce = random_bytes( 12 );
 		$tag   = '';
 		$aad   = self::canonical_json(
 			array(
 				'v'       => 2,
-				'kid'     => self::key_id(),
+				'kid'     => $key_id,
 				'purpose' => sanitize_key( $purpose ),
 				'context' => $context,
 			)
@@ -85,15 +97,17 @@ final class SMC_Security {
 		if ( false === $aad || false === $nonce || false === $tag || false === $data ) {
 			return new WP_Error( 'smc_envelope', __( 'Encrypted data is malformed.', 'sabri-membership-core' ) );
 		}
-		$expected = self::canonical_json(
-			array(
-				'v'       => 2,
-				'kid'     => self::key_id(),
-				'purpose' => sanitize_key( $purpose ),
-				'context' => $context,
-			)
-		);
-		if ( ! hash_equals( $expected, $aad ) ) {
+		$aad_data = json_decode( $aad, true );
+		if ( ! is_array( $aad_data ) ) {
+			return new WP_Error( 'smc_context', __( 'Encrypted data has malformed authenticated context.', 'sabri-membership-core' ) );
+		}
+		$stored_kid = isset( $aad_data['kid'] ) && is_string( $aad_data['kid'] ) ? $aad_data['kid'] : '';
+		$current_kid = self::key_id();
+		$legacy_kid = self::legacy_key_id();
+		$kid_ok = ( '' !== $current_kid && hash_equals( $current_kid, $stored_kid ) ) || ( '' !== $legacy_kid && hash_equals( $legacy_kid, $stored_kid ) );
+		$expected_context = self::canonical_json( $context );
+		$stored_context = self::canonical_json( $aad_data['context'] ?? null );
+		if ( 2 !== (int) ( $aad_data['v'] ?? 0 ) || ! $kid_ok || ! hash_equals( sanitize_key( $purpose ), sanitize_key( $aad_data['purpose'] ?? '' ) ) || ! hash_equals( $expected_context, $stored_context ) ) {
 			return new WP_Error( 'smc_context', __( 'Encrypted data does not match its authenticated context.', 'sabri-membership-core' ) );
 		}
 		$plain = openssl_decrypt( $data, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $nonce, $tag, $aad );
@@ -549,6 +563,20 @@ final class SMC_Security {
 		$doc = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}smc_identity_documents WHERE id=%d", $id ), ARRAY_A );
 		if ( ! $doc ) {
 			wp_die( esc_html__( 'Document not found.', 'sabri-membership-core' ), '', array( 'response' => 404 ) );
+		}
+		$governance_scope = current_user_can( 'manage_options' ) || current_user_can( 'smc_manage_membership' );
+		if ( ! $governance_scope ) {
+			$assigned = $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT id FROM {$wpdb->prefix}smc_verification_requests WHERE user_id=%d AND assigned_reviewer=%d AND status IN ('submitted','under_review','more_information','resubmitted','approval_pending') ORDER BY id DESC LIMIT 1",
+					absint( $doc['user_id'] ),
+					$user_id
+				)
+			);
+			if ( ! $assigned ) {
+				self::audit( 'private_document_access_denied', (int) $doc['user_id'], array( 'document_id' => $id, 'reason_code' => 'reviewer_not_assigned' ) );
+				wp_die( esc_html__( 'This private evidence is outside your assigned review scope.', 'sabri-membership-core' ), '', array( 'response' => 403 ) );
+			}
 		}
 		$dir = self::private_dir();
 		if ( is_wp_error( $dir ) ) {

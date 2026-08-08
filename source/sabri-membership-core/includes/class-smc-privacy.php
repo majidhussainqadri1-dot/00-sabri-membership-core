@@ -197,7 +197,7 @@ final class SMC_Privacy {
 			return new WP_Error( 'smc_erasure_receipt_missing', __( 'The fail-closed erasure lock is incomplete and requires operator repair.', 'sabri-membership-core' ) );
 		}
 		$sessions_ok = SMC_Security::revoke_all_sessions( $user_id, 'privacy_erasure_locked' );
-		$audit_ok = $sessions_ok && SMC_Security::audit( 'privacy_erasure_locked', $user_id, array( 'receipt' => $receipt ) );
+		$audit_ok = $sessions_ok && SMC_Security::audit( 'privacy_erasure_started', $user_id, array( 'receipt' => $receipt ) );
 		if ( ! $sessions_ok || ! $audit_ok ) {
 			return new WP_Error( 'smc_erasure_containment_incomplete', __( 'Erasure is locked fail-closed, but containment evidence requires retry.', 'sabri-membership-core' ) );
 		}

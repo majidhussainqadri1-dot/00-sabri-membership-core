@@ -394,12 +394,12 @@ final class SMC_Advanced_Trust_2026 {
 	/** F00-EXT-007 — Consent dependency graph. */
 	public static function consent_dependency_graph() {
 		$baseline = array(
-			'membership' => array( 'terms', 'privacy', 'membership' ),
-			'communication' => array( 'terms', 'privacy', 'communication' ),
-			'clinical' => array( 'terms', 'privacy', 'clinical' ),
-			'marketplace' => array( 'terms', 'privacy', 'marketplace' ),
-			'publication' => array( 'terms', 'privacy', 'publication' ),
-			'research' => array( 'terms', 'privacy', 'research' ),
+			'membership' => array( 'membership_terms', 'identity_verification', 'ethical_use' ),
+			'communication' => array( 'membership_terms', 'ethical_use', 'communication' ),
+			'clinical' => array( 'membership_terms', 'ethical_use', 'clinical' ),
+			'marketplace' => array( 'membership_terms', 'ethical_use', 'marketplace' ),
+			'publication' => array( 'membership_terms', 'ethical_use', 'publication' ),
+			'research' => array( 'membership_terms', 'ethical_use', 'research' ),
 		);
 		$extended = apply_filters( 'smc_consent_dependency_graph_v1', $baseline );
 		if ( ! is_array( $extended ) ) { return $baseline; }
@@ -418,9 +418,13 @@ final class SMC_Advanced_Trust_2026 {
 			return false;
 		}
 		global $wpdb;
+		$policy_version = function_exists( 'smc_policy' ) ? (string) ( smc_policy()['version'] ?? '' ) : '';
+		if ( '' === $policy_version ) {
+			return false;
+		}
 		foreach ( $graph[ $capability ] as $purpose ) {
 			$purpose = sanitize_key( $purpose );
-			$active = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$wpdb->prefix}smc_consents WHERE user_id=%d AND purpose=%s AND withdrawn_at IS NULL ORDER BY id DESC LIMIT 1", $user_id, $purpose ) );
+			$active = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$wpdb->prefix}smc_consents WHERE user_id=%d AND purpose=%s AND policy_version=%s AND withdrawn_at IS NULL ORDER BY id DESC LIMIT 1", $user_id, $purpose, $policy_version ) );
 			if ( ! $active ) {
 				return false;
 			}
@@ -609,9 +613,18 @@ final class SMC_Advanced_Trust_2026 {
 			'consumer_deadline' => time() + self::REVOCATION_PROPAGATION_SLA,
 			'sla_seconds' => self::REVOCATION_PROPAGATION_SLA,
 		);
-		do_action( 'smc_trust_revocation_invalidated', $user_id, $event );
-		self::release_revocation_lock( $lock );
-		return $event;
+		$propagated = true;
+		try {
+			do_action( 'smc_trust_revocation_invalidated', $user_id, $event );
+		} catch ( Throwable $error ) {
+			$propagated = false;
+			if ( class_exists( 'SMC_Security' ) ) {
+				SMC_Security::audit( 'trust_revocation_propagation_failed', $user_id, array( 'reason' => sanitize_key( $reason ) ) );
+			}
+		} finally {
+			self::release_revocation_lock( $lock );
+		}
+		return $propagated ? $event : false;
 	}
 
 	private static function acquire_revocation_lock( $user_id ) {
