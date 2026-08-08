@@ -31,6 +31,7 @@ jobs:
           python3 tools/audit32/regexfix.py
           python3 tools/audit32/preflight.py
           python3 tools/audit32/postpreflight.py
+          python3 tools/audit32/privacyfix_syntax.py
           python3 tools/audit32/privacyfix.py
           python3 tools/audit32/apply.py
           python3 tools/audit32/sourcefix.py
