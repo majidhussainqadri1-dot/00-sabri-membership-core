@@ -216,28 +216,28 @@ final class SMC_Events {
 		}
 		$consumer = sanitize_key( $consumer );
 		$event_id = sanitize_text_field( (string) $event['event_id'] );
-		$dedupe = hash( 'sha256', $consumer . '|' . $event_id );
+		if ( '' === $consumer || '' === $event_id ) { return false; }
 		$now = current_time( 'mysql', true );
 		$inserted = $wpdb->query(
 			$wpdb->prepare(
-				"INSERT IGNORE INTO {$wpdb->prefix}smc_event_inbox (consumer,event_id,dedupe_hash,status,created_at,updated_at) VALUES (%s,%s,%s,'processing',%s,%s)",
+				"INSERT IGNORE INTO {$wpdb->prefix}smc_event_inbox (consumer,event_id,status,attempts,received_at,updated_at) VALUES (%s,%s,'processing',1,%s,%s)",
 				$consumer,
 				$event_id,
-				$dedupe,
 				$now,
 				$now
 			)
 		);
 		if ( 0 === $inserted ) {
-			$status = $wpdb->get_var( $wpdb->prepare( "SELECT status FROM {$wpdb->prefix}smc_event_inbox WHERE consumer=%s AND dedupe_hash=%s LIMIT 1", $consumer, $dedupe ) );
+			$status = $wpdb->get_var( $wpdb->prepare( "SELECT status FROM {$wpdb->prefix}smc_event_inbox WHERE consumer=%s AND event_id=%s LIMIT 1", $consumer, $event_id ) );
 			return 'processed' === $status;
 		}
+		if ( 1 !== $inserted ) { return false; }
 		$result = call_user_func( $callback, $event );
 		if ( true !== $result ) {
-			$wpdb->delete( $wpdb->prefix . 'smc_event_inbox', array( 'consumer' => $consumer, 'dedupe_hash' => $dedupe ), array( '%s', '%s' ) );
+			$wpdb->delete( $wpdb->prefix . 'smc_event_inbox', array( 'consumer' => $consumer, 'event_id' => $event_id ), array( '%s', '%s' ) );
 			return false;
 		}
-		$updated = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_event_inbox SET status='processed',processed_at=%s,updated_at=%s WHERE consumer=%s AND dedupe_hash=%s AND status='processing'", $now, $now, $consumer, $dedupe ) );
+		$updated = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_event_inbox SET status='processed',processed_at=%s,updated_at=%s WHERE consumer=%s AND event_id=%s AND status='processing'", $now, $now, $consumer, $event_id ) );
 		return 1 === $updated;
 	}
 }
