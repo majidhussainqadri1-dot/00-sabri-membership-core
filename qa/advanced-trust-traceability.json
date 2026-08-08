@@ -1,5 +1,5 @@
 {
-  "release": "1.2.14",
+  "release": "1.2.15",
   "database_schema": "1.3.0",
   "public_membership_contract": "1.2.0",
   "advanced_trust_contract": "1.0.0",
@@ -299,5 +299,5 @@
     "live_deployed": false,
     "operational": false
   },
-  "fresh_ten_review_release": "1.2.14"
+  "fresh_ten_review_release": "1.2.15"
 }

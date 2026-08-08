@@ -1,6 +1,6 @@
 <?php
 error_reporting(E_ALL);
-define('ABSPATH',__DIR__.'/'); define('DB_NAME','test'); define('SMC_DB_VERSION','1.3.0'); define('SMC_VERSION','1.2.14');
+define('ABSPATH',__DIR__.'/'); define('DB_NAME','test'); define('SMC_DB_VERSION','1.3.0'); define('SMC_VERSION','1.2.15');
 $options=['smc_db_version'=>'1.2.9'];
 function get_option($k,$d=false){global $options;return array_key_exists($k,$options)?$options[$k]:$d;}
 function update_option($k,$v,$autoload=null){global $options;$options[$k]=$v;return true;}
