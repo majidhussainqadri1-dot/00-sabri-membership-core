@@ -17,12 +17,12 @@ Baseline: `main` at `c9c299163df49322ae868d35374524ca46a3edca` (Release 1.2.15).
 | 7 | durable inbox/outbox exception recovery | 2 | TFR-R7-D01, TFR-R7-D02 | Corrected |
 | 8 | privacy erasure downstream invalidation | 1 | TFR-R8-D01 | Corrected |
 | 9 | backup/restore operational evidence | 2 | TFR-R9-D01, TFR-R9-D02 | Corrected |
-| 10 | release identity and permanent regression QA | 2 | TFR-R10-D01, TFR-R10-D02 | Corrected |
+| 10 | release identity, lockfile parity and permanent regression QA | 3 | TFR-R10-D01, TFR-R10-D02, TFR-R10-D03 | Corrected |
 
 **Rounds with defects:** 1, 2, 3, 4, 5, 7, 8, 9, 10.  
 **Rounds without defects:** 6.  
-**Unique defects:** 13. Corrected: **13/13**.  
-**Severity:** 1 Critical, 7 High, 5 Medium, 0 Low.  
+**Unique defects:** 14. Corrected: **14/14**.  
+**Severity:** 1 Critical, 7 High, 6 Medium, 0 Low.  
 **Known unresolved repository defects:** 0 after exact-head QA closure.
 
 ## Corrective summary
@@ -40,6 +40,7 @@ Baseline: `main` at `c9c299163df49322ae868d35374524ca46a3edca` (Release 1.2.15).
 - **TFR-R9-D02 — Medium:** restore reconciliation did not verify evidence/audit persistence. Both are now read-back/fail-closed gates.
 - **TFR-R10-D01 — Medium:** corrected behavior required a distinct release identity; runtime/package advanced coherently to 1.2.16.
 - **TFR-R10-D02 — Medium:** prior QA missed the runtime key-ID path. Third-fresh static/runtime regressions are permanent release gates.
+- **TFR-R10-D03 — Medium:** `package-lock.json` still identified the QA package as 1.2.15 after runtime/package moved to 1.2.16. Root and package lock identities are now aligned to 1.2.16.
 
 ## Acceptance boundary
 Repository coding/package/automated-QA may be marked complete only after exact-head read-only CI is green on branch/PR and merged `main`. Hostinger Staging-Accepted, Live-Deployed and Operational remain separate external gates.
