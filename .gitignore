@@ -2,3 +2,5 @@ node_modules/
 *.tmp
 *.log
 qa/clean-extract/
+dist/*.zip
+dist/CHECKSUMS.sha256
