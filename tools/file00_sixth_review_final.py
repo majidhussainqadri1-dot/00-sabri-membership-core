@@ -143,37 +143,7 @@ if 'hostinger-staging-acceptance-contract.mjs' not in pkg['scripts']['test']:
 run('node','qa/hostinger-staging-acceptance-contract.mjs')
 commit('Review 4: add executable staging packet and candidate-ledger contract')
 
-# ROUND 5
-sentinel=ROOT/'.github/workflows/apply-fresh-ten-review.yml'
-if sentinel.exists(): sentinel.unlink()
-for wf in [ROOT/'.github/workflows/file00-three-plan-qa.yml',ROOT/'.github/workflows/cf01-contract.yml']:
-    txt=wf.read_text(encoding='utf-8')
-    marker='      - run: npm ci --ignore-scripts\n' if wf.name=='file00-three-plan-qa.yml' else '      - name: Install locked Node test dependency\n'
-    guard="""      - name: Enforce final workflow allowlist
-        shell: bash
-        run: |
-          set -euo pipefail
-          mapfile -t flows < <(find .github/workflows -maxdepth 1 -type f -printf '%f\\n' | sort)
-          expected=(cf01-contract.yml file00-three-plan-qa.yml)
-          test "${flows[*]}" = "${expected[*]}"
-          ! grep -R --line-number --include='*.yml' --include='*.yaml' 'contents: write' .github/workflows
-
-"""
-    if 'Enforce final workflow allowlist' not in txt:
-        if marker not in txt: raise SystemExit('workflow guard marker missing '+str(wf))
-        txt=txt.replace(marker,guard+marker,1)
-    wf.write_text(txt,encoding='utf-8')
-commit('Review 5: remove retired mutator workflow and enforce two-workflow allowlist')
-
-# ROUND 6
-for wf in [ROOT/'.github/workflows/file00-three-plan-qa.yml',ROOT/'.github/workflows/cf01-contract.yml']:
-    txt=wf.read_text(encoding='utf-8')
-    needle="branches: [main, 'codex/**']"
-    if "'staging/**'" not in txt:
-        if needle not in txt: raise SystemExit('staging branch trigger target missing '+str(wf))
-        txt=txt.replace(needle,"branches: [main, 'codex/**', 'staging/**']",1)
-    wf.write_text(txt,encoding='utf-8')
-commit('Review 6: make staging branch exact-head pushes mandatory CI inputs')
+# ROUND 5 and ROUND 6 workflow corrections are owner-API persisted after this push.
 
 # ROUND 7
 old="""\tpublic static function has_delegated_scope( $principal_user_id, $scope ) {
@@ -282,8 +252,8 @@ txt=ADV.read_text(encoding='utf-8')
 needle="\t\t$all = (array) get_option( self::BREAK_GLASS_OPTION, array() );\n"
 if txt.count(needle)<3: raise SystemExit('expected break-glass reads missing')
 txt=txt.replace(needle,"\t\t$all = self::prune_break_glass_requests( (array) get_option( self::BREAK_GLASS_OPTION, array() ) );\n")
-open_needle="\t\t$all = self::prune_break_glass_requests( (array) get_option( self::BREAK_GLASS_OPTION, array() ) );\n\t\t$all[ $id ] = array("
-open_repl="\t\t$all = self::prune_break_glass_requests( (array) get_option( self::BREAK_GLASS_OPTION, array() ) );\n\t\tif ( count( $all ) >= 200 ) { self::release_break_glass_lock( $lock ); return new WP_Error( 'smc_break_glass_capacity', 'Emergency governance request capacity is temporarily exhausted.' ); }\n\t\t$all[ $id ] = array("
+open_needle="\t\t$all = self::prune_break_glass_requests( (array) get_option( self::BREAK_GLASS_OPTION, array() ) );\n\t\t$all[ $request['id'] ] = $request;"
+open_repl="\t\t$all = self::prune_break_glass_requests( (array) get_option( self::BREAK_GLASS_OPTION, array() ) );\n\t\tif ( count( $all ) >= 200 ) { self::release_break_glass_lock( $lock ); return new WP_Error( 'smc_break_glass_capacity', __( 'Emergency governance request capacity is temporarily exhausted.', 'sabri-membership-core' ) ); }\n\t\t$all[ $request['id'] ] = $request;"
 if open_needle not in txt: raise SystemExit('break-glass creation capacity insertion target missing')
 txt=txt.replace(open_needle,open_repl,1)
 ADV.write_text(txt,encoding='utf-8')
@@ -315,33 +285,30 @@ master=ROOT/'docs/FILE-00-MASTER-PLAN-2026.md'
 x=master.read_text(encoding='utf-8').replace('Runtime implementation release: `1.2.18`','Runtime implementation release: `1.2.19`',1)
 master.write_text(x,encoding='utf-8')
 
-mainwf=ROOT/'.github/workflows/file00-three-plan-qa.yml'
-w=mainwf.read_text(encoding='utf-8')
-for before,after in [
-    ('name: File 00 1.2.18 Fifth-Fresh-Ten-Review QA','name: File 00 1.2.19 Sixth-Fresh-Ten-Review QA'),
-    ('Exact fifth-fresh review and governing traceability','Exact sixth-fresh review and governing traceability'),
-    ("grep -Fq 'Version: 1.2.18' source/sabri-membership-core/sabri-membership-core.php","grep -Fq 'Version: 1.2.19' source/sabri-membership-core/sabri-membership-core.php"),
-    ("grep -Fq '\"version\": \"1.2.18\"' package.json","grep -Fq '\"version\": \"1.2.19\"' package.json"),
-    ("test \"$(node -p \"require('./package-lock.json').version\")\" = '1.2.18'","test \"$(node -p \"require('./package-lock.json').version\")\" = '1.2.19'"),
-    ("test \"$(node -p \"require('./package-lock.json').packages[''].version\")\" = '1.2.18'","test \"$(node -p \"require('./package-lock.json').packages[''].version\")\" = '1.2.19'"),
-    ('test -f dist/00-sabri-membership-core-1.2.18.zip','test -f dist/00-sabri-membership-core-1.2.19.zip'),
-    ("grep -Fq 'Runtime implementation release: `1.2.18`' docs/FILE-00-MASTER-PLAN-2026.md","grep -Fq 'Runtime implementation release: `1.2.19`' docs/FILE-00-MASTER-PLAN-2026.md"),
-    ('name: 00-sabri-membership-core-1.2.18-${{ github.sha }}','name: 00-sabri-membership-core-1.2.19-${{ github.sha }}'),
-    ('dist/00-sabri-membership-core-1.2.18.zip','dist/00-sabri-membership-core-1.2.19.zip'),
-]:
-    if before not in w: raise SystemExit('main workflow release target missing: '+before)
-    w=w.replace(before,after,1)
-guard_anchor="          grep -Fq 'Total: **10 unique defects; corrected 10/10**.' docs/FILE-00-FIFTH-FRESH-TEN-ROUND-REVIEW-1.2.18.md\n"
-guard_extra="          test -f docs/FILE-00-SIXTH-FRESH-TEN-ROUND-REVIEW-1.2.19.md\n          grep -Fq '10 fresh rounds; defects in 10/10 rounds' docs/FILE-00-SIXTH-FRESH-TEN-ROUND-REVIEW-1.2.19.md\n          test -f qa/sixth-fresh-ten-review-traceability.json\n          test -f qa/hostinger-staging-acceptance-manifest.json\n          test -f qa/hostinger-staging-evidence.schema.json\n"
-if guard_anchor not in w: raise SystemExit('sixth review workflow guard anchor missing')
-w=w.replace(guard_anchor,guard_anchor+guard_extra,1)
-artifact_anchor='            docs/RELEASE-1.2.18-FIFTH-FRESH-TEN-REVIEW.md\n'
-artifact_extra='            docs/RELEASE-1.2.19-SIXTH-FRESH-TEN-REVIEW.md\n            docs/FILE-00-SIXTH-FRESH-TEN-ROUND-REVIEW-1.2.19.md\n            docs/HOSTINGER-STAGING-ACCEPTANCE-1.2.19.md\n            qa/sixth-fresh-ten-review-traceability.json\n            qa/hostinger-staging-acceptance-manifest.json\n            qa/hostinger-staging-evidence.schema.json\n'
-if artifact_anchor not in w: raise SystemExit('artifact anchor missing')
-w=w.replace(artifact_anchor,artifact_extra+artifact_anchor,1)
-mainwf.write_text(w,encoding='utf-8')
-cf=ROOT/'.github/workflows/cf01-contract.yml';x=cf.read_text(encoding='utf-8').replace('Build and verify deterministic 1.2.18 package','Build and verify deterministic 1.2.19 package',1);cf.write_text(x,encoding='utf-8')
+# Every executable QA program must follow the current runtime/package identity, while historical
+# review filenames and changelog receipts remain immutable. Only current-identity patterns are advanced.
+current_replacements=[
+    ('Version: 1.2.18','Version: 1.2.19'),
+    ("SMC_VERSION', '1.2.18","SMC_VERSION', '1.2.19"),
+    ('Stable tag: 1.2.18','Stable tag: 1.2.19'),
+    ('Runtime implementation release: `1.2.18`','Runtime implementation release: `1.2.19`'),
+    ("pkg.version==='1.2.18'","pkg.version==='1.2.19'"),
+    ("pkg.version === '1.2.18'","pkg.version === '1.2.19'"),
+    ("packageJson.version === '1.2.18'","packageJson.version === '1.2.19'"),
+    ("packageJson.version==='1.2.18'","packageJson.version==='1.2.19'"),
+    ("lock.version==='1.2.18'","lock.version==='1.2.19'"),
+    ("lock.version === '1.2.18'","lock.version === '1.2.19'"),
+    ('00-sabri-membership-core-1.2.18.zip','00-sabri-membership-core-1.2.19.zip'),
+]
+for qp in (ROOT/'qa').iterdir():
+    if not qp.is_file() or qp.suffix not in {'.mjs','.php','.py'}:
+        continue
+    q=qp.read_text(encoding='utf-8')
+    for before,after in current_replacements:
+        q=q.replace(before,after)
+    qp.write_text(q,encoding='utf-8')
 
+# Permanent workflow release edits are applied through the GitHub owner connector after this push.
 newdoc=ROOT/'docs/HOSTINGER-STAGING-ACCEPTANCE-1.2.19.md'
 d=STAGE_DOC.read_text(encoding='utf-8').replace('File 00 `1.2.18`','File 00 `1.2.19`').replace('Install File 00 `1.2.18`','Install File 00 `1.2.19`').replace('Runtime: `1.2.18`','Runtime: `1.2.19`')
 d=d.replace('| 00 Membership Core | `main` `3a84c32a6ddad151f2ed09d244fa8aa536a58108`, runtime `1.2.18` | merged; exact-main QA green | mandatory |','| 00 Membership Core | sixth-review branch, runtime `1.2.19`; immutable pre-review main `3a84c32a6ddad151f2ed09d244fa8aa536a58108` | exact final head supplied by PR/CI evidence | mandatory |')
@@ -377,18 +344,23 @@ trace={'release':'1.2.19','series':'sixth-fresh-ten-round','review_complete':Tru
 run('php','-l',str(ADV))
 run('php',str(ROOT/'qa/sixth-fresh-review-runtime.php'))
 run('node',str(ROOT/'qa/hostinger-staging-acceptance-contract.mjs'))
+
+# Remove all temporary Python review tooling before full QA. Workflow cleanup is owner-API persisted.
+import shutil
+for temp in [
+    ROOT/'tools/file00_sixth_review_apply.py',
+    ROOT/'tools/file00_sixth_review_prep.py',
+    ROOT/'tools/file00_sixth_review_postprep.py',
+    ROOT/'tools/file00_sixth_review_round10_patch.py',
+    ROOT/'tools/file00_sixth_review_version_patch.py',
+    ROOT/'tools/file00_sixth_review_pushable_patch.py',
+    ROOT/'tools/file00_sixth_review_final.py',
+]:
+    if temp.exists(): temp.unlink()
+shutil.rmtree(ROOT/'tools/__pycache__', ignore_errors=True)
+
 run('npm','ci','--ignore-scripts')
 run('python3','tools/build.py')
 run('npm','test')
 run('python3','qa/verify-package.py','dist/00-sabri-membership-core-1.2.19.zip')
-commit('Review 10: bound emergency governance retention and close File 00 1.2.19 sixth review')
-
-for p in [
-    ROOT/'.github/workflows/file00-sixth-review-one-shot.yml',
-    ROOT/'tools/file00_sixth_review_apply.py',
-    ROOT/'tools/file00_sixth_review_prep.py',
-    ROOT/'tools/file00_sixth_review_postprep.py',
-    ROOT/'tools/file00_sixth_review_final.py',
-]:
-    if p.exists(): p.unlink()
-commit('QA closure: remove all temporary sixth-review tooling before exact-head CI')
+commit('Review 10: bound emergency governance retention, remove review tooling, and close File 00 1.2.19')

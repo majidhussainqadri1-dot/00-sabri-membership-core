@@ -11,19 +11,119 @@
     "wrapper_sha256": "aa4bc3b845506685fa39ed705053d82b3fe774f5fb0fe7a16f838770374fbf6d"
   },
   "candidate_matrix": {
-    "file00": {"ref": "main", "sha": "3a84c32a6ddad151f2ed09d244fa8aa536a58108", "version": "1.2.18", "required": true},
-    "file01": {"ref": "pull/3", "sha": "ad34ecf316261666769d33a8ce3acac9c019ab73", "version": "2.0.0", "required": true, "main_is_current_candidate": false},
-    "file02": {"ref": "pull/7", "sha": "c895ec17c631e6a28c86aa659bf947f9d326dc4d", "version": "1.2.0", "required": true, "main_is_current_candidate": false},
-    "file03": {"ref": "main", "sha": "0db6161b7f8906e65387f1db9bb4fc6f215d00ef", "version": "1.0.0-rc3", "required": true},
-    "file09": {"ref": "pull/6", "sha": "f58b04f4282c1f907a9cf3043d2f9394fbccd640", "version": "1.2.0-rc3", "required": true, "main_is_current_candidate": false},
-    "file17": {"ref": "main", "sha": "c4bb3d399b309d6f7f4f77f8bb376df25ccad558", "version": "2.0.3", "required": true},
-    "file19": {"ref": "main", "sha": "5cb83d399f35ae1636415fb83373b6ba282e3685", "version": "3.0.0", "required": true},
-    "file20": {"ref": "main", "sha": "178606ed1599c88dce7ef45cb69e2e90081cd519", "version": "1.4.3", "required": true},
-    "file21": {"ref": "main", "sha": "ac83c987ab39d599ec4f5f092f1a1dedcaeaa1ee", "package_version": "1.0.5", "runtime_version": "1.0.3", "schema_version": "1.0.0", "required": true},
-    "file22": {"ref": "pull/24", "sha": "ce3dc881395cf22e5b33a538cbb7e104d1a51931", "version": "1.0.0-rc.2", "required": true, "main_is_current_candidate": false},
-    "file23": {"ref": "main", "sha": "a8a8c805f4730998ccb44bd95c87591836561759", "version": "1.2.0", "required": true},
-    "file24": {"ref": "main", "sha": "3c5ea8ef342983630a7973274d3409c34409f86c", "version": "0.99.0", "schema_version": "0.25.5", "required": true},
-    "file25": {"ref": "pull/1", "sha": "64ccd17ca7c2055dd7f31365a91861b6aa28139c", "version": "0.14.0", "required": true, "main_is_current_candidate": false}
+    "file00": {
+      "ref": "main",
+      "sha": "3a84c32a6ddad151f2ed09d244fa8aa536a58108",
+      "version": "1.2.18",
+      "required": true
+    },
+    "file01": {
+      "ref": "pull/3",
+      "sha": "ad34ecf316261666769d33a8ce3acac9c019ab73",
+      "version": "2.0.0",
+      "required": true,
+      "main_is_current_candidate": false
+    },
+    "file02": {
+      "ref": "pull/7",
+      "sha": "c895ec17c631e6a28c86aa659bf947f9d326dc4d",
+      "version": "1.2.0",
+      "required": true,
+      "main_is_current_candidate": false
+    },
+    "file03": {
+      "ref": "main",
+      "sha": "0db6161b7f8906e65387f1db9bb4fc6f215d00ef",
+      "version": "1.0.0-rc3",
+      "required": true
+    },
+    "file09": {
+      "ref": "pull/6",
+      "sha": "f58b04f4282c1f907a9cf3043d2f9394fbccd640",
+      "version": "1.2.0-rc3",
+      "required": true,
+      "main_is_current_candidate": false
+    },
+    "file17": {
+      "ref": "main",
+      "sha": "c4bb3d399b309d6f7f4f77f8bb376df25ccad558",
+      "version": "2.0.3",
+      "required": true
+    },
+    "file19": {
+      "ref": "main",
+      "sha": "5cb83d399f35ae1636415fb83373b6ba282e3685",
+      "version": "3.0.0",
+      "required": true
+    },
+    "file20": {
+      "ref": "main",
+      "sha": "178606ed1599c88dce7ef45cb69e2e90081cd519",
+      "version": "1.4.3",
+      "required": true
+    },
+    "file21": {
+      "ref": "main",
+      "sha": "ac83c987ab39d599ec4f5f092f1a1dedcaeaa1ee",
+      "package_version": "1.0.5",
+      "runtime_version": "1.0.3",
+      "schema_version": "1.0.0",
+      "required": true
+    },
+    "file22": {
+      "ref": "pull/24",
+      "sha": "ce3dc881395cf22e5b33a538cbb7e104d1a51931",
+      "version": "1.0.0-rc.2",
+      "required": true,
+      "main_is_current_candidate": false
+    },
+    "file23": {
+      "ref": "main",
+      "sha": "a8a8c805f4730998ccb44bd95c87591836561759",
+      "version": "1.2.0",
+      "required": true
+    },
+    "file24": {
+      "ref": "main",
+      "sha": "3c5ea8ef342983630a7973274d3409c34409f86c",
+      "version": "0.99.0",
+      "schema_version": "0.25.5",
+      "required": true
+    },
+    "file25": {
+      "ref": "pull/1",
+      "sha": "64ccd17ca7c2055dd7f31365a91861b6aa28139c",
+      "version": "0.14.0",
+      "required": true,
+      "main_is_current_candidate": false
+    },
+    "file08": {
+      "ref": "pull/6",
+      "sha": "97a6e3861306c119c3250d5881675d80691f9309",
+      "version": "1.0.0",
+      "required": true,
+      "source_ref_status": "pinned",
+      "package_identity_state": "stale_receipt_pending_refresh"
+    },
+    "file12": {
+      "ref": "pull/2",
+      "sha": "1ddc48e0271c896f32dbaa6d53a41711c22031ed",
+      "version": "0.2.0",
+      "required": true,
+      "source_ref_status": "pinned",
+      "artifact_id": 8738191320,
+      "artifact_wrapper_sha256": "6eac003469a811ba7caa7cdabbc2ca6bd2e0e3fdaf2d43a17bac474ebdadae51",
+      "package_identity_state": "artifact_wrapper_pinned_inner_zip_pending"
+    },
+    "file18": {
+      "ref": "pull/3",
+      "sha": "60191944dde0bb7df5e2057ba462d747883f8717",
+      "version": "2.1.0",
+      "required": true,
+      "source_ref_status": "pinned",
+      "package_sha256": "17a9d7dc35137341fe14cfc84ac78987da74f9e4ee585e44bc0f673552b4b58f",
+      "package_identity_state": "stale_head_receipt_pending_refresh"
+    }
   },
   "mandatory_unpinned_companions": [],
   "candidate_pinning_status": "complete_for_file00_plan_named_integrations",
@@ -47,5 +147,23 @@
     "live_deployed": false,
     "operational": false
   },
-  "acceptance_rule": "Staging-Accepted may become true only after every mandatory real-environment gate is evidenced, all required companion candidates are pinned and compatible, zero known unresolved defects remain or an explicit time-bounded Founder risk acceptance exists, backup/restore and rollback rehearsal pass, and Founder acceptance is dated."
+  "acceptance_rule": "Staging-Accepted may become true only after every mandatory real-environment gate is evidenced, all required companion candidates are pinned and compatible, zero known unresolved defects remain or an explicit time-bounded Founder risk acceptance exists, backup/restore and rollback rehearsal pass, and Founder acceptance is dated.",
+  "required_file00_plan_integrations": [
+    "02",
+    "03",
+    "08",
+    "09",
+    "12",
+    "17",
+    "18",
+    "19",
+    "20",
+    "21",
+    "22",
+    "23",
+    "24",
+    "25"
+  ],
+  "candidate_source_pinning_status": "complete_for_file00_plan_named_integrations",
+  "package_pinning_status": "partial_pending_external_artifact_receipts"
 }

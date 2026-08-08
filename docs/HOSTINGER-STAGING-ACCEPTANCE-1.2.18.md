@@ -13,15 +13,24 @@ Repository/code completion, deterministic packaging and automated QA are not sta
 
 | File | Candidate to stage | Evidence state | Staging instruction |
 |---|---|---|---|
-| 00 Membership Core | `main` `3a84c32a6ddad151f2ed09d244fa8aa536a58108`, runtime `1.2.18` | merged; exact-main QA green | **mandatory** |
-| 01 Platform Foundation | Draft PR #3 head `ad34ecf316261666769d33a8ce3acac9c019ab73`, candidate `2.0.0` | source/package/QA green; main remains historical baseline | use PR candidate for current-plan staging; do not infer acceptance from main |
-| 02 Authentication | Draft PR #7 head `c895ec17c631e6a28c86aa659bf947f9d326dc4d`, candidate `1.2.0` | passkey/WebAuthn + File 00 Advanced Trust candidate, exact-head QA green; main is old `0.2.0` lineage | **mandatory current auth candidate** |
-| 19 Notifications | `main` `5cb83d399f35ae1636415fb83373b6ba282e3685`, runtime `3.0.0` | merged; repository QA green | **mandatory** |
-| 20 Unified Application Shell | `main` `178606ed1599c88dce7ef45cb69e2e90081cd519`, runtime `1.4.3` | merged after third ten-round hardening | **mandatory** |
-| 21 Home/News | `main` `ac83c987ab39d599ec4f5f092f1a1dedcaeaa1ee`, package/runtime/schema `1.0.5/1.0.3/1.0.0` | merged ten-round NG30 hardening | required for shell/feed coexistence |
-| 24 Security/Privacy/Resilience | `main` `3c5ea8ef342983630a7973274d3409c34409f86c`, runtime `0.99.0`, schema `0.25.5` | merged; repository code-complete candidate | **mandatory assurance plane** |
+| 00 Membership Core | `main` `3a84c32a6ddad151f2ed09d244fa8aa536a58108`, runtime `1.2.18` | merged; exact-main QA green | mandatory |
+| 01 Platform Foundation | PR #3 `ad34ecf316261666769d33a8ce3acac9c019ab73`, `2.0.0` | exact-head QA/package candidate | mandatory current candidate |
+| 02 Authentication | PR #7 `c895ec17c631e6a28c86aa659bf947f9d326dc4d`, `1.2.0` | exact-head QA/package candidate; governing-plan freshness reviewed separately | mandatory auth dependency |
+| 03 Profiles & Doctors | `main` `0db6161b7f8906e65387f1db9bb4fc6f215d00ef`, `1.0.0-rc3` | merged candidate | mandatory |
+| 08 Clinic & Appointments | PR #6 `97a6e3861306c119c3250d5881675d80691f9309`, `1.0.0` | source candidate; exact-head drift review follows | mandatory |
+| 09 Doctor Verification | PR #6 `f58b04f4282c1f907a9cf3043d2f9394fbccd640`, `1.2.0-rc3` | exact-head QA/package candidate | mandatory |
+| 12 PDF Library | PR #2 `1ddc48e0271c896f32dbaa6d53a41711c22031ed`, `0.2.0` | corrective QA-green candidate | mandatory |
+| 17 Communication Network | `main` `c4bb3d399b309d6f7f4f77f8bb376df25ccad558`, `2.0.3` | merged | mandatory |
+| 18 Marketplace | PR #3 `60191944dde0bb7df5e2057ba462d747883f8717`, `2.1.0` | source candidate; exact-head drift review follows | mandatory |
+| 19 Notifications | `main` `5cb83d399f35ae1636415fb83373b6ba282e3685`, `3.0.0` | merged; QA green | mandatory |
+| 20 Unified Shell | `main` `178606ed1599c88dce7ef45cb69e2e90081cd519`, `1.4.3` | merged; QA green | mandatory |
+| 21 Home/News | `main` `ac83c987ab39d599ec4f5f092f1a1dedcaeaa1ee`, package/runtime `1.0.5/1.0.3` | merged | mandatory |
+| 22 Composer | PR #24 `ce3dc881395cf22e5b33a538cbb7e104d1a51931`, `1.0.0-rc.2` | exact-head QA/package candidate | mandatory |
+| 23 Publishing Dashboard | `main` `a8a8c805f4730998ccb44bd95c87591836561759`, `1.2.0` | merged | mandatory |
+| 24 Security/Privacy | `main` `3c5ea8ef342983630a7973274d3409c34409f86c`, `0.99.0` schema `0.25.5` | merged repository candidate | mandatory assurance plane |
+| 25 Visual Experience | PR #1 `64ccd17ca7c2055dd7f31365a91861b6aa28139c`, `0.14.0` | exact-head QA artifact | mandatory |
 
-Files 03/09/17/22/23/25 must also be pinned to exact accepted candidates before the final integrated File 00 staging verdict because the File 00 plan names them as mandatory current contract integrations. Their absence or unknown version is not a PASS; it is an open staging gate.
+All File 00-plan-named integrations are now represented. Source-ref pinning is not package acceptance: every staged package still requires exact ZIP/checksum/manifest evidence before PASS.
 
 ## File 00 package identity
 
