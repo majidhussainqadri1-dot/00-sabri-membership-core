@@ -1,4 +1,5 @@
 name: File 00 Sixth Fresh Ten-Round Corrective Applicator
+# Final diagnostic rerun; this temporary workflow deletes itself before release QA.
 
 on:
   push:
