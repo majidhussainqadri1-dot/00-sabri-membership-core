@@ -28,7 +28,9 @@ jobs:
           coverage: none
           tools: none
       - name: Apply corrections
-        run: python3 tools/apply-fourth-fresh-ten-review.py
+        run: |
+          python3 tools/apply-fourth-fresh-ten-review.py
+          python3 tools/fix-fourth-static.py
       - name: Verify corrected source
         run: |
           npm ci --ignore-scripts
@@ -37,7 +39,7 @@ jobs:
       - name: Remove temporary mutator and commit corrected source
         run: |
           set -euo pipefail
-          git rm tools/apply-fourth-fresh-ten-review.py .github/workflows/apply-fourth-fresh-ten-review.yml
+          git rm tools/apply-fourth-fresh-ten-review.py tools/fix-fourth-static.py .github/workflows/apply-fourth-fresh-ten-review.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
