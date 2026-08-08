@@ -91,7 +91,8 @@ final class SMC_Authorization {
 	}
 
 	private static function recovery_actions() {
-		$actions = (array) apply_filters( 'smc_membership_recovery_actions', self::$recovery_actions );
+		$filtered = (array) apply_filters( 'smc_membership_recovery_actions', self::$recovery_actions );
+		$actions = array_merge( self::$recovery_actions, $filtered );
 		return array_values( array_unique( array_filter( array_map( 'sanitize_key', $actions ) ) ) );
 	}
 
@@ -164,17 +165,12 @@ final class SMC_Authorization {
 			return;
 		}
 		$user_id = get_current_user_id();
-		$is_admin = self::user_is_administrator( $user_id );
-		$is_file00 = self::request_is_file00_admin();
-
-		// Ordinary WordPress administration remains outside File 00 unless the
-		// request is a File 00/platform membership action. Reviewers are still
-		// governed on every admin request they can reach.
-		if ( $is_admin && ! $is_file00 ) {
-			return;
-		}
-
 		$assertions = self::assertions( $user_id );
+
+		// Privileged WordPress administration is a sensitive surface. Founder or
+		// Administrator identity never bypasses an explicit membership hard block,
+		// stale eligibility, containment/reverification hold, or current MFA gate.
+		// Explicit recovery actions remain available through the exact allowlist above.
 		if ( ! empty( $assertions['hard_blocked'] ) || empty( $assertions['effective_eligible'] ) || empty( $assertions['session_two_factor'] ) ) {
 			wp_safe_redirect( smc_page_url( 'status', '/membership-status/' ) );
 			exit;

@@ -878,6 +878,36 @@ final class SMC_Security {
 		return true;
 	}
 
+	public static function session_verified_at( $user_id ) {
+		$token = wp_get_session_token();
+		if ( ! $token ) {
+			return 0;
+		}
+		$hash = self::blind_index( $token, 'session-token' );
+		if ( is_wp_error( $hash ) ) {
+			return 0;
+		}
+		global $wpdb;
+		$base_cutoff = time() - 12 * HOUR_IN_SECONDS;
+		$required_after = absint( get_user_meta( absint( $user_id ), '_smc_revalidation_required_at', true ) );
+		$mfa_cutoff = gmdate( 'Y-m-d H:i:s', max( $base_cutoff, $required_after ) );
+		$activity_cutoff = gmdate( 'Y-m-d H:i:s', time() - 30 * MINUTE_IN_SECONDS );
+		$verified_at = $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT two_factor_at FROM {$wpdb->prefix}smc_auth_sessions WHERE user_id=%d AND token_hash=%s AND revoked_at IS NULL AND expires_at>UTC_TIMESTAMP() AND two_factor_at>=%s AND updated_at>=%s LIMIT 1",
+				absint( $user_id ),
+				$hash,
+				$mfa_cutoff,
+				$activity_cutoff
+			)
+		);
+		if ( ! $verified_at ) {
+			return 0;
+		}
+		$timestamp = strtotime( (string) $verified_at . ' UTC' );
+		return $timestamp > 0 ? $timestamp : 0;
+	}
+
 	public static function session_is_verified( $user_id ) {
 		$token = wp_get_session_token();
 		if ( ! $token ) {

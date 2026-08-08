@@ -10,8 +10,8 @@ const review = load('docs/FORTY-ROUND-REVIEW-1.2.10.md');
 const packageJson = JSON.parse(load('package.json'));
 
 const checks = [
-  ['runtime version', plugin.includes("define( 'SMC_VERSION', '1.2.16' );")],
-  ['package version', packageJson.version === '1.2.16'],
+  ['runtime version', plugin.includes("define( 'SMC_VERSION', '1.2.17' );")],
+  ['package version', packageJson.version === '1.2.17'],
   ['historical forty-round evidence retained', review.includes('1.2.10')],
   ['undefined guardian cleanup removed', !/guardian_consent_transaction_failed[\s\S]{0,500}submission_receipt_key/.test(workflow)],
   ['guardian write blocked by safe mode', !completion.match(/\$allowed\s*=\s*array\([\s\S]*?smc_verify_guardian[\s\S]*?\);/)],
@@ -34,4 +34,4 @@ for (const [name, ok] of checks) {
   if (!ok) failed += 1;
 }
 if (failed) process.exit(1);
-console.log(`${checks.length}/${checks.length} retained forty-round corrective assertions passed for runtime 1.2.16.`);
+console.log(`${checks.length}/${checks.length} retained forty-round corrective assertions passed for runtime 1.2.17.`);

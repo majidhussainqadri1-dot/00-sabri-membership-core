@@ -19,14 +19,14 @@ function assert(condition, name) {
   else failures.push(name);
 }
 
-assert(main.includes('Version: 1.2.16'), 'Plugin header is 1.2.16');
-assert(main.includes("define( 'SMC_VERSION', '1.2.16' )"), 'Runtime version is 1.2.16');
+assert(main.includes('Version: 1.2.17'), 'Plugin header is 1.2.17');
+assert(main.includes("define( 'SMC_VERSION', '1.2.17' )"), 'Runtime version is 1.2.17');
 assert(main.includes("define( 'SMC_DB_VERSION', '1.3.0' )"), 'Database version is 1.3.0');
 assert(main.includes("define( 'SMC_CONTRACT_VERSION', '1.2.0' )"), 'Contract version is 1.2.0');
 assert(stateFunction.length > 0, 'Explicit membership-state API exists');
 assert(/\$institutional\s*=\s*\$is_founder\s*\|\|\s*\$is_admin\s*\|\|\s*\$is_ai/.test(stateFunction), 'Founder, Administrator and institutional AI authority are resolved explicitly');
 assert(stateFunction.indexOf('if ( $institutional )') < stateFunction.indexOf('if ( $row && $status )'), 'Institutional authority is evaluated before ordinary application state');
-assert(/\$hard_blocks\s*=\s*array\( 'rejected', 'suspended', 'appeal_review', 'erasure_pending' \)/.test(stateFunction), 'Persistent institutional hard-block statuses remain explicit');
+assert(/\$hard_blocks\s*=\s*array\( 'rejected', 'suspended', 'expired', 'appeal_review', 'erasure_pending' \)/.test(stateFunction), 'Persistent institutional hard-block statuses remain explicit');
 assert(stateFunction.includes("'application_status'    => $status"), 'Underlying application state remains observable');
 assert(stateFunction.includes("'status'                => 'verified'"), 'Institutional compatibility status exists');
 assert(stateFunction.includes("'status'                => 'not_enrolled'"), 'Non-enrolled state is distinct from draft');

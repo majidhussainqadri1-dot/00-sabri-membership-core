@@ -3,7 +3,7 @@ Contributors: sabrihomeopathy
 Tags: membership, identity, guardian consent, two-factor authentication, privacy
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 1.2.16
+Stable tag: 1.2.17
 License: GPL-2.0-or-later
 
 Canonical membership eligibility, identity assurance, guardian consent, security assertions, and verification governance for the Sabri Social Homeopathy Platform.
@@ -52,6 +52,7 @@ Contract `smc.cf01.membership-assurance` version `1.0.0` returns a short-lived, 
 == Required Configuration ==
 
 Define a securely generated and separately backed-up SMC_MASTER_KEY with at least 256 bits of entropy in wp-config.php.
+Define SMC_MASTER_KEY_ID as a stable non-secret key identifier (for example smc-master-2026-01). New sensitive encryption fails closed if this identifier is absent or invalid; retain prior key identifiers only as required by an approved rotation/migration plan.
 
 Private storage defaults to a directory outside the WordPress public root. For explicit control, define SMC_PRIVATE_STORAGE_DIR as an absolute, non-symlink path outside ABSPATH and WP_CONTENT_DIR. The web-server user must be able to enforce directory mode 0700 and file mode 0600.
 
@@ -69,6 +70,10 @@ Local source and GitHub checks do not authorize production. Test fresh activatio
 
 == Changelog ==
 
+= 1.2.17 =
+* Fourth fresh ten-round corrective closure: institutional-admin MFA/hard-block enforcement, non-removable recovery allowlists, opaque assurance profiles, factual MFA provenance timestamps, institutional expiry fail-closed handling, deployment key-ID documentation, and release-QA provenance synchronization.
+* Preserves DB 1.3.0, public membership contract 1.2.0, Advanced Trust contract 1.0.0, single free tier, donor neutrality, zero commission and canonical File 00 ownership boundaries.
+
 = 1.2.16 =
 Third fresh ten-round corrective closure: key-ID migration safety, object-scoped private evidence, canonical publishing authority, revocation/consent hardening, durable event recovery, erasure propagation, restore evidence checks, and permanent regression QA.
 
@@ -76,7 +81,7 @@ Third fresh ten-round corrective closure: key-ID migration safety, object-scoped
 * Second fresh ten-round corrective closure: release-artifact hygiene, migration-lock contention safety, immutable authorization baselines, non-bypassable Safe Mode, fresh-session private-document access, canonical event-inbox schema use, replay-safe application lifecycle, privacy-minimal exports, durable outbox retry scheduling, and permanent regression gating.
 * Preserves DB 1.3.0, public membership contract 1.2.0, Advanced Trust contract 1.0.0, single free tier, donor neutrality, zero commission and canonical File 00 ownership boundaries.
 
-= 1.2.15 =
+= 1.2.14 =
 * Fresh ten-round corrective closure: synchronous periodic reverification, serialized revocation epochs, purpose-bound revocation-fresh selective disclosures, fail-closed state transitions, service-identity separation, typed File 09 professional claims, propagated overdue holds, and atomic emergency governance.
 * Preserves DB 1.3.0, public membership contract 1.2.0, Advanced Trust contract 1.0.0, single free tier, donor neutrality, zero commission and canonical ownership boundaries.
 

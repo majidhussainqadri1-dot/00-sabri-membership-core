@@ -286,7 +286,7 @@ function smc_membership_state( $user_id ) {
 	$is_ai         = $user_id > 0 && smc_is_institutional_ai( $user_id );
 	$institutional = $is_founder || $is_admin || $is_ai;
 	$account_class = smc_account_class_for_user( $user_id, $user );
-	$hard_blocks   = array( 'rejected', 'suspended', 'appeal_review', 'erasure_pending' );
+	$hard_blocks   = array( 'rejected', 'suspended', 'expired', 'appeal_review', 'erasure_pending' );
 	$erasure_lock = $user_id ? smc_privacy_erasure_lock( $user_id ) : false;
 
 	if ( $erasure_lock ) {

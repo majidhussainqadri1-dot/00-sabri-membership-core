@@ -72,7 +72,7 @@ final class SMC_Advanced_Trust_2026 {
 		return array(
 			'contract_version' => self::CONTRACT_VERSION,
 			'policy_version' => self::POLICY_VERSION,
-			'user_id' => $user_id,
+			'subject' => self::subject_reference( $user_id ),
 			'identity_assurance_level' => $identity_level,
 			'authentication_assurance_level' => (int) $auth['level'],
 			'authentication_owner' => (string) $auth['owner'],
@@ -95,7 +95,7 @@ final class SMC_Advanced_Trust_2026 {
 		return array(
 			'contract_version' => self::CONTRACT_VERSION,
 			'policy_version' => self::POLICY_VERSION,
-			'user_id' => 0,
+			'subject' => '',
 			'identity_assurance_level' => 0,
 			'authentication_assurance_level' => 0,
 			'authentication_owner' => 'none',
@@ -118,6 +118,10 @@ final class SMC_Advanced_Trust_2026 {
 	public static function authentication_assurance( $user_id ) {
 		$user_id = absint( $user_id );
 		$session_mfa = class_exists( 'SMC_Security' ) && SMC_Security::session_is_verified( $user_id );
+		$session_verified_at = $session_mfa && method_exists( 'SMC_Security', 'session_verified_at' ) ? absint( SMC_Security::session_verified_at( $user_id ) ) : 0;
+		if ( $session_mfa && $session_verified_at <= 0 ) {
+			$session_mfa = false;
+		}
 		$baseline = array(
 			'contract_version' => '1.0.0',
 			'owner' => 'file00',
@@ -125,7 +129,7 @@ final class SMC_Advanced_Trust_2026 {
 			'method' => $session_mfa ? 'file00_totp_or_recovery' : 'primary_authentication_unasserted',
 			'passkey_asserted' => false,
 			'hardware_backed' => false,
-			'verified_at' => $session_mfa ? time() : 0,
+			'verified_at' => $session_verified_at,
 		);
 		$claim = apply_filters( 'smc_file02_authentication_assurance_v1', $baseline, $user_id );
 		if ( ! is_array( $claim ) ) {

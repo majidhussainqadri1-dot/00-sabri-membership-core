@@ -1,0 +1,113 @@
+{
+  "release": "1.2.17",
+  "database_schema": "1.3.0",
+  "public_membership_contract": "1.2.0",
+  "advanced_trust_contract": "1.0.0",
+  "baseline_main_sha": "3c82152fe787eeb1830ed3feaf156f0306f4beef",
+  "review_complete": true,
+  "rounds_with_defects": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    9,
+    10
+  ],
+  "rounds_without_defects": [
+    6,
+    7,
+    8
+  ],
+  "defects_found_total": 8,
+  "defects_corrected_total": 8,
+  "severity": {
+    "critical": 1,
+    "high": 3,
+    "medium": 4,
+    "low": 0
+  },
+  "known_unresolved_repository_defects": 0,
+  "rounds": [
+    {
+      "round": 1,
+      "defects": [
+        "FFR-R1-D01"
+      ],
+      "status": "corrected"
+    },
+    {
+      "round": 2,
+      "defects": [
+        "FFR-R2-D01"
+      ],
+      "status": "corrected"
+    },
+    {
+      "round": 3,
+      "defects": [
+        "FFR-R3-D01"
+      ],
+      "status": "corrected"
+    },
+    {
+      "round": 4,
+      "defects": [
+        "FFR-R4-D01"
+      ],
+      "status": "corrected"
+    },
+    {
+      "round": 5,
+      "defects": [
+        "FFR-R5-D01"
+      ],
+      "status": "corrected"
+    },
+    {
+      "round": 6,
+      "defects": [],
+      "status": "no_reproducible_defect"
+    },
+    {
+      "round": 7,
+      "defects": [],
+      "status": "no_reproducible_defect"
+    },
+    {
+      "round": 8,
+      "defects": [],
+      "status": "no_reproducible_defect"
+    },
+    {
+      "round": 9,
+      "defects": [
+        "FFR-R9-D01"
+      ],
+      "status": "corrected"
+    },
+    {
+      "round": 10,
+      "defects": [
+        "FFR-R10-D01",
+        "FFR-R10-D02"
+      ],
+      "status": "corrected"
+    }
+  ],
+  "guardrails": {
+    "single_free_tier": true,
+    "donor_advantage": false,
+    "paid_unlocks": false,
+    "commission_percent": 0,
+    "brand_primary": "#087A4E",
+    "self_mutating_ci": false,
+    "fourth_fresh_regressions_permanent": true,
+    "lockfile_matches_runtime": true
+  },
+  "external_status": {
+    "staging_accepted": false,
+    "live_deployed": false,
+    "operational": false
+  }
+}
