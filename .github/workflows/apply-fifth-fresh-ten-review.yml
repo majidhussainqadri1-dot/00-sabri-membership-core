@@ -20,8 +20,8 @@ jobs:
       - name: Decode and apply corrections
         run: |
           set -euo pipefail
-          base64 -d tools/apply-fifth-fresh-ten-review.py.gz.b64 | gzip -d > tools/apply-fifth-fresh-ten-review.py
-          rm tools/apply-fifth-fresh-ten-review.py.gz.b64
+          cat tools/fifth-fresh-payload.part0 tools/fifth-fresh-payload.part1 tools/fifth-fresh-payload.part2 tools/fifth-fresh-payload.part3 | base64 -d | gzip -d > tools/apply-fifth-fresh-ten-review.py
+          rm -f tools/apply-fifth-fresh-ten-review.py.gz.b64 tools/fifth-fresh-payload.part0 tools/fifth-fresh-payload.part1 tools/fifth-fresh-payload.part2 tools/fifth-fresh-payload.part3
           python3 tools/apply-fifth-fresh-ten-review.py
           git diff --check
       - name: Commit corrected release
