@@ -16,11 +16,11 @@ Release 1.2.15 is a repository, authorization, privacy, durable-event and releas
 
 ## Second fresh ten-round result
 
-Ten new rounds were executed from the prior exact `main` baseline `6f557b764e57509d414d4bdb6c2f654a8a0a7f20`; prior review rounds were not counted. The second cycle found **13 unique defects**, corrected **13/13**. All ten rounds found at least one reproducible defect.
+Ten new rounds were executed from the prior exact `main` baseline `6f557b764e57509d414d4bdb6c2f654a8a0a7f20`; prior review rounds were not counted. The second cycle found **14 unique defects**, corrected **14/14**. All ten rounds found at least one reproducible defect.
 
-Severity: **1 Critical, 8 High, 4 Medium, 0 Low**.
+Severity: **1 Critical, 8 High, 5 Medium, 0 Low**.
 
-The most consequential corrections are: canonical event-inbox schema/runtime alignment; immutable hard-block and restricted-capability baselines; non-bypassable Safe Mode; fresh two-factor enforcement for private identity evidence; server-side submission lifecycle replay prevention; durable outbox retry scheduling; migration-lock contention safety; privacy-export data minimization; release-artifact hygiene; and permanent second-cycle regression gating.
+The most consequential corrections are: canonical event-inbox schema/runtime alignment; immutable hard-block and restricted-capability baselines; non-bypassable Safe Mode; fresh two-factor enforcement for private identity evidence; server-side submission lifecycle replay prevention; durable outbox retry scheduling; migration-lock contention safety; privacy-export data minimization; release-artifact hygiene; permanent second-cycle regression gating; and exact master-index/runtime release consistency.
 
 ## Preserved governing laws
 
