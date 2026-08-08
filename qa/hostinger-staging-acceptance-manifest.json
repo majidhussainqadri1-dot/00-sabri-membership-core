@@ -32,10 +32,14 @@
       "version": "1.2.0",
       "required": true,
       "main_is_current_candidate": false,
-      "governing_plan_version": "2.2",
-      "governing_target_runtime": "1.3.0",
+      "governing_plan_version": "2.3",
+      "governing_target_runtime": "1.3.2",
       "staging_usable_for_final_integrated_acceptance": false,
-      "blocker": "Latest approved File 02 v2.2 adds the 24-feature 1.3.0 authentication scope; no matching File 02 1.3.0 repository candidate was found. Preserve passkey-assurance v1 compatibility but do not treat 1.2.0 as current-plan staging acceptance."
+      "blocker": "Latest approved File 02 v2.3 is locally reviewed at runtime 1.3.2 with Authentication Assurance v2 contract 2.0.0, but GitHub PR #7 remains runtime 1.2.0. Do not assert final integrated staging acceptance until the v2.3/1.3.2 source is synchronized and exact-head CI/package evidence is pinned.",
+      "governing_authentication_assurance_v2_contract": "2.0.0",
+      "current_reviewed_local_package_sha256": "fe995c75e017909d15a118cb04b8c6570a7138406183119025add699178016a1",
+      "current_reviewed_local_evidence_only": true,
+      "current_plan_github_exact_head_synced": false
     },
     "file03": {
       "ref": "main",
@@ -181,7 +185,7 @@
   ],
   "candidate_source_pinning_status": "complete_for_file00_plan_named_integrations",
   "package_pinning_status": "partial_pending_external_artifact_receipts",
-  "preflight_status": "blocked_waiting_for_current_file02_1.3.0_candidate_and_real_hostinger_evidence",
+  "preflight_status": "blocked_waiting_for_current_file02_1.3.2_exact_head_candidate_and_real_hostinger_evidence",
   "release_review": "sixth_fresh_ten_round",
   "prior_exact_candidate_artifact": {
     "release": "1.2.19",
