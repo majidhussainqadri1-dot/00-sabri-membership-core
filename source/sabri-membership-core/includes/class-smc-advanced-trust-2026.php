@@ -329,12 +329,12 @@ final class SMC_Advanced_Trust_2026 {
 		foreach ( (array) $ids as $user_id ) {
 			$user_id = absint( $user_id );
 			$status = self::reverification_status( $user_id );
-			if ( ! empty( $status['overdue'] ) && ! get_user_meta( $user_id, '_smc_reverification_required', true ) ) {
-				if ( ! self::write_user_meta_verified( $user_id, '_smc_reverification_required', 1 )
-					|| ! SMC_Security::audit( 'membership_reverification_overdue', $user_id, array( 'due_at' => absint( $status['due_at'] ?? 0 ) ) )
-					|| false === self::bump_revocation_epoch( $user_id, 'membership_reverification_overdue' ) ) {
-					self::write_option_verified( self::REVERIFY_CURSOR_OPTION, $cursor );
-					return;
+			if ( ! empty( $status['overdue'] ) ) {
+				$due_at = absint( $status['due_at'] ?? 0 );
+				$propagated_due_at = absint( get_user_meta( $user_id, '_smc_reverification_overdue_propagated_due_at', true ) );
+				if ( ! get_user_meta( $user_id, '_smc_reverification_required', true ) && ! self::write_user_meta_verified( $user_id, '_smc_reverification_required', 1 ) ) { self::write_option_verified( self::REVERIFY_CURSOR_OPTION, $cursor ); return; }
+				if ( $due_at > 0 && $propagated_due_at < $due_at ) {
+					if ( ! SMC_Security::audit( 'membership_reverification_overdue', $user_id, array( 'due_at' => $due_at ) ) || false === self::bump_revocation_epoch( $user_id, 'membership_reverification_overdue' ) || ! self::write_user_meta_verified( $user_id, '_smc_reverification_overdue_propagated_due_at', $due_at ) ) { self::write_option_verified( self::REVERIFY_CURSOR_OPTION, $cursor ); return; }
 				}
 			}
 			$cursor = $user_id;
