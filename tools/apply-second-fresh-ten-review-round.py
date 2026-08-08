@@ -1,24 +1,17 @@
 #!/usr/bin/env python3
 from pathlib import Path
 root=Path(__file__).resolve().parents[1]
-source=root/'source/sabri-membership-core/includes/class-smc-workflow.php'
+source=root/'source/sabri-membership-core/includes/class-smc-privacy.php'
 s=source.read_text()
-old="""\t\t$user_id = get_current_user_id();\n\t\t$submission_key = sanitize_text_field( wp_unslash( $_POST['submission_key'] ?? '' ) );\n"""
-new="""\t\t$user_id = get_current_user_id();\n\t\t$existing_application = smc_application( $user_id );\n\t\tif ( $existing_application && ! in_array( sanitize_key( $existing_application['status'] ?? '' ), array( 'draft', 'more_information', 'rejected' ), true ) ) {\n\t\t\tself::redirect( 'status', 'saved' );\n\t\t}\n\t\t$submission_key = sanitize_text_field( wp_unslash( $_POST['submission_key'] ?? '' ) );\n"""
+old="""\t\t$page = max( 1, absint( $page ) );\n\t\t$groups = array(\n\t\t\t1 => self::export_identity( $user->ID ),\n\t\t\t2 => self::export_evidence( $user->ID ),\n\t\t\t3 => self::export_workflow( $user->ID ),\n\t\t\t4 => self::export_security( $user->ID ),\n\t\t);\n\t\treturn array(\n\t\t\t'data' => isset( $groups[ $page ] ) ? $groups[ $page ] : array(),\n\t\t\t'done' => $page >= count( $groups ),\n\t\t);\n"""
+new="""\t\t$page = max( 1, absint( $page ) );\n\t\tswitch ( $page ) {\n\t\t\tcase 1:\n\t\t\t\t$data = self::export_identity( $user->ID );\n\t\t\t\tbreak;\n\t\t\tcase 2:\n\t\t\t\t$data = self::export_evidence( $user->ID );\n\t\t\t\tbreak;\n\t\t\tcase 3:\n\t\t\t\t$data = self::export_workflow( $user->ID );\n\t\t\t\tbreak;\n\t\t\tcase 4:\n\t\t\t\t$data = self::export_security( $user->ID );\n\t\t\t\tbreak;\n\t\t\tdefault:\n\t\t\t\t$data = array();\n\t\t}\n\t\treturn array( 'data' => $data, 'done' => $page >= 4 );\n"""
 if new not in s:
-    if old not in s: raise SystemExit('round7 submission lifecycle anchor not found')
-    s=s.replace(old,new,1)
-old2="""\t\tupdate_user_meta( $user_id, '_smc_last_submission_key', $submission_key );\n\t\tupdate_user_meta( $user_id, $submission_receipt_key, array( 'status' => 'completed', 'completed_at' => time(), 'trace_id' => $trace_id ) );\n\t\tSMC_Completion::clear_draft( $user_id );\n"""
-new2="""\t\t$completed_receipt = array( 'status' => 'completed', 'completed_at' => time(), 'trace_id' => $trace_id );\n\t\tupdate_user_meta( $user_id, '_smc_last_submission_key', $submission_key );\n\t\t$last_key_ok = hash_equals( $submission_key, (string) get_user_meta( $user_id, '_smc_last_submission_key', true ) );\n\t\tupdate_user_meta( $user_id, $submission_receipt_key, $completed_receipt );\n\t\t$stored_receipt = get_user_meta( $user_id, $submission_receipt_key, true );\n\t\t$receipt_ok = is_array( $stored_receipt ) && 'completed' === ( $stored_receipt['status'] ?? '' ) && hash_equals( $trace_id, (string) ( $stored_receipt['trace_id'] ?? '' ) );\n\t\tif ( ! $last_key_ok && ! $receipt_ok ) {\n\t\t\tSMC_Security::audit( 'application_idempotency_receipt_failed', $user_id, array( 'trace_id' => $trace_id ) );\n\t\t}\n\t\tSMC_Completion::clear_draft( $user_id );\n"""
-if new2 not in s:
-    if old2 not in s: raise SystemExit('round7 completion receipt anchor not found')
-    s=s.replace(old2,new2,1)
-source.write_text(s)
-
+    if old not in s: raise SystemExit('round8 privacy exporter block not found')
+    source.write_text(s.replace(old,new,1))
 contract=root/'qa/second-fresh-review-contract.mjs'
 c=contract.read_text()
-if "const workflow=" not in c:
-    c=c.replace("const installer=fs.readFileSync('source/sabri-membership-core/includes/class-smc-installer.php','utf8');\n", "const installer=fs.readFileSync('source/sabri-membership-core/includes/class-smc-installer.php','utf8');\nconst workflow=fs.readFileSync('source/sabri-membership-core/includes/class-smc-workflow.php','utf8');\n")
-if "submission handler enforces lifecycle server-side" not in c:
-    c=c.replace("console.log(`Second fresh static complete; failures: ${failed}`); process.exit(failed?1:0);", "pass('submission handler enforces lifecycle server-side', /handle_submit_application[\\s\\S]{0,650}existing_application[\\s\\S]{0,450}more_information[\\s\\S]{0,250}rejected/.test(workflow));\npass('submission completion verifies idempotency persistence', workflow.includes('$last_key_ok = hash_equals') && workflow.includes('$receipt_ok = is_array') && workflow.includes('application_idempotency_receipt_failed'));\nconsole.log(`Second fresh static complete; failures: ${failed}`); process.exit(failed?1:0);")
+if "const privacy=" not in c:
+    c=c.replace("const workflow=fs.readFileSync('source/sabri-membership-core/includes/class-smc-workflow.php','utf8');\n", "const workflow=fs.readFileSync('source/sabri-membership-core/includes/class-smc-workflow.php','utf8');\nconst privacy=fs.readFileSync('source/sabri-membership-core/includes/class-smc-privacy.php','utf8');\n")
+if "privacy exporter processes only requested page" not in c:
+    c=c.replace("console.log(`Second fresh static complete; failures: ${failed}`); process.exit(failed?1:0);", "pass('privacy exporter processes only requested page', privacy.includes('switch ( $page )') && !privacy.includes('1 => self::export_identity( $user->ID )'));\nconsole.log(`Second fresh static complete; failures: ${failed}`); process.exit(failed?1:0);")
 contract.write_text(c)
