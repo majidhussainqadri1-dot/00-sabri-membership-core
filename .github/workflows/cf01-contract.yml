@@ -3,7 +3,7 @@ name: File 00 CF-01 and Forty-Round Contract Integrity
 on:
   pull_request:
   push:
-    branches: [main, 'codex/**']
+    branches: [main, 'codex/**', 'staging/**']
 
 permissions:
   contents: read
@@ -29,6 +29,14 @@ jobs:
           php-version: ${{ matrix.php }}
           coverage: none
           tools: none
+      - name: Enforce final workflow allowlist
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t flows < <(find .github/workflows -maxdepth 1 -type f -printf '%f\n' | sort)
+          expected=(cf01-contract.yml file00-three-plan-qa.yml)
+          test "${flows[*]}" = "${expected[*]}"
+          ! grep -R --line-number --include='*.yml' --include='*.yaml' 'contents: write' .github/workflows
       - name: Public repository and Git integrity
         run: |
           set -euo pipefail
@@ -61,7 +69,7 @@ jobs:
           mapfile -t php_files < <(find source qa -type f -name '*.php' -print | sort)
           test "${#php_files[@]}" -ge 15
           for file in "${php_files[@]}"; do php -l "$file"; done
-      - name: Run inherited, CF-01, forty-round and fifth-fresh suites
+      - name: Run inherited, CF-01, forty-round and sixth-fresh suites
         run: npm test
-      - name: Build and verify deterministic 1.2.18 package
+      - name: Build and verify deterministic 1.2.19 package
         run: npm run verify
