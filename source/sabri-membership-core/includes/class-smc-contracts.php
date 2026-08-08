@@ -498,14 +498,19 @@ final class SMC_Contracts {
 	}
 
 	private static function request_is_membership_recovery() {
-		if ( smc_is_membership_page() ) {
-			return true;
-		}
-		if ( wp_doing_cron() ) {
+		if ( smc_is_membership_page() || wp_doing_cron() ) {
 			return true;
 		}
 		$action = isset( $_REQUEST['action'] ) ? sanitize_key( wp_unslash( $_REQUEST['action'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		return 0 === strpos( $action, 'smc_' ) || 0 === strpos( $action, 'sa_' );
+		$baseline = array(
+			'smc_submit_application', 'smc_request_contact_otp', 'smc_verify_contact_otp',
+			'smc_start_2fa', 'smc_finish_2fa', 'smc_challenge_2fa', 'smc_rotate_recovery', 'smc_revoke_session',
+			'smc_verify_guardian', 'smc_resubmit', 'smc_appeal', 'smc_withdraw_guardian',
+			'smc_save_application_draft', 'smc_clear_application_draft',
+		);
+		$filtered = array_values( array_unique( array_map( 'sanitize_key', (array) apply_filters( 'smc_membership_recovery_actions', $baseline ) ) ) );
+		$allowed = array_values( array_unique( array_merge( $baseline, $filtered ) ) );
+		return '' !== $action && in_array( $action, $allowed, true );
 	}
 
 	public static function enforce_frontend_state() {
