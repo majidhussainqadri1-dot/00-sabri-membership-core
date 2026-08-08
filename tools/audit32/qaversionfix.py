@@ -3,6 +3,9 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[2] / 'qa'
 replacements = {
     "Version: 1.2.18": "Version: 1.2.19",
+    "Stable tag: 1.2.18": "Stable tag: 1.2.19",
+    "WordPress readme stable tag is 1.2.18": "WordPress readme stable tag is 1.2.19",
+    "Plugin readme stable tag is 1.2.18": "Plugin readme stable tag is 1.2.19",
     "define( 'SMC_VERSION', '1.2.18' )": "define( 'SMC_VERSION', '1.2.19' )",
     "SMC_VERSION', '1.2.18": "SMC_VERSION', '1.2.19",
     "define( 'SMC_DB_VERSION', '1.3.0' )": "define( 'SMC_DB_VERSION', '1.4.0' )",
