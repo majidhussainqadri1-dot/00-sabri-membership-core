@@ -602,7 +602,8 @@ final class SMC_Advanced_Trust_2026 {
 		if ( false === $primary_revocation || false === $duplicate_revocation ) {
 			return new WP_Error( 'smc_merge_revocation', __( 'Account merge approval could not be propagated to all consumers.', 'sabri-membership-core' ) );
 		}
-		do_action( 'smc_account_merge_approved', $request );
+		$event = array( 'event_version' => '2.0.0', 'request_id' => sanitize_text_field( (string) $request_id ), 'primary_subject' => self::subject_reference( $primary_user_id ), 'duplicate_subject' => self::subject_reference( $duplicate_user_id ), 'state' => 'approved_for_domain_transfer', 'approved_at' => absint( $request['approved_at'] ?? time() ) );
+		try { do_action( 'smc_account_merge_approved', $event ); } catch ( Throwable $error ) { SMC_Security::audit( 'account_merge_observer_failed', $primary_user_id, array( 'request_id' => sanitize_text_field( (string) $request_id ) ) ); }
 		return $request;
 	}
 
@@ -720,7 +721,7 @@ final class SMC_Advanced_Trust_2026 {
 			'guardian_requirement_met' => ! empty( $base['guardian_verified'] ),
 			'identity_current' => ! empty( $profile['identity_current'] ),
 			'professional_current' => ! empty( $profile['professional_current'] ),
-			'session_step_up_current' => (int) $profile['authentication_assurance_level'] >= 2,
+			'session_step_up_current' => self::protected_actions_allowed( $user_id ) && (int) $profile['authentication_assurance_level'] >= 2 && ( 0 === absint( get_user_meta( $user_id, '_smc_revalidation_required_at', true ) ) || absint( $profile['authentication_verified_at'] ?? 0 ) >= absint( get_user_meta( $user_id, '_smc_revalidation_required_at', true ) ) ),
 			'public_index_allowed' => ! empty( $base['public_profile_allowed'] ) && self::protected_actions_allowed( $user_id ),
 			'revocation_epoch' => self::revocation_epoch( $user_id ),
 			'issued_at' => $now,

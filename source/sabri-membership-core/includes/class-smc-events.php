@@ -24,6 +24,7 @@ final class SMC_Events {
 		'membership_erasure_requested'      => 'AccountErasureStarted',
 		'privacy_erasure_started'           => 'AccountErasureStarted',
 		'membership_restored'               => 'MembershipRestored',
+		'account_merge_approved'             => 'AccountMergeApproved',
 		'institutional_membership_restored' => 'MembershipRestored',
 	);
 
@@ -49,7 +50,7 @@ final class SMC_Events {
 		$allowed = array(
 			'age', 'type', 'guardian_required', 'applicant_version', 'status', 'old_status', 'new_status',
 			'document_key', 'version', 'channel', 'reason_code', 'scope', 'source_version', 'policy_version',
-			'contract_version', 'queue_type', 'trace_id', 'role_types',
+			'contract_version', 'queue_type', 'trace_id', 'request_id', 'duplicate_subject', 'role_types',
 		);
 		$payload = array();
 		foreach ( $allowed as $key ) {
