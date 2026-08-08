@@ -41,6 +41,7 @@ jobs:
           python3 tools/audit32/sourcefix3.py
           python3 tools/audit32/sourcefix4.py
           python3 tools/audit32/sourcefix5.py
+          python3 tools/audit32/sourcefix6.py
           python3 tools/audit32/qaversionfix.py
       - name: Refresh source manifest
         run: |
