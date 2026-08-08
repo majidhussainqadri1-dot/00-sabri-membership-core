@@ -1,0 +1,31 @@
+name: Apply File 00 Third Fresh Active-QA Sync
+
+on:
+  push:
+    branches: [codex/file00-third-fresh-ten-review-1.2.16]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - run: python3 tools/sync-third-fresh-active-qa.py
+      - name: Commit active QA synchronization
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add qa
+          git diff --cached --quiet && exit 0
+          git commit -m 'Round 10: synchronize active QA runtime expectations to 1.2.16'
+          git push origin HEAD:codex/file00-third-fresh-ten-review-1.2.16
