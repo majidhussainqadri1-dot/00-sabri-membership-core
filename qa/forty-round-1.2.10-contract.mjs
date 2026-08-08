@@ -10,8 +10,8 @@ const review = load('docs/FORTY-ROUND-REVIEW-1.2.10.md');
 const packageJson = JSON.parse(load('package.json'));
 
 const checks = [
-  ['runtime version', plugin.includes("define( 'SMC_VERSION', '1.2.19' );")],
-  ['package version', packageJson.version === '1.2.19'],
+  ['runtime version', plugin.includes("define( 'SMC_VERSION', '1.2.20' );")],
+  ['package version', packageJson.version === '1.2.20'],
   ['historical forty-round evidence retained', review.includes('1.2.10')],
   ['undefined guardian cleanup removed', !/guardian_consent_transaction_failed[\s\S]{0,500}submission_receipt_key/.test(workflow)],
   ['guardian write blocked by safe mode', !completion.match(/\$allowed\s*=\s*array\([\s\S]*?smc_verify_guardian[\s\S]*?\);/)],
