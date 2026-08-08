@@ -907,11 +907,18 @@ final class SMC_Advanced_Trust_2026 {
 		if ( ! is_array( $request ) || absint( $request['expires_at'] ?? 0 ) <= time() || ! empty( $request['consumed_at'] ) || count( array_unique( (array) ( $request['approvals'] ?? array() ) ) ) < 2 || ! in_array( $actor_id, (array) $request['approvals'], true ) || ! self::break_glass_approvals_current( $request ) ) {
 			self::release_break_glass_lock( $lock ); return false;
 		}
+		$before = $request;
 		$request['consumed_at'] = time(); $request['consumed_by'] = $actor_id; $all[ $request_id ] = $request;
 		$stored = self::write_option_verified( self::BREAK_GLASS_OPTION, $all );
-		$audit = $stored && SMC_Security::audit( 'break_glass_consumed', absint( $request['subject_user_id'] ), array( 'request_id' => $request_id ) );
+		if ( ! $stored ) { self::release_break_glass_lock( $lock ); return false; }
+		$audit = SMC_Security::audit( 'break_glass_consumed', absint( $request['subject_user_id'] ), array( 'request_id' => $request_id ) );
+		if ( ! $audit ) {
+			$all[ $request_id ] = $before;
+			self::write_option_verified( self::BREAK_GLASS_OPTION, $all );
+			self::release_break_glass_lock( $lock );
+			return false;
+		}
 		self::release_break_glass_lock( $lock );
-		if ( ! $stored || ! $audit ) { return false; }
 		return array( 'authorized' => true, 'request_id' => $request_id, 'subject' => self::subject_reference( absint( $request['subject_user_id'] ) ), 'purpose' => sanitize_text_field( $request['purpose'] ?? '' ), 'expires_at' => min( absint( $request['expires_at'] ), time() + 300 ) );
 	}
 
