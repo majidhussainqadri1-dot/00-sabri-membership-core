@@ -197,6 +197,7 @@ final class SMC_Advanced_Trust_2026 {
 			'delegation_grant' => array( 3, 2, false, false ),
 			'account_merge' => array( 4, 2, false, false ),
 			'professional_approval' => array( 4, 2, false, false ),
+			'service_identity_change' => array( 3, 3, false, true ),
 			'founder_recovery' => array( 4, 3, true, true ),
 			'break_glass' => array( 4, 3, true, true ),
 		);
@@ -975,7 +976,7 @@ final class SMC_Advanced_Trust_2026 {
 
 	public static function set_service_identity( $user_id, $actor_id, $purpose, $approved = true ) {
 		$user_id = absint( $user_id ); $actor_id = absint( $actor_id ); $purpose = sanitize_key( $purpose );
-		if ( ! $user_id || ! get_userdata( $user_id ) || '' === $purpose || ! self::actor_is_current( $actor_id, 'manage_options', true ) || ! SMC_Security::session_is_verified( $actor_id ) ) { return false; }
+		if ( ! $user_id || ! get_userdata( $user_id ) || '' === $purpose || ! self::actor_meets_step_up( $actor_id, 'service_identity_change', 'manage_options', true ) ) { return false; }
 		if ( function_exists( 'smc_is_founder' ) && smc_is_founder( $user_id ) ) { return false; }
 		if ( function_exists( 'smc_is_institutional_ai' ) && smc_is_institutional_ai( $user_id ) ) { return false; }
 		$existing = get_user_meta( $user_id, self::SERVICE_IDENTITY_META, true );
@@ -1094,7 +1095,7 @@ final class SMC_Advanced_Trust_2026 {
 		if ( function_exists( 'get_current_user_id' ) && get_current_user_id() > 0 && get_current_user_id() !== $actor_id ) { return false; }
 		$is_founder = function_exists( 'smc_is_founder' ) && smc_is_founder( $actor_id );
 		$is_admin = current_user_can( 'manage_options' );
-		if ( $founder_or_admin && ( $is_founder || $is_admin ) ) { return true; }
+		if ( $founder_or_admin && ( $is_founder || $is_admin ) ) { return self::protected_actions_allowed( $actor_id ) && ( '' === $capability || current_user_can( $capability ) ); }
 		if ( ! $is_founder && ! $is_admin && class_exists( 'SMC_Contracts' ) ) {
 			$membership = SMC_Contracts::assertions( $actor_id );
 			if ( empty( $membership['approved'] ) || ! empty( $membership['suspended'] ) || empty( $membership['eligible'] ) || ! self::protected_actions_allowed( $actor_id ) ) { return false; }
