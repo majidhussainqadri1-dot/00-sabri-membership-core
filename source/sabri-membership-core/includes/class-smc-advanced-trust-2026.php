@@ -1047,7 +1047,13 @@ final class SMC_Advanced_Trust_2026 {
 		$actor_id = absint( $actor_id );
 		if ( $actor_id <= 0 ) { return false; }
 		if ( function_exists( 'get_current_user_id' ) && get_current_user_id() > 0 && get_current_user_id() !== $actor_id ) { return false; }
-		if ( $founder_or_admin && function_exists( 'smc_is_founder' ) && smc_is_founder( $actor_id ) ) { return true; }
+		$is_founder = function_exists( 'smc_is_founder' ) && smc_is_founder( $actor_id );
+		$is_admin = current_user_can( 'manage_options' );
+		if ( $founder_or_admin && ( $is_founder || $is_admin ) ) { return true; }
+		if ( ! $is_founder && ! $is_admin && class_exists( 'SMC_Contracts' ) ) {
+			$membership = SMC_Contracts::assertions( $actor_id );
+			if ( empty( $membership['approved'] ) || ! empty( $membership['suspended'] ) || empty( $membership['eligible'] ) || ! self::protected_actions_allowed( $actor_id ) ) { return false; }
+		}
 		return '' === $capability || current_user_can( $capability );
 	}
 
