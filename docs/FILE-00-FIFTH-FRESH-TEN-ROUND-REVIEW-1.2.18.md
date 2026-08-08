@@ -13,8 +13,8 @@ Baseline: `40e411f291eb2949b7906b4c39b65577a7f490b6` (1.2.17). Earlier review cy
 | 7 | Defect | F5R-R7-D01 — High: break-glass approvals were IDs without approval time/current-authority revalidation at consume | Persist approval timestamps and revalidate both distinct privileged approvers at consumption |
 | 8 | Defect | F5R-R8-D01 — Medium: guardian succession successor lookup did not bind to current consent-policy version | Current verified guardian lookup now requires current `smc_policy()['version']` |
 | 9 | Defect | F5R-R9-D01 — Medium: hardening regression test encoded a stale File00 assurance-level assumption and falsely treated a correctly rejected File02 elevation as failure | Preserve the current File00 MFA baseline while asserting that stale File02 passkey/hardware elevation is rejected; regression now checks owner plus absence of elevated passkey/hardware claims |
-| 10 | Clean | No new reproducible repository defect | Fresh corrected-source closure, release identity, package/CI/traceability review; external gates remain separate |
+| 10 | Defect | F5R-R10-D01 — Medium: committed plugin `MANIFEST.sha256` still contained pre-1.2.18 digests for changed release files, causing the clean exact-head contract gate to fail | Regenerated the committed manifest from the exact 1.2.18 source and retained deterministic package/source integrity verification |
 
-Total: **9 unique defects; corrected 9/9**. Severity: **1 Critical, 4 High, 4 Medium, 0 Low**. Known unresolved repository defects after corrected-source closure: **0**.
+Total: **10 unique defects; corrected 10/10**. Severity: **1 Critical, 4 High, 5 Medium, 0 Low**. Known unresolved repository defects after corrected-source closure: **0**.
 
 Staging-Accepted, Live-Deployed and Operational remain pending external acceptance gates and are not inferred from repository QA.

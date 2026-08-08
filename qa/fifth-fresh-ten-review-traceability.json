@@ -14,17 +14,16 @@
     6,
     7,
     8,
-    9
-  ],
-  "rounds_without_defects": [
+    9,
     10
   ],
-  "defects_found_total": 9,
-  "defects_corrected_total": 9,
+  "rounds_without_defects": [],
+  "defects_found_total": 10,
+  "defects_corrected_total": 10,
   "severity": {
     "critical": 1,
     "high": 4,
-    "medium": 4,
+    "medium": 5,
     "low": 0
   },
   "known_unresolved_repository_defects": 0,
@@ -94,8 +93,10 @@
     },
     {
       "round": 10,
-      "defects": [],
-      "status": "no_reproducible_defect"
+      "defects": [
+        "F5R-R10-D01"
+      ],
+      "status": "corrected"
     }
   ],
   "guardrails": {
