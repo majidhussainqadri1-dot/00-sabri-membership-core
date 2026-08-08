@@ -68,7 +68,8 @@ assert(security.includes("WHERE id=%d AND ((status IN ('pending','retry')"), 'Fi
 assert(lifecycle.includes('GET_LOCK') && lifecycle.includes('RELEASE_LOCK'), 'Lifecycle job uses an advisory overlap lock');
 assert(workflow.indexOf('$wpdb->query( $sql )') < workflow.indexOf("apply_filters( 'smc_send_contact_otp'"), 'Contact OTP is persisted before provider delivery');
 assert(workflow.includes("DELETE FROM {$wpdb->prefix}smc_contact_otps"), 'Failed contact delivery deletes the exact unverified OTP');
-assert(security.includes("last_totp_slice'] >= (int) $slice") && security.includes('last_totp_slice<%d'), 'TOTP replay slice is rejected under a row lock');
+assert(installer.includes('smc_mfa_factor_state') && security.includes('SELECT user_id,last_totp_slice FROM {$wpdb->prefix}smc_mfa_factor_state') && security.includes('LIMIT 1 FOR UPDATE'), 'TOTP replay state is serialized at the user/factor level');
+assert(security.includes('$global_last') && security.includes("$global_last >= (int) $slice"), 'A TOTP time slice accepted in any session is rejected for the same factor');
 assert(!security.includes("if ( 1 !== $updated ) {\n\t\t\treturn self::register_session"), 'TOTP replay failure cannot reset the session');
 const registerSection = security.slice(security.indexOf('public static function register_session'), security.indexOf('public static function session_is_verified'));
 assert(!registerSection.includes('revoked_at=NULL'), 'Session registration cannot resurrect revoked sessions');
