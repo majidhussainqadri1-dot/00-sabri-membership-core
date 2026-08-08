@@ -4,8 +4,11 @@ root = Path(__file__).resolve().parents[2] / 'qa'
 replacements = {
     "Version: 1.2.18": "Version: 1.2.19",
     "define( 'SMC_VERSION', '1.2.18' )": "define( 'SMC_VERSION', '1.2.19' )",
+    "SMC_VERSION', '1.2.18": "SMC_VERSION', '1.2.19",
     "define( 'SMC_DB_VERSION', '1.3.0' )": "define( 'SMC_DB_VERSION', '1.4.0' )",
+    "SMC_DB_VERSION', '1.3.0": "SMC_DB_VERSION', '1.4.0",
     "define( 'SMC_CONTRACT_VERSION', '1.2.0' )": "define( 'SMC_CONTRACT_VERSION', '1.2.1' )",
+    "SMC_CONTRACT_VERSION', '1.2.0": "SMC_CONTRACT_VERSION', '1.2.1",
     "Plugin header is 1.2.18": "Plugin header is 1.2.19",
     "Runtime version is 1.2.18": "Runtime version is 1.2.19",
     "Database version is 1.3.0": "Database version is 1.4.0",
