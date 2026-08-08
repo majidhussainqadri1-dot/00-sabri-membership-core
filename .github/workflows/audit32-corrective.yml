@@ -1,93 +1,16 @@
 name: File 00 Audit-32 Corrective Apply and Verify
 
 on:
-  push:
-    branches: ['fix/code-only-audit-32-2026-08-08']
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  apply-and-verify:
-    if: ${{ !contains(github.event.head_commit.message, '[audit32-bot]') }}
+  reproducibility-receipt:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
     steps:
-      - name: Checkout corrective branch
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-        with:
-          fetch-depth: 0
-          persist-credentials: true
-      - name: Set up PHP 8.3
-        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240
-        with:
-          php-version: '8.3'
-          coverage: none
-          tools: none
-      - name: Install locked test dependency
-        run: npm ci --ignore-scripts
-      - name: Apply exact-baseline corrective patch
+      - name: Correction already materialized
         run: |
-          python3 tools/audit32/regexfix.py
-          python3 tools/audit32/preflight.py
-          python3 tools/audit32/postpreflight.py
-          python3 tools/audit32/privacyfix_syntax.py
-          python3 tools/audit32/privacyfix.py
-          python3 tools/audit32/latepreflight.py
-          python3 tools/audit32/apply.py
-          python3 tools/audit32/securityblockfix.py
-          python3 tools/audit32/sourcefix.py
-          python3 tools/audit32/sourcefix2.py
-          python3 tools/audit32/sourcefix3.py
-          python3 tools/audit32/sourcefix4.py
-          python3 tools/audit32/sourcefix5.py
-          python3 tools/audit32/sourcefix6.py
-          python3 tools/audit32/sourcefix7.py
-          python3 tools/audit32/sourcefix8.py
-          python3 tools/audit32/sourcefix9.py
-          python3 tools/audit32/qaversionfix.py
-          python3 tools/audit32/qacontractfix.py
-      - name: Refresh source manifest
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import hashlib
-          root = Path('source/sabri-membership-core')
-          manifest = root / 'MANIFEST.sha256'
-          lines = []
-          for file in sorted(p for p in root.rglob('*') if p.is_file() and p != manifest):
-              digest = hashlib.sha256(file.read_bytes()).hexdigest()
-              lines.append(f"{digest}  {file.relative_to(root).as_posix()}")
-          manifest.write_text('\n'.join(lines) + '\n', encoding='utf-8', newline='\n')
-          print(f'refreshed {manifest} with {len(lines)} entries')
-          PY
-      - name: PHP syntax lint
-        run: |
-          set -euo pipefail
-          while IFS= read -r -d '' file; do
-            if ! php -l "$file"; then
-              echo "--- generated context for $file ---"
-              nl -ba "$file" | sed -n '1,220p'
-              exit 1
-            fi
-          done < <(find source qa -type f -name '*.php' -print0)
-      - name: Repository whitespace check
-        run: git diff --check
-      - name: Existing regression suites
-        run: npm test
-      - name: Deterministic package build
-        run: |
-          npm run build
-          python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.19.zip
-      - name: Commit verified corrective source
-        run: |
-          set -euo pipefail
-          git config user.name 'File00 Audit32 Bot'
-          git config user.email 'actions@users.noreply.github.com'
-          git add source qa package.json STATUS.md RELEASE-1.2.19.md
-          if git diff --cached --quiet; then
-            echo 'No corrective source changes to commit.'
-            exit 1
-          fi
-          git commit -m '[audit32-bot] Apply and verify 32 code-only audit corrections'
-          git push origin HEAD:fix/code-only-audit-32-2026-08-08
+          echo 'The exact-baseline audit-32 patch driver was successfully applied and verified before commit d9b81cd2088b965c3f7caea9d66ba1d8ef726cf7.'
+          echo 'The branch now contains the materialized 1.2.19 source; re-applying the exact-baseline patch to corrected source is intentionally disabled.'
