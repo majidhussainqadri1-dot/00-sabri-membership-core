@@ -8,15 +8,16 @@
   "plugin_zip_sha256": "935ffa474625f25e64aad780d058de82b2403b1964bc4ce935a2b4551a764b43",
   "exact_main_artifact": {
     "id": 9020924990,
-    "wrapper_sha256": "aa4bc3b845506685fa39ed705053d82b3fe774f5fb0fe7a16f838770374fbf6d"
+    "wrapper_sha256": "aa4bc3b845506685fa39ed705053d82b3fe774f5fb0fe7a16f838770374fbf6d",
+    "role": "historical main baseline only; not the current candidate artifact"
   },
   "candidate_matrix": {
     "file00": {
-      "ref": "staging/file00-1.2.18-hostinger-acceptance",
-      "sha": "3a84c32a6ddad151f2ed09d244fa8aa536a58108",
+      "ref": "codex/file00-seventh-fresh-ten-review-1.2.20",
+      "sha": "c0d04a67fb2c24319d34defc23d534e0546445e0",
       "version": "1.2.19",
       "required": true,
-      "sha_role": "immutable pre-review main baseline; final exact branch head is external CI/PR evidence"
+      "sha_role": "immutable sixth-review 1.2.19 exact-head baseline; seventh-review final head is external CI/PR evidence"
     },
     "file01": {
       "ref": "pull/3",
@@ -181,5 +182,14 @@
   "candidate_source_pinning_status": "complete_for_file00_plan_named_integrations",
   "package_pinning_status": "partial_pending_external_artifact_receipts",
   "preflight_status": "blocked_waiting_for_current_file02_1.3.0_candidate_and_real_hostinger_evidence",
-  "release_review": "sixth_fresh_ten_round"
+  "release_review": "sixth_fresh_ten_round",
+  "prior_exact_candidate_artifact": {
+    "release": "1.2.19",
+    "head_sha": "c0d04a67fb2c24319d34defc23d534e0546445e0",
+    "id": 9022343881,
+    "wrapper_sha256": "014876db2b7a13671bf32de81841e5d3b7341de107c0ba96467f9e40f09949ab",
+    "plugin_zip_sha256": "8d79c0a1fc67d7b9f8600da52f7323811739a05c1c3793eacbcdea446214b616",
+    "role": "immutable sixth-review exact-head baseline before the seventh fresh review"
+  },
+  "staging_ledger_review": "seventh_fresh_review_in_progress"
 }
