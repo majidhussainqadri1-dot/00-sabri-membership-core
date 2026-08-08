@@ -22,6 +22,8 @@ current_replacements=[
     ('Runtime implementation release: `1.2.18`','Runtime implementation release: `1.2.19`'),
     ("pkg.version==='1.2.18'","pkg.version==='1.2.19'"),
     ("pkg.version === '1.2.18'","pkg.version === '1.2.19'"),
+    ("packageJson.version === '1.2.18'","packageJson.version === '1.2.19'"),
+    ("packageJson.version==='1.2.18'","packageJson.version==='1.2.19'"),
     ("lock.version==='1.2.18'","lock.version==='1.2.19'"),
     ("lock.version === '1.2.18'","lock.version === '1.2.19'"),
     ('00-sabri-membership-core-1.2.18.zip','00-sabri-membership-core-1.2.19.zip'),
