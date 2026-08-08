@@ -1,0 +1,78 @@
+name: File 00 Real WordPress MySQL Audit-32 Gate
+
+on:
+  push:
+    branches: ['fix/code-only-audit-32-2026-08-08']
+  pull_request:
+    branches: ['main']
+
+permissions:
+  contents: read
+
+jobs:
+  wordpress-mysql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_DATABASE: wordpress
+          MARIADB_USER: wordpress
+          MARIADB_PASSWORD: wordpress
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - name: Checkout corrected File 00
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - name: Set up PHP 8.3
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240
+        with:
+          php-version: '8.3'
+          coverage: none
+          extensions: mysqli, openssl, mbstring, json
+          tools: none
+      - name: Install pinned WP-CLI
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 https://github.com/wp-cli/wp-cli/releases/download/v2.12.0/wp-cli-2.12.0.phar -o /tmp/wp-cli.phar
+          php /tmp/wp-cli.phar --info
+      - name: Install WordPress 7.0.1
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar core download --version=7.0.1 --path=/tmp/wordpress --force
+          php /tmp/wp-cli.phar config create --path=/tmp/wordpress --dbname=wordpress --dbuser=wordpress --dbpass=wordpress --dbhost=127.0.0.1:3306 --skip-check
+          php /tmp/wp-cli.phar config set SMC_MASTER_KEY 'base64:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=' --type=constant --path=/tmp/wordpress
+          php /tmp/wp-cli.phar config set SMC_MASTER_KEY_ID 'audit32-ci-key-v1' --type=constant --path=/tmp/wordpress
+          php /tmp/wp-cli.phar config set WP_ENVIRONMENT_TYPE 'staging' --type=constant --path=/tmp/wordpress
+          php /tmp/wp-cli.phar core install --path=/tmp/wordpress --url=http://audit32.local --title='File 00 Audit 32 CI' --admin_user=founder --admin_password='Audit32-Temporary-Password!9' --admin_email=founder@example.test --skip-email
+      - name: Activate corrected plugin
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/wordpress/wp-content/plugins/sabri-membership-core
+          cp -R source/sabri-membership-core /tmp/wordpress/wp-content/plugins/sabri-membership-core
+          php /tmp/wp-cli.phar plugin activate sabri-membership-core --path=/tmp/wordpress
+          php /tmp/wp-cli.phar plugin status sabri-membership-core --path=/tmp/wordpress
+      - name: Concurrent audit append smoke
+        run: |
+          set -euo pipefail
+          for i in 1 2 3 4; do
+            php /tmp/wp-cli.phar eval "if (!SMC_Security::audit('audit32_concurrent_a_${i}',0,array('worker'=>'a'))) { exit(11); }" --path=/tmp/wordpress &
+            php /tmp/wp-cli.phar eval "if (!SMC_Security::audit('audit32_concurrent_b_${i}',0,array('worker'=>'b'))) { exit(12); }" --path=/tmp/wordpress &
+          done
+          wait
+      - name: Real WordPress and InnoDB integration assertions
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file "$GITHUB_WORKSPACE/qa/audit32-wordpress-mysql.php" --path=/tmp/wordpress
+      - name: Runtime/package identity evidence
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval 'echo SMC_VERSION," / ",SMC_DB_VERSION," / ",SMC_CONTRACT_VERSION,"\n";' --path=/tmp/wordpress
+          php /tmp/wp-cli.phar db query "SELECT TABLE_NAME,ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME LIKE 'wp_smc_%' ORDER BY TABLE_NAME" --path=/tmp/wordpress
