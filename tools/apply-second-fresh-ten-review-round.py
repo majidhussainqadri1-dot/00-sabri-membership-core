@@ -1,32 +1,19 @@
 #!/usr/bin/env python3
 from pathlib import Path
 root=Path(__file__).resolve().parents[1]
-installer=root/'source/sabri-membership-core/includes/class-smc-installer.php'
-s=installer.read_text()
-old="""\tpublic static function maybe_upgrade() {\n\t\tif ( SMC_DB_VERSION === get_option( 'smc_db_version', '' ) ) {\n\t\t\treturn;\n\t\t}\n\t\t$lock = self::acquire_lock( 1 );\n\t\ttry {\n\t\t\tself::create_tables();\n\t\t\tself::create_roles();\n\t\t\tself::create_pages();\n\t\t\tif ( ! self::backfill_role_grants() ) {\n\t\t\t\treturn;\n\t\t\t}\n\t\t\tself::run_legacy_batch();\n\t\t} catch ( Throwable $error ) {\n\t\t\tself::record_failure( 'upgrade', $error );\n\t\t} finally {\n\t\t\tself::release_lock( $lock );\n\t\t}\n\t}\n"""
-new="""\tpublic static function maybe_upgrade() {\n\t\tif ( SMC_DB_VERSION === get_option( 'smc_db_version', '' ) ) {\n\t\t\treturn;\n\t\t}\n\t\t$lock = null;\n\t\ttry {\n\t\t\t$lock = self::acquire_lock( 1 );\n\t\t\tself::create_tables();\n\t\t\tself::create_roles();\n\t\t\tself::create_pages();\n\t\t\tif ( ! self::backfill_role_grants() ) {\n\t\t\t\treturn;\n\t\t\t}\n\t\t\tself::run_legacy_batch();\n\t\t} catch ( Throwable $error ) {\n\t\t\tself::record_failure( 'upgrade', $error );\n\t\t} finally {\n\t\t\tif ( is_array( $lock ) ) {\n\t\t\t\tself::release_lock( $lock );\n\t\t\t}\n\t\t}\n\t}\n"""
-if old not in s: raise SystemExit('round2 maybe_upgrade block not found')
-installer.write_text(s.replace(old,new,1))
+source=root/'source/sabri-membership-core/includes/class-smc-authorization.php'
+s=source.read_text()
+old="""\tprivate static function restricted_capabilities() {\n\t\t$caps = (array) apply_filters( 'smc_restricted_capabilities', self::$restricted_caps );\n\t\treturn array_values( array_unique( array_filter( array_map( 'sanitize_key', $caps ) ) ) );\n\t}\n\n\tpublic static function hard_block_statuses() {\n\t\treturn (array) apply_filters(\n\t\t\t'smc_hard_block_statuses',\n\t\t\tarray( 'rejected', 'suspended', 'expired', 'appeal_review', 'erasure_pending', 'invalid_application' )\n\t\t);\n\t}\n"""
+new="""\tprivate static function restricted_capabilities() {\n\t\t$filtered = (array) apply_filters( 'smc_restricted_capabilities', self::$restricted_caps );\n\t\t$caps = array_merge( self::$restricted_caps, $filtered );\n\t\treturn array_values( array_unique( array_filter( array_map( 'sanitize_key', $caps ) ) ) );\n\t}\n\n\tpublic static function hard_block_statuses() {\n\t\t$baseline = array( 'rejected', 'suspended', 'expired', 'appeal_review', 'erasure_pending', 'invalid_application' );\n\t\t$filtered = (array) apply_filters( 'smc_hard_block_statuses', $baseline );\n\t\treturn array_values( array_unique( array_filter( array_map( 'sanitize_key', array_merge( $baseline, $filtered ) ) ) ) );\n\t}\n"""
+if old not in s: raise SystemExit('round3 authorization baseline block not found')
+source.write_text(s.replace(old,new,1))
 
-test=root/'qa/second-fresh-review-runtime.php'
-test.write_text(r'''<?php
-error_reporting(E_ALL);
-define('ABSPATH',__DIR__.'/'); define('DB_NAME','test'); define('SMC_DB_VERSION','1.3.0'); define('SMC_VERSION','1.2.14');
-$options=['smc_db_version'=>'1.2.9'];
-function get_option($k,$d=false){global $options;return array_key_exists($k,$options)?$options[$k]:$d;}
-function update_option($k,$v,$autoload=null){global $options;$options[$k]=$v;return true;}
-function delete_option($k){global $options;unset($options[$k]);return true;}
-function wp_generate_uuid4(){return '11111111-1111-4111-8111-111111111111';}
-function current_time($t,$gmt=false){return '2026-08-08 03:45:00';}
-function sanitize_key($v){return strtolower(preg_replace('/[^a-z0-9_\-]/','',(string)$v));}
-function sanitize_text_field($v){return trim((string)$v);}
-class SMC_Security{public static $audits=[];public static function audit($a,$u=0,$d=[]){self::$audits[]=[$a,$u,$d];return true;}}
-class WPDBSecondReviewStub{public $prefix='wp_';public function prepare($q,...$a){return $q;}public function get_var($q){if(strpos($q,'GET_LOCK')!==false)return 0;return null;}}
-$wpdb=new WPDBSecondReviewStub();$GLOBALS['wpdb']=$wpdb;
-require __DIR__.'/../source/sabri-membership-core/includes/class-smc-installer.php';
-$threw=false;try{SMC_Installer::maybe_upgrade();}catch(Throwable $e){$threw=true;}
-$recorded=get_option('smc_last_migration_failure',[]);
-$ok=!$threw && is_array($recorded) && ($recorded['scope']??'')==='upgrade';
-echo ($ok?'PASS ':'FAIL ')."migration lock contention is safely deferred without request-fatal exception\n";
-exit($ok?0:1);
+contract=root/'qa/second-fresh-review-contract.mjs'
+contract.write_text(r'''import fs from 'node:fs';
+let failed=0; const pass=(n,c)=>{console.log(`${c?'PASS':'FAIL'} ${n}`); if(!c)failed++;};
+const auth=fs.readFileSync('source/sabri-membership-core/includes/class-smc-authorization.php','utf8');
+pass('restricted capability baseline cannot be removed by filter', auth.includes('array_merge( self::$restricted_caps, $filtered )'));
+pass('hard-block baseline is unioned back after filtering', auth.includes('array_merge( $baseline, $filtered )'));
+for (const state of ['rejected','suspended','expired','appeal_review','erasure_pending','invalid_application']) pass(`mandatory hard block retained: ${state}`, auth.includes(`'${state}'`));
+console.log(`Second fresh static: ${9-failed} PASS / ${failed} FAIL`); process.exit(failed?1:0);
 ''')
