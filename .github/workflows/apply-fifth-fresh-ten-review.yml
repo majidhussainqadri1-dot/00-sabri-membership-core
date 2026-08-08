@@ -33,6 +33,9 @@ jobs:
       - name: Commit corrected release
         run: |
           set -euo pipefail
+          # The helper is intentionally not allowed to push workflow-file mutations.
+          # Those final read-only workflow updates are applied separately through the connector.
+          git checkout HEAD -- .github/workflows/cf01-contract.yml .github/workflows/file00-three-plan-qa.yml .github/workflows/apply-fifth-fresh-ten-review.yml
           git config user.name 'majidhussainqadri1-dot'
           git config user.email 'majidhussainqadri1@gmail.com'
           git add -A
