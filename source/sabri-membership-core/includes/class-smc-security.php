@@ -111,17 +111,133 @@ final class SMC_Security {
 
 	public static function key_ready() { return self::crypto_ready() && ! empty( self::configured_key_record() ); }
 
-	/** Legacy purpose/index/audit key retained until the explicit index/audit migration completes. */
-	private static function key() {
+	/**
+	 * Select the key generation that owns legacy blind indexes and new audit writes.
+	 *
+	 * A managed generation deliberately remains authoritative for these domains
+	 * when an installation later adds an explicit SMC3 envelope key.  Keeping the
+	 * selection in one place also lets audit rows record the exact non-secret key
+	 * generation used for every new HMAC.
+	 */
+	private static function integrity_key_record() {
 		// Blind indexes and the existing audit chain must not silently change key
 		// when a managed shared-host installation later adopts an explicit SMC3
 		// envelope key. Keep the managed generation as the legacy integrity/index
 		// key until an explicit reindex/audit migration is performed.
 		$record = self::managed_keyring();
 		if ( empty( $record ) ) { $record = self::configured_key_record(); }
+		return is_array( $record ) ? $record : array();
+	}
+
+	private static function integrity_key_salt( $record ) {
+		if ( 'constant' !== (string) ( $record['mode'] ?? '' ) ) {
+			return '';
+		}
+		return defined( 'SMC_LEGACY_AUTH_SALT' ) && is_string( SMC_LEGACY_AUTH_SALT ) && '' !== SMC_LEGACY_AUTH_SALT
+			? SMC_LEGACY_AUTH_SALT
+			: wp_salt( 'auth' );
+	}
+
+	/** Legacy purpose/index key retained until the explicit index migration completes. */
+	private static function key() {
+		$record = self::integrity_key_record();
 		if ( empty( $record ) ) { return new WP_Error( 'smc_key_missing', __( 'File 00 encryption key material is not configured yet.', 'sabri-membership-core' ) ); }
 		$salt = 'constant' === ( $record['mode'] ?? '' ) ? ( defined( 'SMC_LEGACY_AUTH_SALT' ) && is_string( SMC_LEGACY_AUTH_SALT ) && '' !== SMC_LEGACY_AUTH_SALT ? SMC_LEGACY_AUTH_SALT : wp_salt( 'auth' ) ) : '';
 		return hash_hkdf( 'sha256', $record['material'], 32, 'sabri-membership-core:v2', $salt );
+	}
+
+	/**
+	 * Build the trusted audit-verification keyring without exposing key material.
+	 *
+	 * Releases before 1.2.19 passed an encoded `base64:`/`hex:` constant to
+	 * hash_hkdf literally.  1.2.19 correctly decoded the material for new writes,
+	 * but a single-key verifier then misclassified authentic older rows as
+	 * tampering.  Both derivations are accepted only as verification candidates;
+	 * new rows always use the selected current integrity generation.
+	 *
+	 * @return array{write_id:string,write_key:string,candidates:array<int,array<string,string>>}
+	 */
+	private static function audit_integrity_keyring() {
+		$candidates = array();
+		$seen = array();
+		$write_id = '';
+		$write_key = '';
+		$add = static function ( $id, $material, $salt, $mode = 'verify' ) use ( &$candidates, &$seen, &$write_id, &$write_key ) {
+			$id = trim( (string) $id );
+			if ( ! preg_match( '/^[A-Za-z0-9][A-Za-z0-9._:-]{2,63}$/', $id ) || ! is_string( $material ) || '' === $material || ! is_string( $salt ) ) {
+				return;
+			}
+			$key = hash_hkdf( 'sha256', $material, 32, 'sabri-membership-core:v2', $salt );
+			$fingerprint = hash( 'sha256', $key );
+			$dedupe = $id . '|' . $fingerprint;
+			if ( isset( $seen[ $dedupe ] ) ) {
+				if ( 'write' === $mode ) { $write_id = $id; $write_key = $key; }
+				return;
+			}
+			$seen[ $dedupe ] = true;
+			$candidates[] = array( 'id' => $id, 'key' => $key, 'token' => $fingerprint );
+			if ( 'write' === $mode ) { $write_id = $id; $write_key = $key; }
+		};
+
+		$selected = self::integrity_key_record();
+		if ( ! empty( $selected['material'] ) && ! empty( $selected['key_id'] ) ) {
+			$add( $selected['key_id'], $selected['material'], self::integrity_key_salt( $selected ), 'write' );
+		}
+
+		// The explicit constant may have signed earlier rows before a managed
+		// generation was provisioned. Retain it as a verification-only candidate.
+		if ( defined( 'SMC_MASTER_KEY' ) && defined( 'SMC_MASTER_KEY_ID' ) && is_string( SMC_MASTER_KEY ) && is_string( SMC_MASTER_KEY_ID ) ) {
+			$decoded = self::master_material( SMC_MASTER_KEY );
+			if ( false !== $decoded ) {
+				$constant_record = array( 'mode' => 'constant' );
+				$add( SMC_MASTER_KEY_ID, $decoded, self::integrity_key_salt( $constant_record ) );
+			}
+
+			$raw = (string) SMC_MASTER_KEY;
+			if ( false !== $decoded && $raw !== $decoded && ( 0 === strpos( trim( $raw ), 'base64:' ) || 0 === strpos( trim( $raw ), 'hex:' ) ) ) {
+				$literal_id = 'legacy-literal-' . substr( hash( 'sha256', $raw ), 0, 16 );
+				$add( $literal_id, $raw, wp_salt( 'auth' ) );
+				if ( defined( 'SMC_LEGACY_AUTH_SALT' ) && is_string( SMC_LEGACY_AUTH_SALT ) && '' !== SMC_LEGACY_AUTH_SALT ) {
+					$add( $literal_id, $raw, SMC_LEGACY_AUTH_SALT );
+				}
+			}
+		}
+
+		$managed = self::managed_keyring();
+		if ( ! empty( $managed['material'] ) && ! empty( $managed['key_id'] ) ) {
+			$add( $managed['key_id'], $managed['material'], '' );
+		}
+
+		// Operator-supplied decrypt-only generations are already a trusted key
+		// inventory. They may verify historical audit rows but never become the
+		// write key merely by appearing in this filter.
+		$extra = function_exists( 'apply_filters' ) ? apply_filters( 'smc_encryption_keyring_v1', array() ) : array();
+		foreach ( (array) $extra as $id => $entry ) {
+			if ( ! is_array( $entry ) ) { continue; }
+			$decoded = self::master_material( $entry['material'] ?? '' );
+			if ( false === $decoded ) { continue; }
+			$salt = array_key_exists( 'legacy_auth_salt', $entry ) ? (string) $entry['legacy_auth_salt'] : wp_salt( 'auth' );
+			$add( $id, $decoded, $salt );
+			$raw = (string) ( $entry['material'] ?? '' );
+			if ( $raw !== $decoded && ! empty( $entry['legacy_literal'] ) ) {
+				$add( $id, $raw, $salt );
+			}
+		}
+
+		return array( 'write_id' => $write_id, 'write_key' => $write_key, 'candidates' => $candidates );
+	}
+
+	private static function matching_audit_key( $record, $row_hash, $stored_key_id = '', $candidates = null ) {
+		if ( null === $candidates ) {
+			$ring = self::audit_integrity_keyring();
+			$candidates = (array) ( $ring['candidates'] ?? array() );
+		}
+		foreach ( (array) $candidates as $candidate ) {
+			if ( '' !== $stored_key_id && ! hash_equals( $stored_key_id, (string) ( $candidate['id'] ?? '' ) ) ) { continue; }
+			$expected = hash_hmac( 'sha256', self::canonical_json( $record ), (string) ( $candidate['key'] ?? '' ) );
+			if ( hash_equals( $expected, (string) $row_hash ) ) { return $candidate; }
+		}
+		return array();
 	}
 
 	public static function key_id() { $record = self::configured_key_record(); return empty( $record ) ? '' : (string) $record['key_id']; }
@@ -1499,8 +1615,9 @@ final class SMC_Security {
 	 */
 	public static function inspect_audit_rows_for_recovery( $limit = 0 ) {
 		global $wpdb;
-		$key = self::key();
-		if ( is_wp_error( $key ) ) {
+		$ring = self::audit_integrity_keyring();
+		$candidates = (array) ( $ring['candidates'] ?? array() );
+		if ( empty( $candidates ) ) {
 			return array( 'valid' => false, 'checked' => 0, 'verified_rows' => 0, 'legacy_rows' => 0, 'failed_id' => 0, 'reason' => 'key_unavailable', 'last_hash' => '' );
 		}
 
@@ -1528,7 +1645,10 @@ final class SMC_Security {
 		}
 		$legacy_columns = array( 'subject_user_id', 'object_type', 'object_id' );
 		$hash_schema = ! array_diff( array( 'subject_hash', 'previous_hash', 'row_hash' ), $columns );
-		$allowed_bridge_columns = array_merge( $base_columns, $legacy_columns, array( 'subject_hash', 'previous_hash', 'row_hash' ) );
+		$allowed_bridge_columns = array_merge( $base_columns, $legacy_columns, array( 'subject_hash', 'previous_hash', 'row_hash', 'audit_key_id' ) );
+		if ( isset( $schema['audit_key_id'] ) && ( 'varchar' !== strtolower( (string) ( $schema['audit_key_id']['DATA_TYPE'] ?? '' ) ) || 64 !== (int) ( $schema['audit_key_id']['CHARACTER_MAXIMUM_LENGTH'] ?? 0 ) ) ) {
+			return array( 'valid' => false, 'checked' => 0, 'verified_rows' => 0, 'legacy_rows' => 0, 'failed_id' => 0, 'reason' => 'audit_key_column_incompatible', 'last_hash' => '' );
+		}
 		$unsigned_bigint = static function ( $column ) use ( $schema ) {
 			return isset( $schema[ $column ] ) && 'bigint' === strtolower( (string) ( $schema[ $column ]['DATA_TYPE'] ?? '' ) ) && false !== stripos( (string) ( $schema[ $column ]['COLUMN_TYPE'] ?? '' ), 'unsigned' );
 		};
@@ -1551,9 +1671,14 @@ final class SMC_Security {
 		$verified = 0;
 		$legacy = 0;
 		$legacy_cutoff_id = 0;
+		$first_modern_id = 0;
+		$first_modern_hash = '';
+		$first_modern_key_id = '';
+		$first_modern_previous_hash = '';
 		$cursor = 0;
 		$maximum = absint( $limit );
 		$snapshot = hash_init( 'sha256' );
+		$key_epochs = hash_init( 'sha256' );
 		do {
 			$batch_size = $maximum ? min( 500, $maximum - $checked ) : 500;
 			if ( $batch_size <= 0 ) {
@@ -1571,8 +1696,12 @@ final class SMC_Security {
 				}
 				$row_previous = $hash_schema ? (string) ( $row['previous_hash'] ?? '' ) : '';
 				$row_hash = $hash_schema ? (string) ( $row['row_hash'] ?? '' ) : '';
+				$row_key_id = array_key_exists( 'audit_key_id', $row ) && null !== $row['audit_key_id'] ? trim( (string) $row['audit_key_id'] ) : '';
 
 				if ( '' === $row_previous && '' === $row_hash ) {
+					if ( '' !== $row_key_id ) {
+						return array( 'valid' => false, 'checked' => $checked, 'verified_rows' => $verified, 'legacy_rows' => $legacy, 'failed_id' => $row_id, 'reason' => 'audit_key_id_without_hash', 'last_hash' => $previous );
+					}
 					if ( $verified > 0 ) {
 						return array( 'valid' => false, 'checked' => $checked, 'verified_rows' => $verified, 'legacy_rows' => $legacy, 'failed_id' => $row_id, 'reason' => 'unhashed_row_after_chain_start', 'last_hash' => $previous );
 					}
@@ -1607,6 +1736,9 @@ final class SMC_Security {
 				if ( ! preg_match( '/^[a-f0-9]{64}$/D', $row_hash ) || ( '' !== $row_previous && ! preg_match( '/^[a-f0-9]{64}$/D', $row_previous ) ) ) {
 					return array( 'valid' => false, 'checked' => $checked, 'verified_rows' => $verified, 'legacy_rows' => $legacy, 'failed_id' => $row_id, 'reason' => 'audit_hash_format_invalid', 'last_hash' => $previous );
 				}
+				if ( '' !== $row_key_id && ! preg_match( '/^[A-Za-z0-9][A-Za-z0-9._:-]{2,63}$/D', $row_key_id ) ) {
+					return array( 'valid' => false, 'checked' => $checked, 'verified_rows' => $verified, 'legacy_rows' => $legacy, 'failed_id' => $row_id, 'reason' => 'audit_key_id_invalid', 'last_hash' => $previous );
+				}
 				if ( ! hash_equals( $previous, $row_previous ) ) {
 					return array( 'valid' => false, 'checked' => $checked, 'verified_rows' => $verified, 'legacy_rows' => $legacy, 'failed_id' => $row_id, 'reason' => 'previous_hash_mismatch', 'last_hash' => $previous );
 				}
@@ -1618,10 +1750,25 @@ final class SMC_Security {
 					'previous_hash' => $row_previous,
 					'created_at'    => (string) ( $row['created_at'] ?? '' ),
 				);
-				$expected = hash_hmac( 'sha256', self::canonical_json( $record ), $key );
-				if ( ! hash_equals( $expected, $row_hash ) ) {
-					return array( 'valid' => false, 'checked' => $checked, 'verified_rows' => $verified, 'legacy_rows' => $legacy, 'failed_id' => $row_id, 'reason' => 'row_hash_mismatch', 'last_hash' => $previous );
+				if ( '' !== $row_key_id ) {
+					$record['audit_key_id'] = $row_key_id;
 				}
+				$matched = self::matching_audit_key( $record, $row_hash, $row_key_id, $candidates );
+				if ( empty( $matched ) ) {
+					$key_known = '' === $row_key_id;
+					foreach ( $candidates as $candidate ) {
+						if ( '' !== $row_key_id && hash_equals( $row_key_id, (string) ( $candidate['id'] ?? '' ) ) ) { $key_known = true; break; }
+					}
+					$reason = $key_known ? 'row_hash_mismatch' : 'audit_key_generation_unavailable';
+					return array( 'valid' => false, 'checked' => $checked, 'verified_rows' => $verified, 'legacy_rows' => $legacy, 'failed_id' => $row_id, 'reason' => $reason, 'last_hash' => $previous );
+				}
+				if ( 0 === $first_modern_id ) {
+					$first_modern_id = $row_id;
+					$first_modern_hash = $row_hash;
+					$first_modern_key_id = (string) ( $matched['id'] ?? '' );
+					$first_modern_previous_hash = $row_previous;
+				}
+				hash_update( $key_epochs, $row_id . '|' . (string) ( $matched['token'] ?? '' ) . "\n" );
 				$previous = $row_hash;
 				$cursor = $row_id;
 				++$checked;
@@ -1629,14 +1776,33 @@ final class SMC_Security {
 			}
 		} while ( count( (array) $rows ) === $batch_size && ( ! $maximum || $checked < $maximum ) );
 
+		$legacy_source_schema = '';
+		$bridge_recovery_eligible = false;
+		if ( $legacy > 0 && $legacy_schema && ! $hash_schema ) {
+			$legacy_source_schema = 'smc-audit-legacy-v1-no-hmac-columns';
+		} elseif ( $legacy > 0 && $legacy_schema && $hash_schema && $verified > 0 && '' === $first_modern_previous_hash && $first_modern_id > $legacy_cutoff_id ) {
+			// A keyed first modern row with an empty previous hash proves that the
+			// HMAC epoch intentionally began after the lower-assurance prefix.  This
+			// permits recovery from a prior release that added columns before it
+			// could persist the migration anchor, without blessing or rewriting the
+			// unhashed prefix itself.
+			$legacy_source_schema = 'smc-audit-legacy-v1-bridge-columns';
+			$bridge_recovery_eligible = true;
+		}
+
 		return array(
 			'valid'                => true,
 			'checked'              => $checked,
 			'verified_rows'        => $verified,
 			'legacy_rows'          => $legacy,
-			'legacy_source_schema' => $legacy_schema && ! $hash_schema ? 'smc-audit-legacy-v1-no-hmac-columns' : '',
+			'legacy_source_schema' => $legacy_source_schema,
+			'bridge_recovery_eligible' => $bridge_recovery_eligible,
 			'legacy_cutoff_id'     => $legacy_cutoff_id,
 			'legacy_snapshot_hash' => $legacy ? hash_final( $snapshot ) : '',
+			'first_modern_id'      => $first_modern_id,
+			'first_modern_hash'    => $first_modern_hash,
+			'first_modern_key_id'  => $first_modern_key_id,
+			'audit_key_epoch_digest' => $verified ? hash_final( $key_epochs ) : '',
 			'failed_id'            => 0,
 			'reason'               => '',
 			'last_id'              => $cursor,
@@ -1644,7 +1810,7 @@ final class SMC_Security {
 		);
 	}
 
-	private static function legacy_audit_anchor_payload( $inspection, $created_at ) {
+	private static function legacy_audit_anchor_payload_v1( $inspection, $created_at ) {
 		return array(
 			'version'                    => 1,
 			'assurance'                  => 'legacy_snapshot_only',
@@ -1653,6 +1819,24 @@ final class SMC_Security {
 			'legacy_row_count'           => absint( $inspection['legacy_rows'] ?? 0 ),
 			'legacy_snapshot_hash'       => (string) ( $inspection['legacy_snapshot_hash'] ?? '' ),
 			'chain_initial_previous_hash'=> '',
+			'created_at'                 => (string) $created_at,
+		);
+	}
+
+	private static function legacy_audit_anchor_payload_v2( $inspection, $created_at, $source_schema, $audit_key_id ) {
+		$bridge = 'smc-audit-legacy-v1-bridge-columns' === (string) $source_schema;
+		return array(
+			'version'                    => 2,
+			'assurance'                  => 'legacy_snapshot_only',
+			'source_schema'              => (string) $source_schema,
+			'legacy_cutoff_id'           => absint( $inspection['legacy_cutoff_id'] ?? 0 ),
+			'legacy_row_count'           => absint( $inspection['legacy_rows'] ?? 0 ),
+			'legacy_snapshot_hash'       => (string) ( $inspection['legacy_snapshot_hash'] ?? '' ),
+			'chain_initial_previous_hash'=> '',
+			'modern_epoch_first_id'      => $bridge ? absint( $inspection['first_modern_id'] ?? 0 ) : 0,
+			'modern_epoch_first_row_hash'=> $bridge ? (string) ( $inspection['first_modern_hash'] ?? '' ) : '',
+			'modern_epoch_first_key_id'  => $bridge ? (string) ( $inspection['first_modern_key_id'] ?? '' ) : '',
+			'audit_key_id'               => (string) $audit_key_id,
 			'created_at'                 => (string) $created_at,
 		);
 	}
@@ -1667,16 +1851,21 @@ final class SMC_Security {
 			$verified = self::verify_legacy_audit_anchor( $inspection, $existing );
 			return ! empty( $verified['valid'] ) ? $existing : new WP_Error( 'smc_audit_legacy_anchor_conflict', __( 'The stored legacy audit anchor does not match the surviving audit history.', 'sabri-membership-core' ) );
 		}
-		if ( 'smc-audit-legacy-v1-no-hmac-columns' !== (string) ( $inspection['legacy_source_schema'] ?? '' ) ) {
-			return new WP_Error( 'smc_audit_legacy_anchor_source', __( 'A new legacy audit anchor can be established only from the original recognized pre-HMAC schema.', 'sabri-membership-core' ) );
+		$source_schema = (string) ( $inspection['legacy_source_schema'] ?? '' );
+		$source_allowed = 'smc-audit-legacy-v1-no-hmac-columns' === $source_schema
+			|| ( 'smc-audit-legacy-v1-bridge-columns' === $source_schema && ! empty( $inspection['bridge_recovery_eligible'] ) );
+		if ( ! $source_allowed ) {
+			return new WP_Error( 'smc_audit_legacy_anchor_source', __( 'A new legacy audit anchor requires the exact original pre-HMAC schema or a cryptographically verified interrupted bridge boundary.', 'sabri-membership-core' ) );
 		}
-		$key = self::key();
-		if ( is_wp_error( $key ) ) {
+		$ring = self::audit_integrity_keyring();
+		$key = (string) ( $ring['write_key'] ?? '' );
+		$key_id = (string) ( $ring['write_id'] ?? '' );
+		if ( '' === $key || '' === $key_id ) {
 			return new WP_Error( 'smc_audit_legacy_anchor_key', __( 'The audit integrity key is unavailable.', 'sabri-membership-core' ) );
 		}
-		$payload = self::legacy_audit_anchor_payload( $inspection, current_time( 'mysql', true ) );
+		$payload = self::legacy_audit_anchor_payload_v2( $inspection, current_time( 'mysql', true ), $source_schema, $key_id );
 		$anchor = $payload;
-		$anchor['signature'] = hash_hmac( 'sha256', 'smc:audit-legacy-anchor:v1|' . self::canonical_json( $payload ), $key );
+		$anchor['signature'] = hash_hmac( 'sha256', 'smc:audit-legacy-anchor:v2|' . self::canonical_json( $payload ), $key );
 		if ( ! add_option( self::LEGACY_AUDIT_ANCHOR_OPTION, $anchor, '', 'no' ) ) {
 			$existing = get_option( self::LEGACY_AUDIT_ANCHOR_OPTION, array() );
 			$verified = self::verify_legacy_audit_anchor( $inspection, $existing );
@@ -1692,8 +1881,9 @@ final class SMC_Security {
 
 	/** Verify an anchor without treating the pre-HMAC rows as original HMAC evidence. */
 	public static function verify_legacy_audit_anchor( $inspection, $anchor = null ) {
-		$key = self::key();
-		if ( is_wp_error( $key ) ) {
+		$ring = self::audit_integrity_keyring();
+		$candidates = (array) ( $ring['candidates'] ?? array() );
+		if ( empty( $candidates ) ) {
 			return array( 'valid' => false, 'reason' => 'key_unavailable' );
 		}
 		if ( null === $anchor ) {
@@ -1702,8 +1892,26 @@ final class SMC_Security {
 		if ( ! is_array( $inspection ) || empty( $inspection['valid'] ) || empty( $inspection['legacy_rows'] ) || ! is_array( $anchor ) ) {
 			return array( 'valid' => false, 'reason' => 'legacy_anchor_missing' );
 		}
+		$version = absint( $anchor['version'] ?? 0 );
 		$created_at = (string) ( $anchor['created_at'] ?? '' );
-		$payload = self::legacy_audit_anchor_payload( $inspection, $created_at );
+		if ( 1 === $version ) {
+			$payload = self::legacy_audit_anchor_payload_v1( $inspection, $created_at );
+			$domain = 'smc:audit-legacy-anchor:v1|';
+			$stored_key_id = '';
+		} elseif ( 2 === $version ) {
+			$source_schema = (string) ( $anchor['source_schema'] ?? '' );
+			if ( ! in_array( $source_schema, array( 'smc-audit-legacy-v1-no-hmac-columns', 'smc-audit-legacy-v1-bridge-columns' ), true ) ) {
+				return array( 'valid' => false, 'reason' => 'legacy_anchor_source_invalid' );
+			}
+			if ( 'smc-audit-legacy-v1-bridge-columns' === $source_schema && empty( $inspection['bridge_recovery_eligible'] ) ) {
+				return array( 'valid' => false, 'reason' => 'legacy_anchor_boundary_invalid' );
+			}
+			$stored_key_id = (string) ( $anchor['audit_key_id'] ?? '' );
+			$payload = self::legacy_audit_anchor_payload_v2( $inspection, $created_at, $source_schema, $stored_key_id );
+			$domain = 'smc:audit-legacy-anchor:v2|';
+		} else {
+			return array( 'valid' => false, 'reason' => 'legacy_anchor_version_invalid' );
+		}
 		$signature = (string) ( $anchor['signature'] ?? '' );
 		foreach ( $payload as $field => $value ) {
 			if ( ! array_key_exists( $field, $anchor ) || $anchor[ $field ] !== $value ) {
@@ -1713,10 +1921,15 @@ final class SMC_Security {
 		if ( '' === $created_at || ! preg_match( '/^[a-f0-9]{64}$/D', $signature ) ) {
 			return array( 'valid' => false, 'reason' => 'legacy_anchor_format_invalid' );
 		}
-		$expected = hash_hmac( 'sha256', 'smc:audit-legacy-anchor:v1|' . self::canonical_json( $payload ), $key );
-		return hash_equals( $expected, $signature )
-			? array( 'valid' => true, 'reason' => '' )
-			: array( 'valid' => false, 'reason' => 'legacy_anchor_signature_mismatch' );
+		foreach ( $candidates as $candidate ) {
+			$candidate_id = (string) ( $candidate['id'] ?? '' );
+			if ( '' !== $stored_key_id && ! hash_equals( $stored_key_id, $candidate_id ) ) { continue; }
+			$expected = hash_hmac( 'sha256', $domain . self::canonical_json( $payload ), (string) ( $candidate['key'] ?? '' ) );
+			if ( hash_equals( $expected, $signature ) ) {
+				return array( 'valid' => true, 'reason' => '', 'audit_key_id' => $candidate_id );
+			}
+		}
+		return array( 'valid' => false, 'reason' => 'legacy_anchor_signature_mismatch' );
 	}
 
 	public static function verify_audit_chain( $limit = 0 ) {
@@ -1852,15 +2065,20 @@ final class SMC_Security {
 	public static function audit( $action, $subject_user_id = 0, $details = array() ) {
 		global $wpdb;
 		self::$last_audit_error = '';
-		$schema_state = class_exists( 'SMC_Installer' ) ? SMC_Installer::ensure_audit_infrastructure() : new WP_Error( 'smc_audit_installer_unavailable', 'Audit installer unavailable.' );
+		$outer_transaction = self::transaction_active();
+		$schema_state = class_exists( 'SMC_Installer' )
+			? ( $outer_transaction ? SMC_Installer::audit_infrastructure_ready() : SMC_Installer::ensure_audit_infrastructure() )
+			: new WP_Error( 'smc_audit_installer_unavailable', 'Audit installer unavailable.' );
 		if ( is_wp_error( $schema_state ) ) { self::$last_audit_error = sanitize_key( $schema_state->get_error_code() ); return false; }
-		if ( ! empty( $schema_state['bootstrapped'] ) ) {
+		if ( is_array( $schema_state ) && ! empty( $schema_state['bootstrapped'] ) ) {
 			$details = is_array( $details ) ? $details : array();
 			$details['audit_infrastructure_bootstrapped'] = true;
 		}
-		$key = self::key();
-		if ( is_wp_error( $key ) ) { self::$last_audit_error = 'audit_key_unavailable'; return false; }
-		$owns_transaction = ! self::transaction_active();
+		$ring = self::audit_integrity_keyring();
+		$key = (string) ( $ring['write_key'] ?? '' );
+		$audit_key_id = (string) ( $ring['write_id'] ?? '' );
+		if ( '' === $key || '' === $audit_key_id ) { self::$last_audit_error = 'audit_key_unavailable'; return false; }
+		$owns_transaction = ! $outer_transaction;
 		if ( $owns_transaction && false === $wpdb->query( 'START TRANSACTION' ) ) { self::$last_audit_error = 'audit_transaction_start'; return false; }
 		$ok = false;
 		try {
@@ -1898,10 +2116,11 @@ final class SMC_Security {
 				'action' => sanitize_key( $action ),
 				'details' => self::canonical_json( self::minimize_audit_details( $details ) ),
 				'previous_hash' => $previous,
+				'audit_key_id' => $audit_key_id,
 				'created_at' => $created,
 			);
 			$record['row_hash'] = hash_hmac( 'sha256', self::canonical_json( $record ), $key );
-			if ( 1 !== $wpdb->insert( $wpdb->prefix . 'smc_audit_log', $record, array( '%d','%s','%s','%s','%s','%s','%s' ) ) ) { throw new RuntimeException( 'audit_insert' ); }
+			if ( 1 !== $wpdb->insert( $wpdb->prefix . 'smc_audit_log', $record, array( '%d','%s','%s','%s','%s','%s','%s','%s' ) ) ) { throw new RuntimeException( 'audit_insert' ); }
 			$audit_id = (int) $wpdb->insert_id;
 			if ( 1 !== $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_audit_tail SET row_hash=%s,updated_at=%s WHERE id=1 AND row_hash=%s", $record['row_hash'], $created, $previous ) ) ) { throw new RuntimeException( 'audit_tail_update' ); }
 			if ( class_exists( 'SMC_Events' ) && ! SMC_Events::from_audit( $record['action'], $subject_user_id, self::minimize_audit_details( $details ), $audit_id ) ) { throw new RuntimeException( 'audit_event' ); }

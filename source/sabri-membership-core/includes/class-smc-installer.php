@@ -27,6 +27,51 @@ final class SMC_Installer {
 		'smc_application_repairs',
 	);
 
+	/**
+	 * Read-only audit readiness gate for callers that already own a transaction.
+	 *
+	 * MySQL DDL implicitly commits.  An audit invoked inside a membership/privacy
+	 * transaction must therefore never run dbDelta, CREATE TABLE, or ALTER TABLE.
+	 * The normal non-transactional bootstrap performs those repairs first; this
+	 * gate only proves that the completed schema and full chain are ready.
+	 */
+	public static function audit_infrastructure_ready() {
+		global $wpdb;
+		$audit_table = $wpdb->prefix . 'smc_audit_log';
+		$tail_table = $wpdb->prefix . 'smc_audit_tail';
+		foreach ( array( $audit_table, $tail_table ) as $table ) {
+			$exists = $table === $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) );
+			if ( ! $exists ) { return new WP_Error( 'smc_audit_schema_not_ready', __( 'File 00 audit infrastructure is not initialized yet.', 'sabri-membership-core' ) ); }
+			$engine = (string) $wpdb->get_var( $wpdb->prepare( 'SELECT ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=%s', $table ) );
+			if ( 'InnoDB' !== $engine ) { return new WP_Error( 'smc_audit_schema_engine', __( 'File 00 audit tables require InnoDB.', 'sabri-membership-core' ) ); }
+		}
+		$columns = array_map(
+			'strval',
+			(array) $wpdb->get_col(
+				$wpdb->prepare(
+					'SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=%s',
+					$audit_table
+				)
+			)
+		);
+		if ( array_diff( array( 'id', 'actor_id', 'subject_hash', 'action', 'details', 'previous_hash', 'row_hash', 'audit_key_id', 'created_at' ), $columns ) ) {
+			return new WP_Error( 'smc_audit_schema_upgrade_required', __( 'File 00 audit schema requires a non-transactional upgrade before this action can commit.', 'sabri-membership-core' ) );
+		}
+		if ( '1' !== (string) get_option( 'smc_audit_schema_initialized_v1', '' ) ) {
+			return new WP_Error( 'smc_audit_schema_marker_missing', __( 'File 00 audit initialization has not completed.', 'sabri-membership-core' ) );
+		}
+		$tail_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$tail_table} WHERE id=1" );
+		if ( 1 !== $tail_count ) { return new WP_Error( 'smc_audit_tail_not_ready', __( 'File 00 audit serializer is not initialized yet.', 'sabri-membership-core' ) ); }
+		if ( ! class_exists( 'SMC_Security' ) ) { return new WP_Error( 'smc_audit_security_unavailable', __( 'File 00 security runtime is unavailable.', 'sabri-membership-core' ) ); }
+		$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$audit_table}" );
+		$validation = SMC_Security::verify_audit_chain();
+		if ( ! is_array( $validation ) || empty( $validation['valid'] ) || (int) ( $validation['checked'] ?? -1 ) !== $count ) {
+			$reason = sanitize_key( (string) ( $validation['reason'] ?? 'unknown' ) );
+			return new WP_Error( 'smc_audit_row_chain_invalid', __( 'File 00 audit integrity must be restored before this transaction can commit.', 'sabri-membership-core' ), array( 'reason' => $reason, 'failed_id' => absint( $validation['failed_id'] ?? 0 ) ) );
+		}
+		return true;
+	}
+
 
 	public static function ensure_audit_infrastructure() {
 		global $wpdb;
@@ -47,10 +92,12 @@ final class SMC_Installer {
 				details longtext NULL,
 				previous_hash char(64) NOT NULL,
 				row_hash char(64) NOT NULL,
+				audit_key_id varchar(64) NULL,
 				created_at datetime NOT NULL,
 				PRIMARY KEY  (id),
 				KEY action_date (action,created_at),
-				KEY subject_hash (subject_hash)
+				KEY subject_hash (subject_hash),
+				KEY audit_key_id (audit_key_id)
 			) {$c}";
 			$wpdb->last_error = '';
 			$result = $wpdb->query( $sql );
@@ -78,7 +125,7 @@ final class SMC_Installer {
 		};
 
 		/*
-		 * A 1.0.1 audit table can predate the HMAC columns. Add only the three
+		 * A 1.0.1 audit table can predate the HMAC columns. Add only the four
 		 * non-destructive current columns needed by new writes; never rewrite or
 		 * delete a historical row. Existing incompatible hash columns remain a
 		 * fail-closed schema error rather than being silently coerced.
@@ -109,10 +156,14 @@ final class SMC_Installer {
 					return new WP_Error( 'smc_audit_hash_column_incompatible', sprintf( __( 'The surviving audit column %s has an incompatible definition.', 'sabri-membership-core' ), $hash_column ) );
 				}
 			}
+			if ( isset( $columns['audit_key_id'] ) && ( 'varchar' !== strtolower( (string) ( $columns['audit_key_id']['DATA_TYPE'] ?? '' ) ) || 64 !== (int) ( $columns['audit_key_id']['CHARACTER_MAXIMUM_LENGTH'] ?? 0 ) ) ) {
+				return new WP_Error( 'smc_audit_key_column_incompatible', __( 'The surviving audit key-generation column has an incompatible definition.', 'sabri-membership-core' ) );
+			}
 			$additions = array(
 				'subject_hash'  => 'ADD COLUMN subject_hash char(64) NULL',
 				'previous_hash' => "ADD COLUMN previous_hash char(64) NOT NULL DEFAULT ''",
 				'row_hash'      => "ADD COLUMN row_hash char(64) NOT NULL DEFAULT ''",
+				'audit_key_id'  => 'ADD COLUMN audit_key_id varchar(64) NULL',
 			);
 			foreach ( $additions as $column => $definition ) {
 				if ( isset( $columns[ $column ] ) ) {
@@ -122,6 +173,16 @@ final class SMC_Installer {
 				if ( false === $wpdb->query( "ALTER TABLE {$audit_table} {$definition}" ) ) {
 					return new WP_Error( 'smc_audit_legacy_column_add_failed', sanitize_text_field( $wpdb->last_error ?: $column ) );
 				}
+			}
+			$audit_key_index = $wpdb->get_var(
+				$wpdb->prepare(
+					'SELECT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=%s AND INDEX_NAME=%s LIMIT 1',
+					$audit_table,
+					'audit_key_id'
+				)
+			);
+			if ( 'audit_key_id' !== (string) $audit_key_index && false === $wpdb->query( "ALTER TABLE {$audit_table} ADD KEY audit_key_id (audit_key_id)" ) ) {
+				return new WP_Error( 'smc_audit_key_index_failed', sanitize_text_field( $wpdb->last_error ?: 'audit_key_id' ) );
 			}
 			$actual = array_map(
 				'strval',
@@ -196,7 +257,7 @@ final class SMC_Installer {
 				$columns_ready = $ensure_audit_columns();
 				if ( is_wp_error( $columns_ready ) ) { return $columns_ready; }
 				$normalized = SMC_Security::inspect_audit_rows_for_recovery( max( 1, $count ) );
-				foreach ( array( 'checked', 'verified_rows', 'legacy_rows', 'legacy_cutoff_id', 'legacy_snapshot_hash', 'last_id', 'last_hash' ) as $field ) {
+				foreach ( array( 'checked', 'verified_rows', 'legacy_rows', 'legacy_cutoff_id', 'legacy_snapshot_hash', 'first_modern_id', 'first_modern_hash', 'first_modern_key_id', 'audit_key_epoch_digest', 'last_id', 'last_hash' ) as $field ) {
 					if ( ( $inspection[ $field ] ?? null ) !== ( $normalized[ $field ] ?? null ) ) {
 						return new WP_Error( 'smc_audit_partial_rows_changed', __( 'The audit log changed while File 00 prepared the legacy-safe serializer recovery.', 'sabri-membership-core' ) );
 					}
@@ -309,7 +370,7 @@ final class SMC_Installer {
 		$columns_ready = $ensure_audit_columns();
 		if ( is_wp_error( $columns_ready ) ) { return $columns_ready; }
 		$normalized = SMC_Security::inspect_audit_rows_for_recovery( max( 1, $count ) );
-		foreach ( array( 'checked', 'verified_rows', 'legacy_rows', 'legacy_cutoff_id', 'legacy_snapshot_hash', 'last_id', 'last_hash' ) as $field ) {
+		foreach ( array( 'checked', 'verified_rows', 'legacy_rows', 'legacy_cutoff_id', 'legacy_snapshot_hash', 'first_modern_id', 'first_modern_hash', 'first_modern_key_id', 'audit_key_epoch_digest', 'last_id', 'last_hash' ) as $field ) {
 			if ( ( $inspection[ $field ] ?? null ) !== ( $normalized[ $field ] ?? null ) ) {
 				return new WP_Error( 'smc_audit_rows_changed_during_schema_bridge', __( 'The audit history changed during the non-destructive schema bridge.', 'sabri-membership-core' ) );
 			}
@@ -731,10 +792,12 @@ final class SMC_Installer {
 			details longtext NULL,
 			previous_hash char(64) NOT NULL,
 			row_hash char(64) NOT NULL,
+			audit_key_id varchar(64) NULL,
 			created_at datetime NOT NULL,
 			PRIMARY KEY  (id),
 			KEY action_date (action,created_at),
-			KEY subject_hash (subject_hash)
+			KEY subject_hash (subject_hash),
+			KEY audit_key_id (audit_key_id)
 		) {$c};";
 
 		$sql[] = "CREATE TABLE {$p}smc_audit_tail (
@@ -849,6 +912,7 @@ final class SMC_Installer {
 			'smc_contact_otps' => array( 'delivery_receipt_hash','delivered_at' ),
 			'smc_verification_requests' => array( 'approval_generation','approval_snapshot_hash','applicant_version','row_version' ),
 			'smc_mfa_factor_state' => array( 'last_totp_slice' ),
+			'smc_audit_log' => array( 'previous_hash','row_hash','audit_key_id' ),
 			'smc_audit_tail' => array( 'row_hash' ),
 		);
 		foreach ( $critical_columns as $suffix => $required_columns ) {

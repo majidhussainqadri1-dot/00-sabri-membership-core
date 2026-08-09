@@ -22,8 +22,8 @@ $check    = static function ( $condition, $label ) use ( &$failures, &$passed ) 
 };
 
 global $wpdb;
-$check( defined( 'SMC_VERSION' ) && '1.2.32' === SMC_VERSION, 'runtime 1.2.32 loaded in real WordPress' );
-$check( defined( 'SMC_DB_VERSION' ) && '1.4.3' === SMC_DB_VERSION, 'database contract 1.4.3 loaded' );
+$check( defined( 'SMC_VERSION' ) && '1.2.33' === SMC_VERSION, 'runtime 1.2.33 loaded in real WordPress' );
+$check( defined( 'SMC_DB_VERSION' ) && '1.4.4' === SMC_DB_VERSION, 'database contract 1.4.4 loaded' );
 $check( class_exists( 'SMC_Security' ) && class_exists( 'SMC_Installer' ), 'File 00 runtime classes loaded' );
 
 $tables = $wpdb->get_col( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $wpdb->prefix . 'smc_' ) . '%' ) );
@@ -37,6 +37,7 @@ $guardian_table = $wpdb->prefix . 'smc_guardian_consents';
 $vote_table     = $wpdb->prefix . 'smc_approval_votes';
 $request_table  = $wpdb->prefix . 'smc_verification_requests';
 $factor_table   = $wpdb->prefix . 'smc_mfa_factor_state';
+$audit_log      = $wpdb->prefix . 'smc_audit_log';
 $audit_tail     = $wpdb->prefix . 'smc_audit_tail';
 
 $guardian_indexes = $wpdb->get_col( "SHOW INDEX FROM {$guardian_table} WHERE Key_name='user_generation'", 2 ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
@@ -45,6 +46,15 @@ $check( count( $guardian_indexes ) >= 2, 'guardian immutable-generation unique i
 $check( count( $vote_indexes ) >= 3, 'approval-generation reviewer unique index exists' );
 $check( $wpdb->get_var( "SHOW TABLES LIKE '{$factor_table}'" ) === $factor_table, 'global MFA factor replay table exists' ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 $check( $wpdb->get_var( "SHOW TABLES LIKE '{$audit_tail}'" ) === $audit_tail, 'serialized audit-tail table exists' ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+$check( 'audit_key_id' === (string) $wpdb->get_var( "SHOW COLUMNS FROM {$audit_log} LIKE 'audit_key_id'", 0 ), 'audit key-generation column exists' ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+$transaction_started = false !== $wpdb->query( 'START TRANSACTION' );
+$transaction_audit = $transaction_started && SMC_Security::audit( 'audit32_outer_transaction_smoke', 0, array( 'source' => 'real-mysql' ) );
+$transaction_committed = $transaction_audit && false !== $wpdb->query( 'COMMIT' );
+if ( ! $transaction_committed ) { $wpdb->query( 'ROLLBACK' ); }
+$check( $transaction_committed, 'transaction-owned audit append uses the read-only schema readiness gate' );
+$unidentified_audit_rows = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$audit_log} WHERE row_hash<>'' AND (audit_key_id IS NULL OR audit_key_id='')" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+$check( 0 === $unidentified_audit_rows, 'every fresh modern audit row authenticates its key generation' );
 
 $user_id = wp_insert_user(
 	array(

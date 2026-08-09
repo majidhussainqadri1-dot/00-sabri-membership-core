@@ -4,8 +4,10 @@
 define( 'ABSPATH', __DIR__ . '/' );
 define( 'WP_CONTENT_DIR', sys_get_temp_dir() . '/smc-audit-anchor-runtime' );
 define( 'ARRAY_A', 'ARRAY_A' );
-define( 'SMC_MASTER_KEY', '0123456789abcdef0123456789abcdef' );
+$smc_test_master_material = '0123456789abcdef0123456789abcdef';
+define( 'SMC_MASTER_KEY', 'base64:' . base64_encode( $smc_test_master_material ) );
 define( 'SMC_MASTER_KEY_ID', 'runtime-audit-key-v1' );
+define( 'SMC_LEGACY_AUTH_SALT', 'smc-retained-auth-salt-v1' );
 
 class WP_Error {
 	private $code;
@@ -144,7 +146,21 @@ $late_anchor = SMC_Security::establish_legacy_audit_anchor( $normalized );
 smc_test_assert( is_wp_error( $late_anchor ) && 'smc_audit_legacy_anchor_source' === $late_anchor->get_error_code(), 'a new anchor cannot be invented after hash columns already exist' );
 $GLOBALS['smc_anchor_options'][ SMC_Security::LEGACY_AUDIT_ANCHOR_OPTION ] = $stored_anchor;
 
-$integrity_key = hash_hkdf( 'sha256', SMC_MASTER_KEY, 32, 'sabri-membership-core:v2', wp_salt( 'auth' ) );
+$legacy_literal_integrity_key = hash_hkdf( 'sha256', SMC_MASTER_KEY, 32, 'sabri-membership-core:v2', wp_salt( 'auth' ) );
+$current_integrity_key = hash_hkdf( 'sha256', $smc_test_master_material, 32, 'sabri-membership-core:v2', SMC_LEGACY_AUTH_SALT );
+$v1_payload = array(
+	'version' => 1,
+	'assurance' => 'legacy_snapshot_only',
+	'source_schema' => 'smc-audit-legacy-v1-no-hmac-columns',
+	'legacy_cutoff_id' => 2,
+	'legacy_row_count' => 2,
+	'legacy_snapshot_hash' => $legacy['legacy_snapshot_hash'],
+	'chain_initial_previous_hash' => '',
+	'created_at' => '2026-08-09 11:59:00',
+);
+$v1_anchor = $v1_payload;
+$v1_anchor['signature'] = hash_hmac( 'sha256', 'smc:audit-legacy-anchor:v1|' . smc_test_canonical_json( $v1_payload ), $current_integrity_key );
+smc_test_assert( ! empty( SMC_Security::verify_legacy_audit_anchor( $normalized, $v1_anchor )['valid'] ), 'existing v1 anchors remain verifiable after the keyring and v2 anchor upgrade' );
 $record = array(
 	'actor_id' => 7,
 	'subject_hash' => null,
@@ -153,15 +169,39 @@ $record = array(
 	'previous_hash' => '',
 	'created_at' => '2026-08-09 12:01:00',
 );
-$record_hash = hash_hmac( 'sha256', smc_test_canonical_json( $record ), $integrity_key );
+$record_hash = hash_hmac( 'sha256', smc_test_canonical_json( $record ), $legacy_literal_integrity_key );
 $wpdb->rows[] = array_merge( array( 'id'=>3, 'subject_user_id'=>0, 'object_type'=>'', 'object_id'=>0 ), $record, array( 'row_hash'=>$record_hash ) );
 $mixed = SMC_Security::inspect_audit_rows_for_recovery( 3 );
 smc_test_assert( ! empty( $mixed['valid'] ) && 2 === $mixed['legacy_rows'] && 1 === $mixed['verified_rows'] && $record_hash === $mixed['last_hash'], 'a new HMAC epoch starts after the sealed legacy prefix' );
+smc_test_assert( ! empty( $mixed['bridge_recovery_eligible'] ) && 'smc-audit-legacy-v1-bridge-columns' === $mixed['legacy_source_schema'], 'a verified historical-key suffix proves the interrupted additive bridge boundary' );
 smc_test_assert( ! empty( SMC_Security::verify_audit_chain( 3 )['valid'] ), 'row-only verification requires and accepts the exact anchor' );
+
+unset( $GLOBALS['smc_anchor_options'][ SMC_Security::LEGACY_AUDIT_ANCHOR_OPTION ] );
+$bridge_anchor = SMC_Security::establish_legacy_audit_anchor( $mixed );
+smc_test_assert( is_array( $bridge_anchor ) && 2 === (int) ( $bridge_anchor['version'] ?? 0 ) && 'smc-audit-legacy-v1-bridge-columns' === ( $bridge_anchor['source_schema'] ?? '' ), 'an interrupted bridge is anchored only after its modern suffix verifies under a trusted historical key' );
+smc_test_assert( ! empty( SMC_Security::verify_legacy_audit_anchor( $mixed, $bridge_anchor )['valid'] ), 'the bridge anchor binds the exact lower-assurance prefix and first verified modern row' );
 
 $wpdb->tail_exists = true;
 $wpdb->tail_hash = $record_hash;
 smc_test_assert( ! empty( SMC_Security::verify_audit_chain()['valid'] ), 'the serializer tail binds to the verified modern epoch' );
+
+$wpdb->columns[] = smc_test_schema_column( 'audit_key_id', 'varchar', 'varchar(64)', 64 );
+$current_record = array(
+	'actor_id' => 7,
+	'subject_hash' => null,
+	'action' => 'recovery_codes_rotated',
+	'details' => '{}',
+	'previous_hash' => $record_hash,
+	'audit_key_id' => SMC_MASTER_KEY_ID,
+	'created_at' => '2026-08-09 12:01:30',
+);
+$current_hash = hash_hmac( 'sha256', smc_test_canonical_json( $current_record ), $current_integrity_key );
+$wpdb->rows[] = array_merge( array( 'id'=>4, 'subject_user_id'=>0, 'object_type'=>'', 'object_id'=>0 ), $current_record, array( 'row_hash'=>$current_hash ) );
+$wpdb->tail_hash = $current_hash;
+$keyed = SMC_Security::inspect_audit_rows_for_recovery( 4 );
+smc_test_assert( ! empty( $keyed['valid'] ) && 2 === $keyed['verified_rows'] && $current_hash === $keyed['last_hash'], 'new rows authenticate their explicit current audit key generation while historical rows remain verifiable' );
+smc_test_assert( ! empty( SMC_Security::verify_legacy_audit_anchor( $keyed, $bridge_anchor )['valid'] ), 'later keyed rows do not change the anchored legacy boundary' );
+smc_test_assert( ! empty( SMC_Security::verify_audit_chain()['valid'] ), 'mixed historical and explicit-key audit epochs bind to one serializer tail' );
 
 $wpdb->rows[0]['details'] = '{"source":"changed"}';
 $changed = SMC_Security::inspect_audit_rows_for_recovery( 3 );
@@ -170,12 +210,21 @@ smc_test_assert( empty( $changed_anchor['valid'] ) && 'legacy_anchor_snapshot_mi
 $wpdb->rows[0]['details'] = '{"source":"legacy"}';
 
 $wpdb->rows[2]['action'] = 'tampered';
-$tampered = SMC_Security::inspect_audit_rows_for_recovery( 3 );
+$tampered = SMC_Security::inspect_audit_rows_for_recovery( 4 );
 smc_test_assert( empty( $tampered['valid'] ) && 'row_hash_mismatch' === $tampered['reason'] && 3 === $tampered['failed_id'], 'modern HMAC corruption remains fail-closed with the exact row id' );
 $wpdb->rows[2]['action'] = 'two_factor_enabled';
 
-$wpdb->rows[] = array( 'id'=>4, 'actor_id'=>7, 'subject_user_id'=>11, 'subject_hash'=>null, 'action'=>'late_legacy', 'object_type'=>'user', 'object_id'=>11, 'details'=>'{}', 'previous_hash'=>'', 'row_hash'=>'', 'created_at'=>'2026-08-09 12:02:00' );
-$late_legacy = SMC_Security::inspect_audit_rows_for_recovery( 4 );
+$wpdb->rows[3]['action'] = 'tampered_current';
+$tampered_current = SMC_Security::inspect_audit_rows_for_recovery( 4 );
+smc_test_assert( empty( $tampered_current['valid'] ) && 'row_hash_mismatch' === $tampered_current['reason'] && 4 === $tampered_current['failed_id'], 'explicit key IDs never turn a wrong HMAC into a recoverable key transition' );
+$wpdb->rows[3]['action'] = 'recovery_codes_rotated';
+$wpdb->rows[3]['audit_key_id'] = 'retired-unavailable-key';
+$missing_generation = SMC_Security::inspect_audit_rows_for_recovery( 4 );
+smc_test_assert( empty( $missing_generation['valid'] ) && 'audit_key_generation_unavailable' === $missing_generation['reason'] && 4 === $missing_generation['failed_id'], 'an unavailable explicit audit generation fails closed without trying unrelated keys' );
+$wpdb->rows[3]['audit_key_id'] = SMC_MASTER_KEY_ID;
+
+$wpdb->rows[] = array( 'id'=>5, 'actor_id'=>7, 'subject_user_id'=>11, 'subject_hash'=>null, 'action'=>'late_legacy', 'object_type'=>'user', 'object_id'=>11, 'details'=>'{}', 'previous_hash'=>'', 'row_hash'=>'', 'audit_key_id'=>null, 'created_at'=>'2026-08-09 12:02:00' );
+$late_legacy = SMC_Security::inspect_audit_rows_for_recovery( 5 );
 smc_test_assert( empty( $late_legacy['valid'] ) && 'unhashed_row_after_chain_start' === $late_legacy['reason'], 'an unhashed row cannot appear after the modern epoch begins' );
 
 $wpdb->rows = array( array( 'id'=>1, 'actor_id'=>1, 'subject_hash'=>null, 'action'=>'blank', 'details'=>'{}', 'previous_hash'=>'', 'row_hash'=>'', 'created_at'=>'2026-08-09 12:03:00' ) );

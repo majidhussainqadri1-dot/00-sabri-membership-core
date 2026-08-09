@@ -802,8 +802,8 @@ final class SMC_Workflow {
 
 	private static function security_event_list( $user_id ) {
 		global $wpdb;
-		$subject_hash = SMC_Security::blind_index( (string) absint( $user_id ), 'audit-subject' );
-		if ( is_wp_error( $subject_hash ) ) { return; }
+		$subject_hash = SMC_Security::subject_hash( $user_id );
+		if ( '' === $subject_hash ) { return; }
 		$actions = array( 'two_factor_enabled','two_factor_replaced','two_factor_challenge_passed','recovery_codes_rotated','recovery_code_used','membership_session_revoked','sessions_revoked','email_ownership_verified','mobile_ownership_verified' );
 		$placeholders = implode( ',', array_fill( 0, count( $actions ), '%s' ) );
 		$params = array_merge( array( $subject_hash ), $actions );
