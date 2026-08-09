@@ -3,7 +3,7 @@ Contributors: sabrihomeopathy
 Tags: membership, identity, guardian consent, two-factor authentication, privacy
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 1.2.32
+Stable tag: 1.2.33
 License: GPL-2.0-or-later
 
 Canonical membership eligibility, identity assurance, guardian consent, security assertions, and verification governance for the Sabri Social Homeopathy Platform.
@@ -69,6 +69,15 @@ File 19 receives membership notices through its canonical sabri_notify integrati
 Local source and GitHub checks do not authorize production. Test fresh activation, 1.0.1 upgrade, MySQL advisory locks, concurrent reviewers, authorization matrices, filesystem denial and rollback, scanner providers, email/mobile/guardian delivery, File 02 Google sign-in and passkey assurance adapter, CF-01 provider/consumer contracts, all named cross-file integrations, advanced trust containment/revocation/selective-disclosure workflows, privacy erasure, restore, browser accessibility, and mobile layouts on Hostinger staging.
 
 == Changelog ==
+
+= 1.2.33 =
+* Verifies immutable modern audit rows against an allowlisted historical keyring instead of assuming every row used the current derivation. This closes the pre-1.2.19 encoded-key transition that could falsely report a valid row as row_hash_mismatch.
+* Recovers an interrupted legacy bridge only when blank legacy rows are one contiguous prefix and the first modern suffix row cryptographically proves a new epoch with an empty previous hash. Legacy rows remain unchanged and explicitly lower assurance.
+* Adds an authenticated audit_key_id to every new audit row so future key rotations are deterministic; pre-1.2.33 rows remain verifiable in their original format.
+* Keeps v1 migration anchors verifiable and creates stronger v2 anchors binding the source shape, exact legacy snapshot, signing generation, and—when already present—the first verified modern row.
+* Prevents audit bootstrap DDL from running inside an existing membership/privacy transaction, avoiding MySQL implicit commits during security-sensitive operations.
+* Uses the canonical audit subject hash for recent security events, restoring records previously queried under an incompatible digest.
+* Runtime 1.2.33; DB schema 1.4.4; public contract 1.2.1. No audit row is deleted, rewritten, backfilled, or silently re-signed.
 
 = 1.2.32 =
 * Correctly identifies surviving File 00 1.0.1 audit rows, whose original schema had no previous_hash or row_hash fields, instead of falsely reporting them as damaged modern HMAC rows.

@@ -15,11 +15,11 @@ const failures = [];
 let passed = 0;
 function check(c, n) { if (c) passed++; else failures.push(n); }
 
-check(main.includes('Version: 1.2.32'), 'plugin header 1.2.32');
-check(main.includes("define( 'SMC_VERSION', '1.2.32' )"), 'runtime version 1.2.32');
-check(main.includes("define( 'SMC_DB_VERSION', '1.4.3' )"), 'schema is 1.4.3');
+check(main.includes('Version: 1.2.33'), 'plugin header 1.2.33');
+check(main.includes("define( 'SMC_VERSION', '1.2.33' )"), 'runtime version 1.2.33');
+check(main.includes("define( 'SMC_DB_VERSION', '1.4.4' )"), 'schema is 1.4.4');
 check(main.includes("define( 'SMC_CONTRACT_VERSION', '1.2.1' )"), 'contract stays 1.2.1');
-check(readme.includes('Stable tag: 1.2.32'), 'readme stable tag');
+check(readme.includes('Stable tag: 1.2.33'), 'readme stable tag');
 
 check(admin.includes('private static function approval_gate'), 'approval gate helper exists');
 check(admin.includes("'pending_senior'"), 'senior pending state exists');
@@ -57,6 +57,7 @@ check(security.includes("if ($old_enabled) {update_user_meta($user_id,'_smc_2fa_
 check(security.includes("if ( $old_secret ) { update_user_meta($user_id,'_smc_totp_secret_enc',$old_secret); } else { delete_user_meta($user_id,'_smc_totp_secret_enc'); }"), 'incomplete 2FA setup restores or removes the encrypted TOTP secret');
 check(security.includes("revoke_all_sessions( $user_id, 'two_factor_changed' )") && security.indexOf("$wpdb->query( 'COMMIT' )") < security.indexOf("revoke_all_sessions( $user_id, 'two_factor_changed' )"), 'committed 2FA changes revoke sessions after the atomic write');
 check(workflow.includes("$challenge = $user ? SMC_Security::verify_two_factor_challenge") && workflow.includes('true !== $challenge'), '2FA challenge result is checked exactly');
+check(workflow.includes('$subject_hash = SMC_Security::subject_hash( $user_id );') && !workflow.includes("blind_index( (string) absint( $user_id ), 'audit-subject'"), 'security-event history queries the canonical audit subject hash');
 
 if (failures.length) {
   console.error(`completion hardening contract: ${passed} PASS, ${failures.length} FAIL`);
