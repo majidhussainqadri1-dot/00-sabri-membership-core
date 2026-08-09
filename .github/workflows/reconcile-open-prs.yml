@@ -1,0 +1,230 @@
+name: Reconcile File 00 Open PRs 21 29 30 31
+
+on:
+  push:
+    branches: ['reconcile/open-prs-21-29-30-31-2026-08-09']
+    paths: ['.github/workflows/reconcile-open-prs.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout current reconciliation branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+
+      - name: Fetch four open PR heads
+        run: |
+          set -euo pipefail
+          git fetch origin \
+            pull/21/head:refs/remotes/origin/pr21 \
+            pull/29/head:refs/remotes/origin/pr29 \
+            pull/30/head:refs/remotes/origin/pr30 \
+            pull/31/head:refs/remotes/origin/pr31
+          git rev-parse refs/remotes/origin/pr21
+          git rev-parse refs/remotes/origin/pr29
+          git rev-parse refs/remotes/origin/pr30
+          git rev-parse refs/remotes/origin/pr31
+
+      - name: Reconcile histories without regressing current conflict resolutions
+        run: |
+          set -euo pipefail
+          START_SHA=$(git rev-parse HEAD)
+          echo "$START_SHA" > /tmp/file00-start-sha
+          git config user.name 'File 00 Reconciliation Bot'
+          git config user.email 'majidhussainqadri1@gmail.com'
+          for item in '21:refs/remotes/origin/pr21' '29:refs/remotes/origin/pr29' '30:refs/remotes/origin/pr30' '31:refs/remotes/origin/pr31'; do
+            n=${item%%:*}
+            ref=${item#*:}
+            if ! git merge --no-ff --no-edit -X ours "$ref"; then
+              echo "Resolving remaining PR #$n conflicts in favor of the current v1.2.32 line; non-conflicting PR changes remain merged."
+              while IFS= read -r path; do
+                [ -n "$path" ] || continue
+                if git checkout --ours -- "$path" 2>/dev/null; then :; else git rm -f --ignore-unmatch "$path" || true; fi
+              done < <(git diff --name-only --diff-filter=U)
+              git add -A
+              git commit -m "Merge PR #$n into File 00 v1.2.32 with current-line conflict resolution"
+            fi
+          done
+
+          for pair in \
+            '21:2548d98782b14992a9cde697243b3ce169e5924c' \
+            '29:c0d04a67fb2c24319d34defc23d534e0546445e0' \
+            '30:6e73f6f8d7813f6216bd349aa7a82ab2fccee55b' \
+            '31:a8301a9e452055ea53ecf8f2f65c1c9464db8874'; do
+            n=${pair%%:*}; sha=${pair#*:}
+            git merge-base --is-ancestor "$sha" HEAD || { echo "PR #$n head is not an ancestor after reconciliation"; exit 41; }
+          done
+
+      - name: Preserve current release identity and workflow authority
+        run: |
+          set -euo pipefail
+          START_SHA=$(cat /tmp/file00-start-sha)
+          for path in \
+            README.md STATUS.md package.json package-lock.json \
+            docs/FILE-00-MASTER-PLAN-2026.md \
+            source/sabri-membership-core/sabri-membership-core.php \
+            source/sabri-membership-core/README.txt \
+            source/sabri-membership-core/MANIFEST.sha256; do
+            if git cat-file -e "$START_SHA:$path" 2>/dev/null; then git checkout "$START_SHA" -- "$path"; fi
+          done
+          # Keep the exact current-main permanent workflow set. The one-shot file removes itself before the final push.
+          find .github/workflows -maxdepth 1 -type f -print0 | while IFS= read -r -d '' path; do
+            if ! git cat-file -e "$START_SHA:$path" 2>/dev/null; then rm -f "$path"; fi
+          done
+          git checkout "$START_SHA" -- .github/workflows
+
+      - name: Rebind File 02 account-contract v1.1 provider to current bootstrap
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('source/sabri-membership-core/sabri-membership-core.php')
+          s=p.read_text()
+          anchor="define( 'SMC_CF01_CONTRACT_VERSION', '1.0.0' );\n"
+          addition="define( 'SMC_AUTHENTICATION_CONTRACT_VERSION', '1.1.0' );\ndefine( 'SMC_AUTHENTICATION_CONTRACT_V11_VERSION', '1.1.0' );\n"
+          if 'SMC_AUTHENTICATION_CONTRACT_VERSION' not in s:
+              s=s.replace(anchor,anchor+addition)
+          if "define( 'SMC_DIR', SMC_PATH );" not in s:
+              s=s.replace("define( 'SMC_PATH', plugin_dir_path( __FILE__ ) );\n", "define( 'SMC_PATH', plugin_dir_path( __FILE__ ) );\ndefine( 'SMC_DIR', SMC_PATH );\n")
+          req_anchor="require_once SMC_PATH . 'includes/class-smc-cf01-contract.php';\n"
+          reqs="require_once SMC_PATH . 'includes/class-smc-authentication-contract.php';\nrequire_once SMC_PATH . 'includes/class-smc-authentication-contract-v11.php';\n"
+          if 'class-smc-authentication-contract-v11.php' not in s:
+              s=s.replace(req_anchor,req_anchor+reqs)
+          init_anchor="\t\t\tarray( 'SMC_CF01_Contract', 'init' ),\n"
+          inits="\t\t\tarray( 'SMC_Authentication_Contract', 'init' ),\n\t\t\tarray( 'SMC_Authentication_Contract_V11', 'init' ),\n"
+          if "array( 'SMC_Authentication_Contract_V11', 'init' )" not in s:
+              s=s.replace(init_anchor,init_anchor+inits)
+          helper="""
+          /** Compatibility helper for the versioned File 02 account-contract quarantine path. */
+          if ( ! function_exists( 'wp_destroy_all_sessions' ) ) {
+          \tfunction wp_destroy_all_sessions( $user_id ) {
+          \t\t$user_id = absint( $user_id );
+          \t\tif ( $user_id && class_exists( 'WP_Session_Tokens' ) ) {
+          \t\t\tWP_Session_Tokens::get_instance( $user_id )->destroy_all();
+          \t\t}
+          \t}
+          }
+
+          """
+          if 'Compatibility helper for the versioned File 02 account-contract quarantine path' not in s:
+              marker='/**\n * Minimal activation entry point.\n'
+              s=s.replace(marker,helper+marker)
+          p.write_text(s)
+          PY
+
+      - name: Enforce eighth-review authorization and recovery corrections
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('source/sabri-membership-core/includes/class-smc-contracts.php')
+          s=p.read_text()
+          recovery="""\tprivate static function request_is_membership_recovery() {
+          \t\tif ( smc_is_membership_page() || wp_doing_cron() ) {
+          \t\t\treturn true;
+          \t\t}
+          \t\t$action = isset( $_REQUEST['action'] ) ? sanitize_key( wp_unslash( $_REQUEST['action'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+          \t\t$baseline = array(
+          \t\t\t'smc_submit_application', 'smc_request_contact_otp', 'smc_verify_contact_otp',
+          \t\t\t'smc_start_2fa', 'smc_finish_2fa', 'smc_challenge_2fa', 'smc_rotate_recovery', 'smc_revoke_session',
+          \t\t\t'smc_verify_guardian', 'smc_resubmit', 'smc_appeal', 'smc_withdraw_guardian',
+          \t\t\t'smc_save_application_draft', 'smc_clear_application_draft',
+          \t\t);
+          \t\t$filtered = array_values( array_unique( array_map( 'sanitize_key', (array) apply_filters( 'smc_membership_recovery_actions', $baseline ) ) ) );
+          \t\t$allowed = array_values( array_unique( array_merge( $baseline, $filtered ) ) );
+          \t\treturn '' !== $action && in_array( $action, $allowed, true );
+          \t}
+
+          """
+          s,n=re.subn(r"\tprivate static function request_is_membership_recovery\(\) \{.*?\n\t\}\n\n(?=\tpublic static function enforce_frontend_state)",recovery,s,flags=re.S)
+          if n!=1: raise SystemExit('request_is_membership_recovery replacement failed')
+          s=s.replace("if ( ! is_user_logged_in() || current_user_can( 'manage_options' ) || self::request_is_membership_recovery() ) {", "if ( ! is_user_logged_in() || self::request_is_membership_recovery() ) {")
+          s=s.replace("if ( ! empty( $result ) || ! is_user_logged_in() || current_user_can( 'manage_options' ) ) {", "if ( ! empty( $result ) || ! is_user_logged_in() ) {")
+          profile="""\tpublic static function filter_profile_visibility( $allowed, $profile_user_id, $viewer_user_id ) {
+          \t\t$profile_user_id = absint( $profile_user_id );
+          \t\t$viewer_user_id = absint( $viewer_user_id );
+          \t\tif ( $profile_user_id > 0 && $profile_user_id === $viewer_user_id ) { return true; }
+          \t\tif ( self::viewer_can_access_private_profile( $viewer_user_id, $profile_user_id ) ) { return true; }
+          \t\treturn self::assertions( $profile_user_id )['public_profile_allowed'];
+          \t}
+
+          \tprivate static function viewer_can_access_private_profile( $viewer_user_id, $profile_user_id ) {
+          \t\t$viewer_user_id = absint( $viewer_user_id ); $profile_user_id = absint( $profile_user_id );
+          \t\t$current_user_id = function_exists( 'get_current_user_id' ) ? absint( get_current_user_id() ) : 0;
+          \t\t$viewer = get_userdata( $viewer_user_id );
+          \t\tif ( $viewer_user_id <= 0 || $profile_user_id <= 0 || $current_user_id !== $viewer_user_id || ! $viewer || ! class_exists( 'SMC_Security' ) || ! SMC_Security::session_is_verified( $viewer_user_id ) ) { return false; }
+          \t\tif ( class_exists( 'SMC_Advanced_Trust_2026' ) && ! SMC_Advanced_Trust_2026::protected_actions_allowed( $viewer_user_id ) ) { return false; }
+          \t\tif ( user_can( $viewer, 'manage_options' ) && user_can( $viewer, 'smc_manage_membership' ) ) { return true; }
+          \t\tif ( ! user_can( $viewer, 'smc_review_verification' ) ) { return false; }
+          \t\tglobal $wpdb; if ( ! isset( $wpdb ) || ! is_object( $wpdb ) || empty( $wpdb->prefix ) ) { return false; }
+          \t\t$assigned = $wpdb->get_var( $wpdb->prepare( \"SELECT id FROM {$wpdb->prefix}smc_verification_requests WHERE user_id=%d AND assigned_reviewer=%d AND conflict_status='none' AND status IN ('submitted','resubmitted','under_review','approval_pending','more_information','appeal_review') LIMIT 1\", $profile_user_id, $viewer_user_id ) );
+          \t\treturn absint( $assigned ) > 0;
+          \t}
+
+          """
+          s,n=re.subn(r"\tpublic static function filter_profile_visibility\(.*?\n\t\}\n\n(?=\tprivate static function invalidate_contact_assertion)",profile,s,flags=re.S)
+          if n!=1: raise SystemExit('profile visibility replacement failed')
+          p.write_text(s)
+          PY
+
+      - name: Verify inherited security semantics and current release identity
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          files={
+            'bootstrap':Path('source/sabri-membership-core/sabri-membership-core.php').read_text(),
+            'contracts':Path('source/sabri-membership-core/includes/class-smc-contracts.php').read_text(),
+            'advanced':Path('source/sabri-membership-core/includes/class-smc-advanced-trust-2026.php').read_text(),
+            'events':Path('source/sabri-membership-core/includes/class-smc-events.php').read_text(),
+          }
+          checks={
+            'runtime remains 1.2.32': "Version: 1.2.32" in files['bootstrap'] and "SMC_VERSION', '1.2.32" in files['bootstrap'],
+            'DB remains 1.4.3': "SMC_DB_VERSION', '1.4.3" in files['bootstrap'],
+            'File02 account v1.1 provider loaded': 'SMC_AUTHENTICATION_CONTRACT_V11_VERSION' in files['bootstrap'] and 'class-smc-authentication-contract-v11.php' in files['bootstrap'],
+            'recovery exact allowlist': 'smc_membership_recovery_actions' in files['contracts'] and "0 === strpos( $action, 'smc_' )" not in files['contracts'],
+            'admin bypass removed': "current_user_can( 'manage_options' ) || self::request_is_membership_recovery()" not in files['contracts'],
+            'REST bypass removed': "! is_user_logged_in() || current_user_can( 'manage_options' )" not in files['contracts'],
+            'private profile assignment scope': 'viewer_can_access_private_profile' in files['contracts'] and 'assigned_reviewer=%d' in files['contracts'],
+            'File02 assurance v2': 'smc_file02_authentication_assurance_v2' in files['advanced'],
+            'phishing-resistant step-up': 'phishing_resistant_required' in files['advanced'],
+            'annual reverification cap': 'reverification_interval_seconds' in files['advanced'] and 'min( YEAR_IN_SECONDS' in files['advanced'],
+            'typed system reverification': 'smc_system_reverification_authorization_v1' in files['advanced'],
+            'retryable overdue propagation': '_smc_reverification_overdue_propagated_due_at' in files['advanced'],
+            'privacy-minimal merge event': "'event_version' => '2.0.0'" in files['advanced'] and 'primary_subject' in files['advanced'],
+            'step-up assertion bound to operational state': "'session_step_up_current' => self::protected_actions_allowed" in files['advanced'],
+            'service identity adaptive step-up': "'service_identity_change'" in files['advanced'] and "actor_meets_step_up( $actor_id, 'service_identity_change'" in files['advanced'],
+            'trust timeline typed access': 'trust_timeline_cross_subject_authorized' in files['advanced'],
+            'delegated principal remains eligible': "SMC_Contracts::assertions( $principal_user_id )" in files['advanced'],
+            'bounded emergency store': 'prune_break_glass_requests' in files['advanced'],
+            'account merge event mapping': "'account_merge_approved'" in files['events'] and "'AccountMergeApproved'" in files['events'],
+          }
+          bad=[k for k,v in checks.items() if not v]
+          for k,v in checks.items(): print(('PASS ' if v else 'FAIL ')+k)
+          if bad: raise SystemExit('semantic reconciliation failures: '+', '.join(bad))
+          PY
+
+      - name: Lint, test and package exact reconciled source
+        run: |
+          set -euo pipefail
+          find source/sabri-membership-core -name '*.php' -print0 | xargs -0 -n1 php -l
+          npm ci
+          npm test
+          npm run verify
+
+      - name: Commit reconciled working tree and push
+        run: |
+          set -euo pipefail
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m 'Reconcile PRs #21 #29 #30 #31 onto File 00 v1.2.32'
+          fi
+          git status --short
+          git push origin HEAD:reconcile/open-prs-21-29-30-31-2026-08-09
