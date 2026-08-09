@@ -1,0 +1,124 @@
+name: File 00 Hostinger All Actions Live Fix
+
+on:
+  push:
+    branches: ['fix/code-only-audit-32-2026-08-08']
+    paths:
+      - '.github/workflows/file00-hostinger-all-actions-livefix.yml'
+      - 'tools/livefix/hostinger_all_actions_fix.py'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  livefix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_DATABASE: wordpress
+          MARIADB_USER: wordpress
+          MARIADB_PASSWORD: wordpress
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: Checkout corrective branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+
+      - name: Set up PHP 8.3
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240
+        with:
+          php-version: '8.3'
+          coverage: none
+          extensions: mysqli, openssl, mbstring, json
+          tools: none
+
+      - name: Set up Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+
+      - name: Materialize Hostinger live fix
+        run: |
+          set -euo pipefail
+          python3 tools/livefix/hostinger_all_actions_fix.py
+          php -l source/sabri-membership-core/sabri-membership-core.php
+          php -l source/sabri-membership-core/includes/class-smc-security.php
+          node --check source/sabri-membership-core/assets/membership.js
+          grep -q "prepareNativeSubmission" source/sabri-membership-core/assets/membership.js
+          ! grep -q "new XMLHttpRequest" source/sabri-membership-core/assets/membership.js
+          grep -q "ensure_key_ready" source/sabri-membership-core/includes/class-smc-security.php
+          grep -q "local_document_scan_fallback" source/sabri-membership-core/includes/class-smc-security.php
+          grep -q "hash_file( 'sha256', \$js_path )" source/sabri-membership-core/sabri-membership-core.php
+
+      - name: All button action registry contract
+        run: |
+          set -euo pipefail
+          node qa/all-button-action-contract.mjs
+
+      - name: Install WordPress 7.0.1 without File 00 key constants
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 https://github.com/wp-cli/wp-cli/releases/download/v2.12.0/wp-cli-2.12.0.phar -o /tmp/wp-cli.phar
+          php /tmp/wp-cli.phar core download --version=7.0.1 --path=/tmp/wordpress --force
+          php /tmp/wp-cli.phar config create --path=/tmp/wordpress --dbname=wordpress --dbuser=wordpress --dbpass=wordpress --dbhost=127.0.0.1:3306 --skip-check
+          php /tmp/wp-cli.phar config set WP_ENVIRONMENT_TYPE 'staging' --type=constant --path=/tmp/wordpress
+          php /tmp/wp-cli.phar core install --path=/tmp/wordpress --url=http://file00-livefix.local --title='File 00 Hostinger Live Fix' --admin_user=founder --admin_password='Temporary-Acceptance-Password!9' --admin_email=founder@example.test --skip-email
+          rm -rf /tmp/wordpress/wp-content/plugins/sabri-membership-core
+          cp -R source/sabri-membership-core /tmp/wordpress/wp-content/plugins/sabri-membership-core
+          php /tmp/wp-cli.phar plugin activate sabri-membership-core --path=/tmp/wordpress
+
+      - name: Managed keyring and crypto must work without wp-config constants
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval '$r=SMC_Security::ensure_key_ready(); if (is_wp_error($r) || !SMC_Security::key_ready()) { fwrite(STDERR,"keyring provisioning failed\n"); exit(31); } $e=SMC_Security::encrypt("hostinger-livefix","acceptance",array("user_id"=>1)); if (is_wp_error($e)) { fwrite(STDERR,$e->get_error_message()."\n"); exit(32); } $d=SMC_Security::decrypt($e,"acceptance",array("user_id"=>1)); if (is_wp_error($d) || "hostinger-livefix"!==$d) { exit(33); } echo SMC_Security::key_id(),"\n";' --path=/tmp/wordpress
+          test -f /tmp/wordpress/wp-content/sabri-private-keys/file00-keyring.php
+          grep -q "Require all denied" /tmp/wordpress/wp-content/sabri-private-keys/.htaccess
+
+      - name: Local evidence scanner accepts inert evidence and rejects active PDF
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          Path('/tmp/inert.pdf').write_bytes(b'%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n' + b'A'*1400 + b'\n%%EOF\n')
+          Path('/tmp/active.pdf').write_bytes(b'%PDF-1.4\n1 0 obj\n<< /OpenAction << /S /JavaScript /JS (alert(1)) >> >>\nendobj\n' + b'A'*1400 + b'\n%%EOF\n')
+          PY
+          php /tmp/wp-cli.phar eval '$ok=SMC_Security::local_document_scan_fallback(null,"/tmp/inert.pdf","application/pdf",1,"identity_front"); $bad=SMC_Security::local_document_scan_fallback(null,"/tmp/active.pdf","application/pdf",1,"identity_front"); if (true!==$ok || false!==$bad) { fwrite(STDERR,"local evidence scanner invariant failed\n"); exit(41); } echo "PASS evidence scanner\n";' --path=/tmp/wordpress
+
+      - name: Build and verify installable ZIP
+        run: |
+          set -euo pipefail
+          python3 tools/build.py
+          python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.20.zip
+          sha256sum dist/00-sabri-membership-core-1.2.20.zip
+
+      - name: Commit materialized source corrections
+        run: |
+          set -euo pipefail
+          git config user.name "file00-livefix-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add source/sabri-membership-core tools/livefix/hostinger_all_actions_fix.py
+          if ! git diff --cached --quiet; then
+            git commit -m "[livefix-bot] Make all File 00 user actions Hostinger-safe"
+            git push origin HEAD:fix/code-only-audit-32-2026-08-08
+          fi
+
+      - name: Upload corrected installable ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: File-00-1.2.20-Hostinger-All-Actions-Corrected
+          path: dist/00-sabri-membership-core-1.2.20.zip
+          if-no-files-found: error
+          retention-days: 30
