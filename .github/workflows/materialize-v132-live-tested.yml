@@ -27,15 +27,35 @@ jobs:
           test "$(git hash-object source/sabri-membership-core/assets/membership.js)" = "8695c3fbdf5819ae7ea58da084f82b8ab45c1af7"
           test "$(git hash-object source/sabri-membership-core/MANIFEST.sha256)" = "515b1fb9c3e6c47ca8c2303cb7d01bacfacace16"
 
+      - name: Verify and reconstruct exact v1.2.32 source patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s  %s\n' \
+            '983dd07aa0c4ca7c8335bd4e12da25dbf9927a48b0f0b5899d2e3c7d087ced48' 'tools/livefix/v132-patch.part00' \
+            '92573fb70b6f1bcc4f5c295b4baf1f45d1ea29617334be81d3bcdf894a8e87d5' 'tools/livefix/v132-patch.part01' \
+            '2b53df80b9acc362c410bfa9c0ccfd38e136cd1e43ede8b7292bcd7787b730c9' 'tools/livefix/v132-patch.part02' \
+            '1d87e572b6cf90b2fb2f397fb84a71ed308bf3df9f9e76bd2a8be852ae1d99af' 'tools/livefix/v132-patch.part03' \
+            '3c5ca7d9494b03abb240abb65e80a5f0570afbb6828a55d57c81599546433820' 'tools/livefix/v132-patch.part04' \
+            | sha256sum -c -
+          cat tools/livefix/v132-patch.part00 \
+              tools/livefix/v132-patch.part01 \
+              tools/livefix/v132-patch.part02 \
+              tools/livefix/v132-patch.part03 \
+              tools/livefix/v132-patch.part04 > /tmp/v132.patch.gz.b64
+          test "$(sha256sum /tmp/v132.patch.gz.b64 | awk '{print $1}')" = "3102dd219fbf0966093b2f39d33da1ac93f4330401342f4592815d042429754f"
+          base64 --decode /tmp/v132.patch.gz.b64 | gzip -dc > /tmp/file00-v132.patch
+          test "$(sha256sum /tmp/file00-v132.patch | awk '{print $1}')" = "b7d9c3a7577a65e9039b4fc31a1b252927511cbb30a2a45922f6d26e0c115f84"
+
       - name: Apply exact live-tested v1.2.32 source patch
         shell: bash
         run: |
           set -euo pipefail
-          base64 --decode tools/livefix/v120-to-v132.patch.gz.b64 | gzip -dc > /tmp/file00-v132.patch
           cd source/sabri-membership-core
           patch --batch --forward -p2 < /tmp/file00-v132.patch
           grep -q "Version: 1.2.32" sabri-membership-core.php
           grep -q "define( 'SMC_DB_VERSION', '1.4.3' )" sabri-membership-core.php
+          grep -q "define( 'SMC_CONTRACT_VERSION', '1.2.1' )" sabri-membership-core.php
           sha256sum -c MANIFEST.sha256
 
       - name: Align active repository identity and CI with v1.2.32
@@ -46,7 +66,6 @@ jobs:
           import json
           from pathlib import Path
 
-          # Package metadata is current-state metadata, not historical documentation.
           for name in ('package.json', 'package-lock.json'):
               p = Path(name)
               data = json.loads(p.read_text(encoding='utf-8'))
@@ -74,8 +93,7 @@ jobs:
                   text = text.replace(old, new)
               p.write_text(text, encoding='utf-8')
 
-          release = Path('RELEASE-1.2.32.md')
-          release.write_text('''# File 00 — Sabri Membership Core 1.2.32\n\n## Status\nLive-tested corrective candidate materialized from the exact Hostinger-tested source lineage through v1.2.32.\n\n## Runtime identity\n- Runtime: `1.2.32`\n- Database schema: `1.4.3`\n- Public contract: `1.2.1`\n\n## Live defects incorporated\nActivation bootstrap hardening; Hostinger-safe actions and document submission; email/SMS provider boundaries; origin/nonce handling; TOTP enrollment diagnostics; audit schema bootstrap/reconciliation; verified recovery of a missing audit tail; and trusted historical audit-key transition verification.\n\n## Acceptance boundary\nThis commit materializes the latest tested source and CI evidence. It does not by itself assert production acceptance; live provider, browser, restore/rollback and final founder acceptance remain separate gates.\n''', encoding='utf-8')
+          Path('RELEASE-1.2.32.md').write_text('''# File 00 — Sabri Membership Core 1.2.32\n\n## Status\nCorrective candidate materialized from the exact source lineage used for Hostinger live testing through v1.2.32.\n\n## Runtime identity\n- Runtime: `1.2.32`\n- Database schema: `1.4.3`\n- Public contract: `1.2.1`\n\n## Live defects incorporated\nActivation bootstrap hardening; Hostinger-safe actions and document submission; email/SMS provider boundaries; origin/nonce handling; TOTP enrollment diagnostics; audit schema bootstrap/reconciliation; verified recovery of a missing audit tail; and trusted historical audit-key transition verification.\n\n## Acceptance boundary\nThis commit materializes the latest source and CI evidence. The v1.2.32 historical-key transition hypothesis still requires final live-site confirmation against the user's existing audit record 16. Real email/SMS providers, full browser/mobile/accessibility acceptance, isolated backup restore/rollback, independent security review and final Founder acceptance remain separate gates.\n''', encoding='utf-8')
           PY
 
       - name: Static, package and full QA gate
@@ -94,8 +112,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git rm tools/livefix/v120-to-v132.patch.gz.b64
-          git rm .github/workflows/materialize-v132-live-tested.yml
+          git rm -f tools/livefix/v120-to-v132.patch.gz.b64 || true
+          git rm -f tools/livefix/v132-patch.part00 tools/livefix/v132-patch.part01 tools/livefix/v132-patch.part02 tools/livefix/v132-patch.part03 tools/livefix/v132-patch.part04
+          git rm -f .github/workflows/materialize-v132-live-tested.yml
 
       - name: Commit materialized v1.2.32 source
         shell: bash
