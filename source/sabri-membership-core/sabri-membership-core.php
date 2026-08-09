@@ -38,7 +38,48 @@ require_once SMC_PATH . 'includes/class-smc-three-plan.php';
 require_once SMC_PATH . 'includes/class-smc-latest-central-2026.php';
 require_once SMC_PATH . 'includes/class-smc-advanced-trust-2026.php';
 
-register_activation_hook( SMC_FILE, array( 'SMC_Installer', 'activate' ) );
+/**
+ * Activation entry point for existing installations whose encryption keyring
+ * is not configured yet. Schema/role/page upgrades may be installed safely,
+ * but legacy identity migration must wait for the keyring so activation can
+ * remain fail-closed instead of crashing the WordPress plugin screen.
+ */
+function smc_activation_entrypoint() {
+	$existing_db_version = (string) get_option( 'smc_db_version', '' );
+	$existing_release    = (string) get_option( 'smc_release_version', '' );
+	$defer_legacy        = '' !== $existing_db_version && ! SMC_Security::key_ready();
+
+	if ( $defer_legacy ) {
+		delete_option( 'smc_db_version' );
+		delete_option( 'smc_release_version' );
+	}
+
+	try {
+		SMC_Installer::activate();
+	} finally {
+		if ( $defer_legacy ) {
+			update_option( 'smc_db_version', $existing_db_version, false );
+			if ( '' !== $existing_release ) {
+				update_option( 'smc_release_version', $existing_release, false );
+			} else {
+				delete_option( 'smc_release_version' );
+			}
+			update_option(
+				'smc_migration_deferred_v1',
+				array(
+					'reason'             => 'key_configuration_required',
+					'source_db_version'  => $existing_db_version,
+					'target_db_version'  => SMC_DB_VERSION,
+					'target_release'     => SMC_VERSION,
+					'updated_at'         => current_time( 'mysql', true ),
+				),
+				false
+			);
+		}
+	}
+}
+
+register_activation_hook( SMC_FILE, 'smc_activation_entrypoint' );
 register_deactivation_hook( SMC_FILE, array( 'SMC_Installer', 'deactivate' ) );
 
 add_action(
@@ -68,8 +109,29 @@ add_action(
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return;
 		}
-		SMC_Installer::maybe_upgrade();
-		if ( SMC_VERSION !== get_option( 'smc_institutional_repair_version', '' ) ) {
+		$deferred = get_option( 'smc_migration_deferred_v1', array() );
+		if ( SMC_Security::key_ready() ) {
+			SMC_Installer::maybe_upgrade();
+			if ( SMC_DB_VERSION === get_option( 'smc_db_version', '' ) ) {
+				delete_option( 'smc_migration_deferred_v1' );
+			}
+		} elseif ( is_array( $deferred ) && ! empty( $deferred ) ) {
+			// Keep the plugin active but fail-closed. The data migration resumes
+			// automatically after SMC_MASTER_KEY and SMC_MASTER_KEY_ID are ready.
+		} elseif ( SMC_DB_VERSION !== get_option( 'smc_db_version', '' ) && '' !== get_option( 'smc_db_version', '' ) ) {
+			update_option(
+				'smc_migration_deferred_v1',
+				array(
+					'reason'            => 'key_configuration_required',
+					'source_db_version' => (string) get_option( 'smc_db_version', '' ),
+					'target_db_version' => SMC_DB_VERSION,
+					'target_release'    => SMC_VERSION,
+					'updated_at'        => current_time( 'mysql', true ),
+				),
+				false
+			);
+		}
+		if ( SMC_Security::key_ready() && SMC_VERSION !== get_option( 'smc_institutional_repair_version', '' ) ) {
 			$repaired = SMC_Lifecycle::repair_institutional_accounts();
 			if ( SMC_Lifecycle::institutional_repair_complete() ) {
 				update_option( 'smc_institutional_repair_version', SMC_VERSION, false );
@@ -83,6 +145,19 @@ add_action(
 		}
 	}
 );
+add_action(
+	'admin_notices',
+	static function () {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		$deferred = get_option( 'smc_migration_deferred_v1', array() );
+		if ( is_array( $deferred ) && ! empty( $deferred ) && ! SMC_Security::key_ready() ) {
+			echo '<div class="notice notice-warning"><p>' . esc_html__( 'Sabri Membership Core is active in fail-closed mode. Legacy membership migration is paused until both SMC_MASTER_KEY and SMC_MASTER_KEY_ID are securely configured; migration will then resume automatically.', 'sabri-membership-core' ) . '</p></div>';
+		}
+	}
+);
+
 add_action(
 	'wp_enqueue_scripts',
 	static function () {
