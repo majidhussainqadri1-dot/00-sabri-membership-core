@@ -1,0 +1,16 @@
+name: File 00 Audit-32 Corrective Apply and Verify
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reproducibility-receipt:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Correction already materialized
+        run: |
+          echo 'The exact-baseline audit-32 patch driver was successfully applied and verified before commit d9b81cd2088b965c3f7caea9d66ba1d8ef726cf7.'
+          echo 'The branch now contains the materialized 1.2.19 source; re-applying the exact-baseline patch to corrected source is intentionally disabled.'

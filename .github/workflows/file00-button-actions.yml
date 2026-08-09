@@ -1,0 +1,41 @@
+name: File 00 All Button Actions Gate
+
+on:
+  push:
+    branches: ['fix/code-only-audit-32-2026-08-08']
+  pull_request:
+    branches: ['main']
+
+permissions:
+  contents: read
+
+jobs:
+  button-actions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout File 00
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - name: Set up PHP 8.3
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240
+        with:
+          php-version: '8.3'
+          coverage: none
+          extensions: openssl, json
+          tools: none
+      - name: PHP syntax for protected action layer
+        run: |
+          set -euo pipefail
+          php -l source/sabri-membership-core/includes/class-smc-host-compat.php
+          php -l source/sabri-membership-core/includes/class-smc-workflow.php
+          php -l source/sabri-membership-core/includes/class-smc-admin.php
+          php -l source/sabri-membership-core/includes/class-smc-security.php
+      - name: All user and reviewer button contracts
+        run: |
+          set -euo pipefail
+          node qa/all-button-action-contract.mjs
+      - name: Package build still succeeds
+        run: |
+          set -euo pipefail
+          python3 tools/build.py
+          python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.20.zip

@@ -15,11 +15,11 @@ const failures = [];
 let passed = 0;
 function assert(condition, name) { if (condition) passed += 1; else failures.push(name); }
 
-assert(main.includes('Version: 1.2.18'), 'Plugin header is 1.2.18');
-assert(main.includes("define( 'SMC_VERSION', '1.2.18' )"), 'Runtime version is 1.2.18');
-assert(main.includes("define( 'SMC_DB_VERSION', '1.3.0' )"), 'Database version is 1.3.0');
+assert(main.includes('Version: 1.2.32'), 'Plugin header is 1.2.32');
+assert(main.includes("define( 'SMC_VERSION', '1.2.32' )"), 'Runtime version is 1.2.32');
+assert(main.includes("define( 'SMC_DB_VERSION', '1.4.3' )"), 'Database version is 1.4.3');
 assert(main.includes('SMC_Lifecycle::institutional_repair_complete()'), 'Release repair marker is conditional on a complete repair pass');
-assert(functions.includes("if ( ! isset( smc_allowed_genders()[ $gender ] ) )"), 'Unknown gender fails closed');
+assert(functions.includes("if ( ! isset( smc_allowed_genders()[ $gender ] )"), 'Unknown gender fails closed');
 assert(functions.includes('return false;'), 'Minimum-age resolver can reject corrupt gender');
 assert(contracts.includes('$guardian_verified ='), 'Canonical eligibility computes guardian validity');
 assert(contracts.includes('$contacts_verified ='), 'Canonical eligibility computes contact ownership');
@@ -32,8 +32,11 @@ assert(contracts.includes("'phone_e164_enc' => $phone_enc"), 'Canonical phone fo
 assert(workflow.includes("$applicant_version = (int) $app['row_version'] + 1;"), 'Initial submission advances applicant generation');
 assert(workflow.includes('$user_id, $status, $queue_type, $trace_id, $sla_due, $applicant_version, $now, $now, $now'), 'Request binds queue, trace, SLA and resulting applicant generation');
 assert(workflow.includes('SET status=%s,submitted_at=%s,updated_at=%s,row_version=row_version+1 WHERE user_id=%d AND row_version=%d'), 'Application submission advances the exact locked generation');
-assert(workflow.indexOf("INSERT INTO {$wpdb->prefix}smc_contact_otps") < workflow.indexOf("apply_filters( 'smc_send_contact_otp'"), 'OTP verifier row is persisted before delivery and removed on delivery failure');
-assert(workflow.indexOf("apply_filters( 'smc_send_guardian_invitation'") < workflow.indexOf("INSERT INTO {$wpdb->prefix}smc_guardian_consents"), 'Guardian secret is delivered before a usable invitation row is committed');
+assert(workflow.indexOf("INSERT INTO {$wpdb->prefix}smc_contact_otps") < workflow.indexOf('SMC_Contact_Delivery::send_otp'), 'OTP verifier row is persisted before delivery and removed on delivery failure');
+const guardianInsert = workflow.indexOf("$wpdb->insert( $wpdb->prefix . 'smc_guardian_consents'");
+const guardianSend = workflow.indexOf("apply_filters( 'smc_send_guardian_invitation'");
+assert(guardianInsert >= 0 && guardianSend > guardianInsert, 'Guardian invitation row is durably persisted before its secret is delivered');
+assert(workflow.includes("status='delivery_failed',is_current=0") && workflow.includes("SET is_current=1,withdrawn_at=IF(status='superseded',NULL,withdrawn_at),status=IF(status='superseded','pending',status)"), 'Guardian delivery failure retires the failed generation and restores the previous current consent');
 assert(workflow.includes('write_user_meta_verified'), '2FA pending/enabled metadata is read-after-write verified');
 assert(workflow.includes('delete_user_meta_verified'), 'One-time and rollback metadata deletion is verified');
 assert(workflow.includes("'_smc_recovery_receipt_v2'"), 'Recovery receipt uses one durable metadata record');
@@ -44,7 +47,8 @@ assert(workflow.includes("status='suspended',reviewer_note=%s,applicant_version=
 assert(security.includes('public static function recovery_codes( $user_id, $count = 8, $receipt_callback = null )'), 'Recovery rotation supports atomic receipt persistence');
 assert(security.includes("return new WP_Error( 'smc_recovery_receipt'"), 'Receipt failure rolls back code replacement');
 assert(security.includes("self::audit( 'recovery_codes_rotated', $user_id )"), 'Recovery rotation audit is required');
-assert(security.indexOf("self::audit( 'recovery_codes_rotated'") < security.indexOf("$wpdb->query( 'COMMIT' );", security.indexOf('public static function recovery_codes')), 'Recovery audit is committed atomically with codes');
+const recoveryStart = security.indexOf('public static function recovery_codes');
+assert(security.indexOf("self::audit( 'recovery_codes_rotated'", recoveryStart) < security.indexOf("false === $wpdb->query( 'COMMIT' )", recoveryStart), 'Recovery audit is committed atomically with codes');
 assert(security.includes('public static function consume_recovery_code_for_session'), 'Atomic recovery-session method exists');
 assert(security.includes('LIMIT 1 FOR UPDATE'), 'Recovery code/session rows are locked during consumption');
 assert(privacy.includes("'containment_at' => ''"), 'Erasure lock records containment completion separately');

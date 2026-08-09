@@ -1,13 +1,11 @@
-# Dependency Inventory
+# Dependencies — File 00
 
-## Runtime
+File 00 owns canonical membership eligibility, identity assurance, guardian consent, verification governance, security assertions, and related audit evidence.
 
-File 00 bundles no third-party PHP or JavaScript library. It uses WordPress core APIs, OpenSSL AES-256-GCM, the configured filesystem, and MySQL advisory locks.
+External delivery dependencies remain adapter-based:
+- Email/SMS delivery readiness and receipt-bearing notification transport are supplied by File 19 / configured providers.
+- WordPress/PHP/MySQL capabilities required by File 00 are validated by the runtime and integration gates.
 
-## Development only
+Current corrective identity: runtime `1.2.32`, database schema `1.4.3`, public contract `1.2.1`.
 
-| Package | Purpose | Distribution |
-|---|---|---|
-| `php-parser` | Parse every PHP source file under the declared PHP 7.4 grammar | Not included in the WordPress ZIP |
-
-The deterministic builder uses Python's standard-library `zipfile` module. No Python package is included in the release.
+Provider configuration and live delivery acceptance are separate from repository source merge.

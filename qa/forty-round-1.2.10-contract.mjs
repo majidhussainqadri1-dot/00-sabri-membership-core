@@ -10,8 +10,8 @@ const review = load('docs/FORTY-ROUND-REVIEW-1.2.10.md');
 const packageJson = JSON.parse(load('package.json'));
 
 const checks = [
-  ['runtime version', plugin.includes("define( 'SMC_VERSION', '1.2.18' );")],
-  ['package version', packageJson.version === '1.2.18'],
+  ['runtime version', plugin.includes("define( 'SMC_VERSION', '1.2.19' );")],
+  ['package version', packageJson.version === '1.2.19'],
   ['historical forty-round evidence retained', review.includes('1.2.10')],
   ['undefined guardian cleanup removed', !/guardian_consent_transaction_failed[\s\S]{0,500}submission_receipt_key/.test(workflow)],
   ['guardian write blocked by safe mode', !completion.match(/\$allowed\s*=\s*array\([\s\S]*?smc_verify_guardian[\s\S]*?\);/)],
@@ -19,7 +19,7 @@ const checks = [
   ['stale repair reclaim', completion.includes('Recovered stale processing claim.')],
   ['targeted repair retry', completion.includes('reconcile_applications( 1, $id )')],
   ['targeted outbox retry', completion.includes('process_outbox( 1, $id )') && events.includes('$only_id = absint( $only_id );')],
-  ['restore evidence server validation', completion.includes("strlen( $reference ) < 8")],
+  ['restore evidence server validation', completion.includes("$required = array( 'restore_run_id','manifest_verified','isolated_restore','component_digests_match','row_counts_match','private_files_match','decrypt_samples_pass','key_recovery_pass','audit_chain_pass','retention_holds_reconciled','migrations_reconciled' )") && completion.includes("strlen( $reference ) >= 8") && completion.includes("smc_restore_proof_v1")],
   ['no master-secret-derived key identifier', !completion.includes("hash( 'sha256', (string) SMC_MASTER_KEY )")],
   ['explicit non-secret key ID', completion.includes('SMC_MASTER_KEY_ID')],
   ['eligible document state', completion.includes("status IN ('submitted','approved')") && completion.includes('expiry_date>=UTC_DATE()')],

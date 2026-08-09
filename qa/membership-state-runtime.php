@@ -6,7 +6,7 @@
 declare(strict_types=1);
 
 define( 'ABSPATH', __DIR__ . '/' );
-define( 'SMC_CONTRACT_VERSION', '1.2.0' );
+define( 'SMC_CONTRACT_VERSION', '1.2.1' );
 
 $GLOBALS['smc_test_rows'] = array();
 $GLOBALS['smc_test_users'] = array();

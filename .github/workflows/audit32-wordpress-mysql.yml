@@ -1,0 +1,156 @@
+name: File 00 Real WordPress MySQL Audit-32 Gate
+
+on:
+  push:
+    branches: ['fix/code-only-audit-32-2026-08-08']
+  pull_request:
+    branches: ['main']
+
+permissions:
+  contents: read
+
+jobs:
+  wordpress-mysql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_DATABASE: wordpress
+          MARIADB_USER: wordpress
+          MARIADB_PASSWORD: wordpress
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - name: Checkout corrected File 00
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - name: Set up PHP 8.3
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240
+        with:
+          php-version: '8.3'
+          coverage: none
+          extensions: mysqli, openssl, mbstring, json
+          tools: none
+      - name: Install pinned WP-CLI
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 https://github.com/wp-cli/wp-cli/releases/download/v2.12.0/wp-cli-2.12.0.phar -o /tmp/wp-cli.phar
+          php /tmp/wp-cli.phar --info
+      - name: Install WordPress 7.0.1
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar core download --version=7.0.1 --path=/tmp/wordpress --force
+          php /tmp/wp-cli.phar config create --path=/tmp/wordpress --dbname=wordpress --dbuser=wordpress --dbpass=wordpress --dbhost=127.0.0.1:3306 --skip-check
+          php /tmp/wp-cli.phar config set SMC_MASTER_KEY 'base64:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=' --type=constant --path=/tmp/wordpress
+          php /tmp/wp-cli.phar config set SMC_MASTER_KEY_ID 'audit32-ci-key-v1' --type=constant --path=/tmp/wordpress
+          php /tmp/wp-cli.phar config set WP_ENVIRONMENT_TYPE 'staging' --type=constant --path=/tmp/wordpress
+          php /tmp/wp-cli.phar core install --path=/tmp/wordpress --url=http://audit32.local --title='File 00 Audit 32 CI' --admin_user=founder --admin_password='Audit32-Temporary-Password!9' --admin_email=founder@example.test --skip-email
+      - name: Activate corrected plugin
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/wordpress/wp-content/plugins/sabri-membership-core
+          cp -R source/sabri-membership-core /tmp/wordpress/wp-content/plugins/sabri-membership-core
+          php /tmp/wp-cli.phar plugin activate sabri-membership-core --path=/tmp/wordpress
+          php /tmp/wp-cli.phar plugin status sabri-membership-core --path=/tmp/wordpress
+          php /tmp/wp-cli.phar eval 'SMC_Installer::maybe_upgrade(); if (SMC_DB_VERSION !== get_option("smc_db_version","")) { $failure=get_option("smc_last_migration_failure",array()); fwrite(STDERR,"bootstrap incomplete: ".wp_json_encode($failure)."\n"); exit(10); }' --path=/tmp/wordpress
+      - name: Concurrent audit append smoke
+        run: |
+          set -euo pipefail
+          for i in 1 2 3 4; do
+            php /tmp/wp-cli.phar eval "if (!SMC_Security::audit('audit32_concurrent_a_${i}',0,array('worker'=>'a'))) { exit(11); }" --path=/tmp/wordpress &
+            php /tmp/wp-cli.phar eval "if (!SMC_Security::audit('audit32_concurrent_b_${i}',0,array('worker'=>'b'))) { exit(12); }" --path=/tmp/wordpress &
+          done
+          wait
+      - name: Real WordPress and InnoDB integration assertions
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file "$GITHUB_WORKSPACE/qa/audit32-wordpress-mysql.php" --path=/tmp/wordpress
+      - name: Runtime/package identity evidence
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval 'echo SMC_VERSION," / ",SMC_DB_VERSION," / ",SMC_CONTRACT_VERSION,"\n";' --path=/tmp/wordpress
+          php /tmp/wp-cli.phar db query "SELECT TABLE_NAME,ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME LIKE 'wp_smc_%' ORDER BY TABLE_NAME" --path=/tmp/wordpress
+      - name: Build installable File 00 ZIP
+        run: |
+          set -euo pipefail
+          python3 tools/build.py
+          python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.20.zip
+      - name: Upload installable File 00 ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: File-00-Sabri-Membership-Core-1.2.20-Hostinger-Safe-Activation
+          path: dist/00-sabri-membership-core-1.2.20.zip
+          if-no-files-found: error
+          retention-days: 30
+
+  activation-no-key-upgrade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_DATABASE: wordpress
+          MARIADB_USER: wordpress
+          MARIADB_PASSWORD: wordpress
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - name: Checkout activation hotfix
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - name: Set up PHP 8.3
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240
+        with:
+          php-version: '8.3'
+          coverage: none
+          extensions: mysqli, openssl, mbstring, json
+          tools: none
+      - name: Install pinned WP-CLI
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 https://github.com/wp-cli/wp-cli/releases/download/v2.12.0/wp-cli-2.12.0.phar -o /tmp/wp-cli.phar
+          php /tmp/wp-cli.phar --info
+      - name: Install existing-site WordPress fixture without File 00 keys
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar core download --version=7.0.1 --path=/tmp/wordpress --force
+          php /tmp/wp-cli.phar config create --path=/tmp/wordpress --dbname=wordpress --dbuser=wordpress --dbpass=wordpress --dbhost=127.0.0.1:3306 --skip-check
+          php /tmp/wp-cli.phar config set WP_ENVIRONMENT_TYPE 'staging' --type=constant --path=/tmp/wordpress
+          php /tmp/wp-cli.phar core install --path=/tmp/wordpress --url=http://audit32-nokey.local --title='File 00 Existing Upgrade No Key' --admin_user=founder --admin_password='Audit32-Temporary-Password!9' --admin_email=founder@example.test --skip-email
+          php /tmp/wp-cli.phar option add smc_db_version 1.3.0 --path=/tmp/wordpress
+          php /tmp/wp-cli.phar option add smc_release_version 1.2.19 --path=/tmp/wordpress
+          LEGACY_ID=$(php /tmp/wp-cli.phar user create legacy legacy@example.test --role=subscriber --user_pass='Audit32-Legacy-Password!9' --porcelain --path=/tmp/wordpress)
+          php /tmp/wp-cli.phar user meta update "$LEGACY_ID" _sa_account_type member --path=/tmp/wordpress
+          php /tmp/wp-cli.phar option add smc_schema_owner_lock '{"token":"hostinger-simulated-contention","expires":4102444800}' --format=json --path=/tmp/wordpress
+          rm -rf /tmp/wordpress/wp-content/plugins/sabri-membership-core
+          cp -R source/sabri-membership-core /tmp/wordpress/wp-content/plugins/sabri-membership-core
+      - name: Activation must succeed even with hostile migration preconditions
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar plugin activate sabri-membership-core --path=/tmp/wordpress
+          php /tmp/wp-cli.phar plugin status sabri-membership-core --path=/tmp/wordpress
+          php /tmp/wp-cli.phar eval '$p=get_option("smc_activation_pending_v2",array()); if (!is_array($p) || "1.2.20" !== ($p["target_release"] ?? "")) { fwrite(STDERR,"activation pending marker missing\n"); exit(20); } if ("1.3.0" !== get_option("smc_db_version","")) { fwrite(STDERR,"activation mutated source DB version\n"); exit(21); } echo "PASS activation request stayed non-throwing and non-mutating\n";' --path=/tmp/wordpress
+      - name: Deferred bootstrap must fail closed without keyring
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar option delete smc_schema_owner_lock --path=/tmp/wordpress || true
+          php /tmp/wp-cli.phar eval 'SMC_Installer::maybe_upgrade(); if (SMC_Security::key_ready()) { fwrite(STDERR,"key unexpectedly ready\n"); exit(22); } if ("1.3.0" !== get_option("smc_db_version","")) { fwrite(STDERR,"source db version not preserved\n"); exit(23); } echo "PASS protected bootstrap remained fail-closed without keyring\n";' --path=/tmp/wordpress
+      - name: Configure keyring and resume deferred migration
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar config set SMC_MASTER_KEY 'base64:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=' --type=constant --path=/tmp/wordpress
+          php /tmp/wp-cli.phar config set SMC_MASTER_KEY_ID 'audit32-upgrade-key-v1' --type=constant --path=/tmp/wordpress
+          php /tmp/wp-cli.phar eval 'if (!SMC_Security::key_ready()) { exit(31); } SMC_Installer::maybe_upgrade(); if (SMC_DB_VERSION !== get_option("smc_db_version","")) { $failure=get_option("smc_last_migration_failure",array()); fwrite(STDERR,"deferred migration did not complete: ".wp_json_encode($failure)."\n"); exit(32); } delete_option("smc_migration_deferred_v1"); echo "PASS deferred migration resumed after keyring configuration\n";' --path=/tmp/wordpress
