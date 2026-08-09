@@ -74,9 +74,15 @@ check(security.includes("admin_post_smc_private_document"), 'Private document ac
 
 check(js.includes("previous?.addEventListener('click'"), 'Application Previous button has a client-side handler');
 check(js.includes("next?.addEventListener('click'"), 'Application Next button has a client-side handler');
-check(js.includes("retryButton?.addEventListener('click', submitViaXHR)"), 'Application Retry button has a client-side handler');
-check(js.includes("form.addEventListener('submit'"), 'Application Submit button has a client-side handler');
-check(js.includes('failedSubmission'), 'Application submit has a recoverable failure path');
+check(
+  js.includes("retryButton?.addEventListener('click', () => form.requestSubmit())") ||
+    js.includes("retryButton?.addEventListener('click',()=>form.requestSubmit())"),
+  'Application Retry button re-enters the native submission path'
+);
+check(js.includes("form.addEventListener('submit', prepareNativeSubmission)"), 'Application Submit button uses guarded native multipart submission');
+check(js.includes('prepareNativeSubmission'), 'Application native-submit guard exists');
+check(!js.includes('new XMLHttpRequest'), 'Application private evidence does not depend on XHR on shared hosting');
+check(js.includes('form.checkValidity()') && js.includes('form.reportValidity()'), 'Native submission keeps browser validation and a recoverable invalid-form path');
 
 console.log(`All-button action contract assertions passed: ${passed}`);
 if (failures.length) {
