@@ -83,7 +83,7 @@ final class SMC_Three_Plan {
 	}
 
 	public static function save_institutional_ai() {
-		if ( ! current_user_can( 'manage_options' ) || defined( 'SMC_INSTITUTIONAL_AI_USER_ID' ) ) { wp_die( esc_html__( 'Not authorized.', 'sabri-membership-core' ), '', array( 'response'=>403 ) ); }
+		if ( ! current_user_can( 'manage_options' ) || ! SMC_Security::session_is_verified( get_current_user_id() ) || defined( 'SMC_INSTITUTIONAL_AI_USER_ID' ) ) { wp_die( esc_html__( 'Not authorized.', 'sabri-membership-core' ), '', array( 'response'=>403 ) ); }
 		check_admin_referer( 'smc_save_institutional_ai', 'smc_nonce' );
 		$id = absint( $_POST['ai_user_id'] ?? 0 );
 		$user = get_userdata( $id );
@@ -119,13 +119,15 @@ final class SMC_Three_Plan {
 		$new_check = get_userdata( $id ); $old_check = $old ? get_userdata( $previous ) : null;
 		$roles_ok = $new_check && in_array( 'sabri_institutional_ai_teacher', (array)$new_check->roles, true ) && in_array( 'sabri_institutional_ai_publisher', (array)$new_check->roles, true );
 		if ( $old_check ) { $roles_ok = $roles_ok && ! in_array( 'sabri_institutional_ai_teacher', (array)$old_check->roles, true ) && ! in_array( 'sabri_institutional_ai_publisher', (array)$old_check->roles, true ); }
-		if ( ! $roles_ok ) {
+		$sessions_ok = $roles_ok && SMC_Security::revoke_all_sessions( $id, 'institutional_ai_authority_rebound' );
+		if ( $sessions_ok && $previous && $previous !== $id ) { $sessions_ok = SMC_Security::revoke_all_sessions( $previous, 'institutional_ai_authority_rebound' ); }
+		if ( ! $roles_ok || ! $sessions_ok ) {
 			update_option( 'smc_institutional_ai_user_id', $previous, false ); update_option( 'smc_institutional_ai_activated_at', $previous_activated, false ); update_option( 'smc_institutional_ai_low_risk_auto_publish', $previous_auto, false );
 			$user->remove_role( 'sabri_institutional_ai_teacher' ); $user->remove_role( 'sabri_institutional_ai_publisher' );
 			if ( $old ) { $old->add_role( 'sabri_institutional_ai_teacher' ); $old->add_role( 'sabri_institutional_ai_publisher' ); }
-			$compensated = smc_institutional_ai_user_id() === $previous && SMC_Security::audit( 'institutional_ai_configuration_compensated', $id, array( 'reason_code'=>'role_projection_failed','previous_user_id'=>$previous ) );
+			$compensated = smc_institutional_ai_user_id() === $previous && SMC_Security::audit( 'institutional_ai_configuration_compensated', $id, array( 'reason_code'=>( $roles_ok ? 'session_revocation_failed' : 'role_projection_failed' ),'previous_user_id'=>$previous ) );
 			if ( $compensated ) { delete_user_meta( $id, '_smc_membership_effects_hold_v1' ); if($previous){delete_user_meta($previous,'_smc_membership_effects_hold_v1');} }
-			wp_die( esc_html__( 'Institutional AI role projection failed; the previous configuration was restored and the account remains fail-closed if compensation was incomplete.', 'sabri-membership-core' ), '', array( 'response'=>503 ) );
+			wp_die( esc_html__( 'Institutional AI role/session projection failed; the previous configuration was restored and the account remains fail-closed if compensation was incomplete.', 'sabri-membership-core' ), '', array( 'response'=>503 ) );
 		}
 		delete_user_meta( $id, '_smc_membership_effects_hold_v1' ); if($previous){delete_user_meta($previous,'_smc_membership_effects_hold_v1');}
 		wp_safe_redirect( admin_url( 'admin.php?page=smc-institutional-ai&updated=1' ) ); exit;

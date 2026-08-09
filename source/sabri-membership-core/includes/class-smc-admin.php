@@ -24,7 +24,7 @@ final class SMC_Admin {
 			return;
 		}
 		if ( ! SMC_Security::key_ready() ) {
-			echo '<div class="notice notice-error"><p>' . esc_html__( 'Sabri Membership is fail-closed: define a securely backed-up SMC_MASTER_KEY of at least 32 random characters before processing identity data.', 'sabri-membership-core' ) . '</p></div>';
+			echo '<div class="notice notice-error"><p>' . esc_html__( 'Sabri Membership is fail-closed: its authenticated-encryption/key subsystem is not ready. Ensure OpenSSL AES-256-GCM is available and either allow the protected managed keyring to provision or configure backed-up SMC_MASTER_KEY and SMC_MASTER_KEY_ID constants.', 'sabri-membership-core' ) . '</p></div>';
 		}
 		$dir = SMC_Security::key_ready() ? SMC_Security::private_dir() : null;
 		if ( is_wp_error( $dir ) ) {
@@ -40,8 +40,8 @@ final class SMC_Admin {
 	}
 
 	public static function queue() {
-		if ( ! current_user_can( 'smc_review_verification' ) ) {
-			wp_die( esc_html__( 'Not authorized.', 'sabri-membership-core' ), '', array( 'response' => 403 ) );
+		if ( ! current_user_can( 'smc_review_verification' ) || ! SMC_Security::session_is_verified( get_current_user_id() ) ) {
+			wp_die( esc_html__( 'A current authorized reviewer session is required.', 'sabri-membership-core' ), '', array( 'response' => 403 ) );
 		}
 		$user_id = isset( $_GET['user_id'] ) ? absint( $_GET['user_id'] ) : 0;
 		if ( $user_id ) {
@@ -148,7 +148,7 @@ final class SMC_Admin {
 		wp_nonce_field( 'smc_review_transition_' . $request['id'], 'smc_nonce' );
 		echo '<p><label>' . esc_html__( 'Decision', 'sabri-membership-core' ) . ' <select name="decision" required><option value="under_review">' . esc_html__( 'Claim / continue review', 'sabri-membership-core' ) . '</option><option value="more_information">' . esc_html__( 'Request more information', 'sabri-membership-core' ) . '</option><option value="approve">' . esc_html__( 'Approve / cast approval vote', 'sabri-membership-core' ) . '</option><option value="reject">' . esc_html__( 'Reject', 'sabri-membership-core' ) . '</option><option value="suspend">' . esc_html__( 'Suspend approved membership', 'sabri-membership-core' ) . '</option><option value="restore">' . esc_html__( 'Restore after successful independent appeal', 'sabri-membership-core' ) . '</option></select></label></p>';
 		echo '<p><label>' . esc_html__( 'Reason code', 'sabri-membership-core' ) . ' <select name="reason_code" required><option value="">' . esc_html__( 'Select', 'sabri-membership-core' ) . '</option>'; foreach ( smc_review_reason_codes() as $code => $label ) { echo '<option value="' . esc_attr( $code ) . '">' . esc_html( $label ) . '</option>'; } echo '</select></label></p>';
-		echo '<p><label><input type="checkbox" name="name_match" value="matched"> ' . esc_html__( 'I compared the legal name and authenticated identity evidence and record an exact or adequately explained match.', 'sabri-membership-core' ) . '</label></p><p><label>' . esc_html__( 'Mandatory reason', 'sabri-membership-core' ) . '<br><textarea name="reason" required minlength="12" style="width:100%"></textarea></label></p><p>' . esc_html__( 'Approve, reject, suspend and restore require a current two-factor session. Appeals must be decided by an independent reviewer.', 'sabri-membership-core' ) . '</p><button class="button button-primary">' . esc_html__( 'Apply Controlled Decision', 'sabri-membership-core' ) . '</button></form></div></div>';
+		echo '<p><label><input type="checkbox" name="name_match" value="matched"> ' . esc_html__( 'I compared the legal name and authenticated identity evidence and record an exact or adequately explained match.', 'sabri-membership-core' ) . '</label></p><p><label><input type="checkbox" name="confirm_high_risk" value="1"> ' . esc_html__( 'For approve, reject, suspend or restore, I confirm the current applicant version, evidence, conflict declaration and irreversible/downstream effects shown above.', 'sabri-membership-core' ) . '</label></p><p><label>' . esc_html__( 'Mandatory reason', 'sabri-membership-core' ) . '<br><textarea name="reason" required minlength="12" style="width:100%"></textarea></label></p><p>' . esc_html__( 'Approve, reject, suspend and restore require a current two-factor session. Appeals must be decided by an independent reviewer.', 'sabri-membership-core' ) . '</p><button class="button button-primary">' . esc_html__( 'Apply Controlled Decision', 'sabri-membership-core' ) . '</button></form></div></div>';
 	}
 
 	public static function handle_document() {
@@ -167,23 +167,28 @@ final class SMC_Admin {
 		$updated = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_identity_documents SET status=%s,reviewed_by=%d,reviewed_at=%s,reviewer_note=%s,updated_at=%s WHERE id=%d AND version=%d AND user_id=%d", $decision, get_current_user_id(), $now, $note, $now, $id, $version, (int) $doc['user_id'] ) );
 		$audit_ok = 1 === $updated && SMC_Security::audit( 'document_' . $decision, (int) $doc['user_id'], array( 'document_id' => $id, 'version' => $version, 'reason_code' => 'document_' . $decision ) );
 		if ( 1 !== $updated || ! $audit_ok ) { $wpdb->query( 'ROLLBACK' ); wp_die( esc_html__( 'The evidence decision could not be committed with its audit record. Reload the case.', 'sabri-membership-core' ), '', array( 'response' => 409 ) ); }
-		$wpdb->query( 'COMMIT' ); self::redirect_review( (int) $doc['user_id'] );
+		if ( false === $wpdb->query( 'COMMIT' ) ) { $wpdb->query( 'ROLLBACK' ); wp_die( esc_html__( 'The evidence decision commit failed. Reload the case.', 'sabri-membership-core' ), '', array( 'response'=>503 ) ); } self::redirect_review( (int) $doc['user_id'] );
 	}
 
 	public static function handle_assignment() {
-		if ( ! current_user_can( 'smc_review_verification' ) ) { wp_die( esc_html__( 'Not authorized.', 'sabri-membership-core' ), '', array( 'response' => 403 ) ); }
+		if ( ! current_user_can( 'smc_review_verification' ) || ! SMC_Security::session_is_verified( get_current_user_id() ) ) { wp_die( esc_html__( 'A current authorized reviewer session is required.', 'sabri-membership-core' ), '', array( 'response' => 403 ) ); }
 		$id = absint( $_POST['request_id'] ?? 0 ); check_admin_referer( 'smc_assign_review_' . $id, 'smc_nonce' ); global $wpdb; $wpdb->query( 'START TRANSACTION' );
 		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}smc_verification_requests WHERE id=%d LIMIT 1 FOR UPDATE", $id ), ARRAY_A );
-		if ( ! $row || ( (int) $row['assigned_reviewer'] && (int) $row['assigned_reviewer'] !== get_current_user_id() ) ) { $wpdb->query( 'ROLLBACK' ); wp_die( esc_html__( 'The review is no longer claimable.', 'sabri-membership-core' ), '', array( 'response' => 409 ) ); }
+		$claimable_states = array( 'submitted', 'resubmitted', 'under_review', 'approval_pending', 'appeal_review' );
+		$already_voted = false;
+		if ( $row && 'approval_pending' === (string) $row['status'] && ! empty( $row['approval_generation'] ) ) {
+			$already_voted = (bool) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$wpdb->prefix}smc_approval_votes WHERE request_id=%d AND approval_generation=%s AND reviewer_id=%d LIMIT 1", (int) $row['id'], (string) $row['approval_generation'], get_current_user_id() ) );
+		}
+		if ( ! $row || (int) $row['user_id'] === get_current_user_id() || ! in_array( (string) $row['status'], $claimable_states, true ) || $already_voted || ( (int) $row['assigned_reviewer'] && (int) $row['assigned_reviewer'] !== get_current_user_id() ) ) { $wpdb->query( 'ROLLBACK' ); wp_die( esc_html__( 'The review is no longer claimable by this reviewer.', 'sabri-membership-core' ), '', array( 'response' => 409 ) ); }
 		$now = current_time( 'mysql', true );
 		$updated = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_verification_requests SET assigned_reviewer=%d,assigned_at=%s,conflict_status='undeclared',conflict_note=NULL,row_version=row_version+1,updated_at=%s WHERE id=%d AND row_version=%d", get_current_user_id(), $now, $now, $id, (int) $row['row_version'] ) );
 		$audit_ok = 1 === $updated && SMC_Security::audit( 'review_assigned', (int) $row['user_id'], array( 'request_id' => $id, 'reviewer_id' => get_current_user_id() ) );
 		if ( 1 !== $updated || ! $audit_ok ) { $wpdb->query( 'ROLLBACK' ); wp_die( esc_html__( 'The review could not be assigned safely.', 'sabri-membership-core' ), '', array( 'response' => 409 ) ); }
-		$wpdb->query( 'COMMIT' ); self::redirect_review( (int) $row['user_id'] );
+		if ( false === $wpdb->query( 'COMMIT' ) ) { $wpdb->query( 'ROLLBACK' ); wp_die( esc_html__( 'The review assignment commit failed.', 'sabri-membership-core' ), '', array( 'response'=>503 ) ); } self::redirect_review( (int) $row['user_id'] );
 	}
 
 	public static function handle_conflict() {
-		if ( ! current_user_can( 'smc_review_verification' ) ) { wp_die( esc_html__( 'Not authorized.', 'sabri-membership-core' ), '', array( 'response' => 403 ) ); }
+		if ( ! current_user_can( 'smc_review_verification' ) || ! SMC_Security::session_is_verified( get_current_user_id() ) ) { wp_die( esc_html__( 'A current authorized reviewer session is required.', 'sabri-membership-core' ), '', array( 'response' => 403 ) ); }
 		$id = absint( $_POST['request_id'] ?? 0 ); check_admin_referer( 'smc_declare_conflict_' . $id, 'smc_nonce' );
 		$status = sanitize_key( wp_unslash( $_POST['conflict_status'] ?? '' ) ); $note = sanitize_textarea_field( wp_unslash( $_POST['conflict_note'] ?? '' ) );
 		if ( ! in_array( $status, array( 'none','conflict' ), true ) || ( 'conflict' === $status && strlen( $note ) < 8 ) ) { wp_die( esc_html__( 'A valid conflict declaration is required.', 'sabri-membership-core' ), '', array( 'response' => 400 ) ); }
@@ -193,7 +198,7 @@ final class SMC_Admin {
 		$updated = $wpdb->update( $wpdb->prefix . 'smc_verification_requests', array( 'conflict_status'=>$status,'conflict_note'=>$note,'assigned_reviewer'=>$assigned,'assigned_at'=>$assigned_at,'row_version'=>(int)$row['row_version']+1,'updated_at'=>$now ), array( 'id'=>$id,'row_version'=>(int)$row['row_version'] ) );
 		$audit_ok = 1 === $updated && SMC_Security::audit( 'review_conflict_' . $status, (int) $row['user_id'], array( 'request_id'=>$id,'reason_code'=>'conflict_' . $status ) );
 		if ( 1 !== $updated || ! $audit_ok ) { $wpdb->query( 'ROLLBACK' ); wp_die( esc_html__( 'The conflict declaration could not be committed.', 'sabri-membership-core' ), '', array( 'response'=>409 ) ); }
-		$wpdb->query( 'COMMIT' ); self::redirect_review( (int) $row['user_id'] );
+		if ( false === $wpdb->query( 'COMMIT' ) ) { $wpdb->query( 'ROLLBACK' ); wp_die( esc_html__( 'The conflict declaration commit failed.', 'sabri-membership-core' ), '', array( 'response'=>503 ) ); } self::redirect_review( (int) $row['user_id'] );
 	}
 
 	public static function handle_transition() {
@@ -233,8 +238,9 @@ final class SMC_Admin {
 		if ( (int) $request['assigned_reviewer'] !== get_current_user_id() || 'none' !== $request['conflict_status'] ) {
 			wp_die( esc_html__( 'The review must be assigned to you and a no-conflict declaration must be current.', 'sabri-membership-core' ), '', array( 'response' => 409 ) );
 		}
-		if ( in_array( $decision, array( 'approve', 'reject', 'suspend', 'restore' ), true ) && ! SMC_Security::session_is_verified( get_current_user_id() ) ) {
-			wp_die( esc_html__( 'A current two-factor reviewer session is required for this high-risk decision.', 'sabri-membership-core' ), '', array( 'response' => 403 ) );
+		if ( in_array( $decision, array( 'approve', 'reject', 'suspend', 'restore' ), true ) ) {
+			if ( empty( $_POST['confirm_high_risk'] ) ) { wp_die( esc_html__( 'Explicit confirmation is required for this high-risk decision.', 'sabri-membership-core' ), '', array( 'response'=>400 ) ); }
+			if ( ! SMC_Security::session_is_verified( get_current_user_id() ) ) { wp_die( esc_html__( 'A current two-factor reviewer session is required for this high-risk decision.', 'sabri-membership-core' ), '', array( 'response' => 403 ) ); }
 		}
 		if ( 'restore' === $decision ) {
 			if ( ! current_user_can( 'smc_restore_membership' ) && ! current_user_can( 'smc_finalize_verification' ) ) {
@@ -387,7 +393,7 @@ final class SMC_Admin {
 				$wpdb->query( 'ROLLBACK' );
 				wp_die( esc_html__( 'The approval vote could not be committed atomically.', 'sabri-membership-core' ), '', array( 'response' => 409 ) );
 			}
-			$wpdb->query( 'COMMIT' );
+			if ( false === $wpdb->query( 'COMMIT' ) ) { $wpdb->query( 'ROLLBACK' ); wp_die( esc_html__( 'The approval-pending decision could not be committed.', 'sabri-membership-core' ), '', array( 'response'=>503 ) ); }
 			self::notify_decision( $user_id, 'approval_pending', $pending_reason );
 			self::redirect_review( $user_id );
 		}
@@ -404,7 +410,7 @@ final class SMC_Admin {
 			clean_user_cache( $user_id );
 			wp_die( esc_html__( 'Approval could not be committed atomically.', 'sabri-membership-core' ), '', array( 'response' => 409 ) );
 		}
-		$wpdb->query( 'COMMIT' );
+		if ( false === $wpdb->query( 'COMMIT' ) ) { $wpdb->query( 'ROLLBACK' ); clean_user_cache( $user_id ); wp_die( esc_html__( 'Approval database commit failed; role/session projection was not attempted.', 'sabri-membership-core' ), '', array( 'response'=>503 ) ); }
 		$roles_wp_ok = SMC_Contracts::sync_wordpress_roles( $user_id );
 		$sessions_ok = $roles_wp_ok && SMC_Security::revoke_all_sessions( $user_id, 'membership_approved_requires_fresh_login' );
 		if ( ! $roles_wp_ok || ! $sessions_ok ) { if ( class_exists( 'SMC_Completion' ) ) { SMC_Completion::queue_effects_repair( $user_id, 'approve', 'approved', 'postcommit_effects' ); } wp_die( esc_html__( 'Approval is durably recorded but remains fail-closed pending role/session reconciliation.', 'sabri-membership-core' ), '', array( 'response'=>503 ) ); }
@@ -449,7 +455,7 @@ final class SMC_Admin {
 			clean_user_cache( $user_id );
 			wp_die( esc_html__( 'The request changed concurrently; no decision was applied.', 'sabri-membership-core' ), '', array( 'response' => 409 ) );
 		}
-		$wpdb->query( 'COMMIT' );
+		if ( false === $wpdb->query( 'COMMIT' ) ) { $wpdb->query( 'ROLLBACK' ); clean_user_cache( $user_id ); return; }
 		$role_effect = ( $restrict || $restore ) ? SMC_Contracts::sync_wordpress_roles( $user_id ) : true;
 		$session_effect = ( $restrict || $restore ) && $role_effect ? SMC_Security::revoke_all_sessions( $user_id, $restore ? 'membership_restored_requires_fresh_login' : 'membership_' . $new ) : $role_effect;
 		if ( ! $role_effect || ! $session_effect ) { if ( class_exists( 'SMC_Completion' ) ) { SMC_Completion::queue_effects_repair( $user_id, 'transition', $new, 'postcommit_effects' ); } return; }
@@ -488,7 +494,7 @@ final class SMC_Admin {
 	}
 
 	public static function save_founder() {
-		if ( ! current_user_can( 'manage_options' ) || defined( 'SMC_FOUNDER_USER_ID' ) ) {
+		if ( ! current_user_can( 'manage_options' ) || ! SMC_Security::session_is_verified( get_current_user_id() ) || defined( 'SMC_FOUNDER_USER_ID' ) ) {
 			wp_die( esc_html__( 'Not authorized.', 'sabri-membership-core' ), '', array( 'response' => 403 ) );
 		}
 		check_admin_referer( 'smc_save_founder', 'smc_nonce' );
@@ -497,15 +503,22 @@ final class SMC_Admin {
 			wp_die( esc_html__( 'Select and confirm an existing exact user account.', 'sabri-membership-core' ), '', array( 'response' => 400 ) );
 		}
 		global $wpdb;
+		$had_previous = false !== get_option( 'smc_founder_user_id', false );
+		$previous = get_option( 'smc_founder_user_id', null );
 		$wpdb->query( 'START TRANSACTION' );
 		update_option( 'smc_founder_user_id', $id, false );
 		$stored = (int) get_option( 'smc_founder_user_id', 0 );
 		$audit_ok = $stored === $id && SMC_Security::audit( 'founder_account_configured', $id, array( 'configured_by' => get_current_user_id() ) );
-		if ( $stored !== $id || ! $audit_ok ) {
+		$commit_ok = $audit_ok && $stored === $id && false !== $wpdb->query( 'COMMIT' );
+		if ( ! $commit_ok ) {
 			$wpdb->query( 'ROLLBACK' );
+			if ( $had_previous ) { update_option( 'smc_founder_user_id', $previous, false ); } else { delete_option( 'smc_founder_user_id' ); }
+			wp_cache_delete( 'alloptions', 'options' );
+			wp_cache_delete( 'smc_founder_user_id', 'options' );
 			wp_die( esc_html__( 'Founder identity could not be committed with its audit evidence.', 'sabri-membership-core' ), '', array( 'response' => 409 ) );
 		}
-		$wpdb->query( 'COMMIT' );
+		wp_cache_delete( 'alloptions', 'options' );
+		wp_cache_delete( 'smc_founder_user_id', 'options' );
 		wp_safe_redirect( admin_url( 'admin.php?page=smc-settings&updated=1' ) );
 		exit;
 	}

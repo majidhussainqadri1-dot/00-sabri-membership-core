@@ -22,7 +22,11 @@ final class SMC_Privacy {
 		global $wpdb;
 		$user_id = (int) $user->ID;
 		$page = max( 1, absint( $page ) );
-		$limit = 100;
+		// The privacy API invokes exporters page-by-page. File 00 has many
+		// datasets, so a per-dataset limit of 100 could emit >1,000 records in one
+		// call. Keep each call under a bounded global item budget while preserving
+		// deterministic offsets across every dataset.
+		$limit = 6;
 		$offset = ( $page - 1 ) * $limit;
 		$data = 1 === $page ? self::export_identity( $user_id ) : array();
 		$more = false;
@@ -37,6 +41,8 @@ final class SMC_Privacy {
 			'smc_retention_holds'      => "SELECT * FROM {$wpdb->prefix}smc_retention_holds WHERE user_id=%d ORDER BY id LIMIT %d OFFSET %d",
 			'smc_auth_sessions'        => "SELECT id,user_id,expires_at,two_factor_at,last_totp_slice,ip_hash,device_hash,revoked_at,created_at,updated_at FROM {$wpdb->prefix}smc_auth_sessions WHERE user_id=%d ORDER BY id LIMIT %d OFFSET %d",
 			'smc_recovery_codes'       => "SELECT id,user_id,created_at,consumed_at FROM {$wpdb->prefix}smc_recovery_codes WHERE user_id=%d ORDER BY id LIMIT %d OFFSET %d",
+			'smc_contact_otps'         => "SELECT id,user_id,channel,attempts,expires_at,delivered_at,verified_at,created_at FROM {$wpdb->prefix}smc_contact_otps WHERE user_id=%d ORDER BY id LIMIT %d OFFSET %d",
+			'smc_mfa_factor_state'     => "SELECT user_id,last_totp_slice,updated_at FROM {$wpdb->prefix}smc_mfa_factor_state WHERE user_id=%d ORDER BY user_id LIMIT %d OFFSET %d",
 		);
 		foreach ( $datasets as $name => $sql ) {
 			$rows = $wpdb->get_results( $wpdb->prepare( $sql, $user_id, $limit + 1, $offset ), ARRAY_A );
@@ -48,13 +54,11 @@ final class SMC_Privacy {
 				$data[] = self::item( 'smc-personal-data', __( 'Membership Personal Data', 'sabri-membership-core' ), $name . '-' . $user_id . '-' . ( $offset + $index ), $row );
 			}
 		}
-		$request_ids = $wpdb->get_col( $wpdb->prepare( "SELECT id FROM {$wpdb->prefix}smc_verification_requests WHERE user_id=%d", $user_id ) );
-		if ( $request_ids ) {
-			$ids = implode( ',', array_map( 'absint', $request_ids ) );
-			$votes = $wpdb->get_results( $wpdb->prepare( "SELECT id,request_id,reviewer_id,approval_generation,decision,reason,evidence_snapshot,created_at FROM {$wpdb->prefix}smc_approval_votes WHERE request_id IN ({$ids}) ORDER BY id LIMIT %d OFFSET %d", $limit + 1, $offset ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			if ( count( $votes ) > $limit ) { $more = true; $votes = array_slice( $votes, 0, $limit ); }
-			foreach ( $votes as $index => $row ) { $data[] = self::item( 'smc-personal-data', __( 'Membership Personal Data', 'sabri-membership-core' ), 'smc-approval-vote-' . $user_id . '-' . ( $offset + $index ), $row ); }
-		}
+		// Join votes to their owned verification request instead of first loading
+		// an unbounded list of request IDs into PHP memory.
+		$votes = $wpdb->get_results( $wpdb->prepare( "SELECT v.id,v.request_id,v.reviewer_id,v.approval_generation,v.decision,v.reason,v.evidence_snapshot,v.created_at FROM {$wpdb->prefix}smc_approval_votes v INNER JOIN {$wpdb->prefix}smc_verification_requests r ON r.id=v.request_id WHERE r.user_id=%d ORDER BY v.id LIMIT %d OFFSET %d", $user_id, $limit + 1, $offset ), ARRAY_A );
+		if ( count( $votes ) > $limit ) { $more = true; $votes = array_slice( $votes, 0, $limit ); }
+		foreach ( $votes as $index => $row ) { $data[] = self::item( 'smc-personal-data', __( 'Membership Personal Data', 'sabri-membership-core' ), 'smc-approval-vote-' . $user_id . '-' . ( $offset + $index ), $row ); }
 		$subject_hash = SMC_Security::subject_hash( $user_id );
 		if ( $subject_hash ) {
 			$audits = $wpdb->get_results( $wpdb->prepare( "SELECT id,action,details,created_at FROM {$wpdb->prefix}smc_audit_log WHERE subject_hash=%s ORDER BY id LIMIT %d OFFSET %d", $subject_hash, $limit + 1, $offset ), ARRAY_A );

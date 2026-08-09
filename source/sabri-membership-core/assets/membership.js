@@ -1,5 +1,15 @@
 (() => {
 	'use strict';
+	const copyRecovery = document.querySelector('[data-smc-copy-recovery]');
+	const printRecovery = document.querySelector('[data-smc-print-recovery]');
+	const recoveryFeedback = document.querySelector('[data-smc-recovery-feedback]');
+	copyRecovery?.addEventListener('click', async () => {
+		const codes = Array.from(document.querySelectorAll('#smc-recovery-codes code')).map((node) => node.textContent.trim()).filter(Boolean).join('\n');
+		try { await navigator.clipboard.writeText(codes); if (recoveryFeedback) recoveryFeedback.textContent = 'Recovery codes copied. Keep them private.'; }
+		catch (error) { if (recoveryFeedback) recoveryFeedback.textContent = 'Automatic copy was unavailable. Select and copy the codes manually.'; }
+	});
+	printRecovery?.addEventListener('click', () => window.print());
+
 	const form = document.getElementById('smc-membership-application');
 	if (!form || !window.smcPolicy) return;
 
@@ -9,6 +19,8 @@
 	const draftStatus = document.getElementById('smc-draft-status');
 	const uploadProgress = document.getElementById('smc-upload-progress');
 	const retryButton = document.getElementById('smc-retry-submit');
+	let errorSummary = document.getElementById('smc-error-summary');
+	if (!errorSummary) { errorSummary = document.createElement('div'); errorSummary.id = 'smc-error-summary'; errorSummary.className = 'smc-notice smc-notice--error'; errorSummary.setAttribute('role','alert'); errorSummary.hidden = true; form.prepend(errorSummary); }
 	const previous = form.querySelector('[data-smc-prev]');
 	const next = form.querySelector('[data-smc-next]');
 	const dob = form.querySelector('[name="date_of_birth"]');
@@ -38,7 +50,11 @@
 		}
 		const minimum = gender.value === 'female' ? Number(window.smcPolicy.femaleMinimumAge) : Number(window.smcPolicy.maleMinimumAge);
 		const professional = selectedTypes().some((value) => ['doctor', 'teacher', 'researcher', 'pharmacy', 'clinic', 'publisher'].includes(value));
-		if (guardianStep) guardianStep.dataset.required = age < Number(window.smcPolicy.guardianAge) ? 'true' : 'false';
+		const guardianRequired = age < Number(window.smcPolicy.guardianAge);
+		if (guardianStep) {
+			guardianStep.dataset.required = guardianRequired ? 'true' : 'false';
+			for (const control of guardianStep.querySelectorAll('[name="guardian_name"], [name="guardian_relationship"], [name="guardian_email"], [name="guardian_phone"], [name="guardian_authority"]')) control.required = guardianRequired;
+		}
 		if (age < minimum) ageStatus.textContent = `The selected date is below the minimum age of ${minimum}.`;
 		else if (age < Number(window.smcPolicy.professionalAge) && professional) ageStatus.textContent = 'Professional account classes require age 18 or older.';
 		else if (age < Number(window.smcPolicy.guardianAge)) ageStatus.textContent = 'Verified guardian consent is required.';
@@ -64,12 +80,19 @@
 
 	const validateStep = () => {
 		const controls = Array.from(steps[current - 1].querySelectorAll('input, select, textarea'));
+		if (errorSummary) { errorSummary.hidden = true; errorSummary.textContent = ''; }
 		if (current === 1 && selectedTypes().length === 0) {
+			if (errorSummary) { errorSummary.textContent = 'Select at least one membership role before continuing.'; errorSummary.hidden = false; }
 			steps[0].querySelector('input')?.focus();
 			return false;
 		}
 		for (const control of controls) {
-			if (!control.checkValidity()) { control.reportValidity(); control.focus(); return false; }
+			if (!control.checkValidity()) {
+				const label = control.closest('label')?.childNodes?.[0]?.textContent?.trim() || control.name || 'field';
+				if (errorSummary) { errorSummary.textContent = `Review ${label}: ${control.validationMessage}`; errorSummary.hidden = false; }
+				control.setAttribute('aria-invalid','true'); control.reportValidity(); control.focus(); return false;
+			}
+			control.removeAttribute('aria-invalid');
 		}
 		return true;
 	};

@@ -120,14 +120,12 @@ final class SMC_Lifecycle {
 			}
 
 			if ( get_user_meta( $user_id, self::INSTITUTIONAL_AGE_META, true ) ) {
-				$wpdb->query( 'START TRANSACTION' );
+				$previous_attention = get_user_meta( $user_id, self::INSTITUTIONAL_AGE_META, true );
 				delete_user_meta( $user_id, self::INSTITUTIONAL_AGE_META );
 				$deleted = ! metadata_exists( 'user', $user_id, self::INSTITUTIONAL_AGE_META );
 				$audit_ok = $deleted && SMC_Security::audit( 'institutional_age_evidence_resolved', $user_id );
-				if ( $deleted && $audit_ok ) {
-					$wpdb->query( 'COMMIT' );
-				} else {
-					$wpdb->query( 'ROLLBACK' );
+				if ( ! $deleted || ! $audit_ok ) {
+					update_user_meta( $user_id, self::INSTITUTIONAL_AGE_META, $previous_attention );
 					clean_user_cache( $user_id );
 				}
 			}
@@ -135,8 +133,8 @@ final class SMC_Lifecycle {
 				$wpdb->query( 'START TRANSACTION' );
 				$updated = $wpdb->update( $wpdb->prefix . 'smc_applications', array( 'guardian_required' => 0, 'row_version' => (int) $app['row_version'] + 1, 'updated_at' => current_time( 'mysql', true ) ), array( 'id' => (int) $app['id'], 'row_version' => (int) $app['row_version'] ) );
 				$audit_ok = 1 === $updated && SMC_Security::audit( 'guardian_requirement_ended_at_adulthood', $user_id );
-				if ( 1 === $updated && $audit_ok ) {
-					$wpdb->query( 'COMMIT' );
+				if ( 1 === $updated && $audit_ok && false !== $wpdb->query( 'COMMIT' ) ) {
+					// committed
 				} else {
 					$wpdb->query( 'ROLLBACK' );
 				}
@@ -162,7 +160,8 @@ final class SMC_Lifecycle {
 			return true;
 		}
 		$state = array( 'reason' => $reason, 'audited_at' => current_time( 'mysql', true ) );
-		$wpdb->query( 'START TRANSACTION' );
+		$previous = get_user_meta( $user_id, self::INSTITUTIONAL_AGE_META, true );
+		$had_previous = metadata_exists( 'user', $user_id, self::INSTITUTIONAL_AGE_META );
 		update_user_meta( $user_id, self::INSTITUTIONAL_AGE_META, $state );
 		$stored = get_user_meta( $user_id, self::INSTITUTIONAL_AGE_META, true );
 		$stored_ok = is_array( $stored ) && $reason === ( $stored['reason'] ?? '' ) && ! empty( $stored['audited_at'] );
@@ -172,11 +171,10 @@ final class SMC_Lifecycle {
 			array( 'reason' => $reason )
 		);
 		if ( ! $stored_ok || ! $audit_ok ) {
-			$wpdb->query( 'ROLLBACK' );
+			if ( $had_previous ) { update_user_meta( $user_id, self::INSTITUTIONAL_AGE_META, $previous ); } else { delete_user_meta( $user_id, self::INSTITUTIONAL_AGE_META ); }
 			clean_user_cache( $user_id );
 			return false;
 		}
-		$wpdb->query( 'COMMIT' );
 		return true;
 	}
 
@@ -272,7 +270,7 @@ final class SMC_Lifecycle {
 			$wpdb->query( 'ROLLBACK' );
 			return false;
 		}
-		$wpdb->query( 'COMMIT' );
+		if ( false === $wpdb->query( 'COMMIT' ) ) { $wpdb->query( 'ROLLBACK' ); return false; }
 		clean_user_cache( $user_id );
 		return true;
 	}

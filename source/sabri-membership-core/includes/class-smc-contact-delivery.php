@@ -18,18 +18,23 @@ final class SMC_Contact_Delivery {
 		}
 		self::$initialized = true;
 		add_filter( 'smc_send_contact_otp', array( __CLASS__, 'deliver' ), 100, 2 );
+		add_filter( 'smc_send_guardian_invitation', array( __CLASS__, 'deliver_guardian_invitation' ), 100, 2 );
 		add_action( 'wp_footer', array( __CLASS__, 'render_status_assistance' ), 99 );
+	}
+
+	/** Execute the canonical File 19 contact-OTP bridge and preserve a receipt-bearing result. */
+	public static function send_otp( $payload ) {
+		return self::deliver( false, is_array( $payload ) ? $payload : array() );
 	}
 
 	/**
 	 * @param mixed               $sent Existing provider result.
 	 * @param array<string,mixed> $payload OTP payload from File 00.
-	 * @return bool
+	 * @return bool|array<string,mixed>
 	 */
 	public static function deliver( $sent, $payload ) {
-		if ( true === $sent ) {
-			return true;
-		}
+		if ( is_array( $sent ) && ! empty( $sent['accepted'] ) ) { return $sent; }
+		if ( true === $sent ) { return true; }
 		if ( ! is_array( $payload ) ) {
 			return false;
 		}
@@ -54,14 +59,12 @@ final class SMC_Contact_Delivery {
 
 		/*
 		 * Canonical external-delivery boundary. File 19 (or an explicitly
-		 * Founder-approved provider adapter) should attach here and return true
-		 * only after the provider has accepted the message. File 00 deliberately
+		 * Founder-approved provider adapter) should attach here and return a structured accepted result with a provider receipt/reference after the provider has accepted the message. File 00 deliberately
 		 * does not invoke mail, SMTP, SMS, push or third-party provider APIs.
 		 */
 		$result = apply_filters( 'smc_external_contact_otp_delivery', null, $provider_payload );
-		if ( true === $result || ( is_array( $result ) && ! empty( $result['accepted'] ) ) ) {
-			return true;
-		}
+		if ( is_array( $result ) && ! empty( $result['accepted'] ) ) { return $result; }
+		if ( true === $result ) { return true; }
 		if ( is_wp_error( $result ) ) {
 			return false;
 		}
@@ -69,7 +72,8 @@ final class SMC_Contact_Delivery {
 		/* Backward-compatible dedicated channel hooks for provider adapters. */
 		if ( 'email' === $channel && is_email( $target ) ) {
 			$result = apply_filters( 'smc_send_email_otp', null, $target, $code, $provider_payload );
-			return true === $result || ( is_array( $result ) && ! empty( $result['accepted'] ) );
+			if ( is_array( $result ) && ! empty( $result['accepted'] ) ) { return $result; }
+			return true === $result;
 		}
 		if ( 'mobile' === $channel && preg_match( '/^\+[1-9][0-9]{7,14}$/', $target ) ) {
 			$body = sprintf(
@@ -78,9 +82,22 @@ final class SMC_Contact_Delivery {
 				$code
 			);
 			$result = apply_filters( 'smc_send_sms_otp', null, $target, $body, $provider_payload );
-			return true === $result || ( is_array( $result ) && ! empty( $result['accepted'] ) );
+			if ( is_array( $result ) && ! empty( $result['accepted'] ) ) { return $result; }
+			return true === $result;
 		}
 
+		return false;
+	}
+
+
+	/** Provider bridge for guardian invitations; File 19 remains delivery owner. */
+	public static function deliver_guardian_invitation( $sent, $payload ) {
+		if ( is_array( $sent ) && ! empty( $sent['accepted'] ) ) { return $sent; }
+		if ( true === $sent ) { return true; }
+		if ( ! is_array( $payload ) || empty( $payload['user_id'] ) || empty( $payload['consent_id'] ) || empty( $payload['generation'] ) ) { return false; }
+		$provider = apply_filters( 'smc_external_guardian_invitation_delivery', null, $payload );
+		if ( is_array( $provider ) && ! empty( $provider['accepted'] ) ) { return $provider; }
+		if ( true === $provider ) { return true; }
 		return false;
 	}
 
