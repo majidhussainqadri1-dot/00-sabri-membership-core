@@ -56,7 +56,7 @@ final class SMC_Contact_Delivery {
 		 * Canonical external-delivery boundary. File 19 (or an explicitly
 		 * Founder-approved provider adapter) should attach here and return true
 		 * only after the provider has accepted the message. File 00 deliberately
-		 * does not call wp_mail(), Twilio, SMTP, SMS or push APIs directly.
+		 * does not invoke mail, SMTP, SMS, push or third-party provider APIs.
 		 */
 		$result = apply_filters( 'smc_external_contact_otp_delivery', null, $provider_payload );
 		if ( true === $result || ( is_array( $result ) && ! empty( $result['accepted'] ) ) ) {
