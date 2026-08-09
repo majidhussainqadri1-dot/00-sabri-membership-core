@@ -6,7 +6,7 @@ const readme=read('source/sabri-membership-core/README.txt');
 const pkg=JSON.parse(read('package.json'));
 const trace=JSON.parse(read('qa/fifth-fresh-ten-review-traceability.json'));
 const checks=[
- ['runtime 1.2.18',main.includes('Version: 1.2.18')&&main.includes("SMC_VERSION', '1.2.18")&&pkg.version==='1.2.18'],
+ ['runtime 1.2.32',main.includes('Version: 1.2.32')&&main.includes("SMC_VERSION', '1.2.32")&&pkg.version==='1.2.32'],
  ['adaptive step-up helper is authoritative',adv.includes('private static function actor_meets_step_up')&&adv.includes("step_up_requirement( $actor_id, sanitize_key( $action ) )")],
  ['critical identity uses adaptive step-up',/mark_critical_identity_change[\s\S]{0,1200}actor_meets_step_up[\s\S]{0,100}'identity_change'/.test(adv)&&/resolve_critical_identity_change[\s\S]{0,1000}actor_meets_step_up[\s\S]{0,120}'identity_change'/.test(adv)],
  ['guardian succession uses adaptive step-up',/begin_guardian_succession[\s\S]{0,900}actor_meets_step_up[\s\S]{0,100}'guardian_change'/.test(adv)&&/complete_guardian_succession[\s\S]{0,1200}actor_meets_step_up[\s\S]{0,120}'guardian_change'/.test(adv)],
@@ -17,10 +17,10 @@ const checks=[
  ['VC chronology is coherent',adv.includes('$issued > $verified_at')&&adv.includes('$expires <= $issued')&&adv.includes('$expires <= $verified_at')],
  ['delegation revalidates grantor authority',adv.includes('delegation_grantor_current')&&/delegated_authorities[\s\S]{0,900}delegation_grantor_current/.test(adv)],
  ['break-glass stores approval times and revalidates approvers',adv.includes("'approval_times'")&&adv.includes('break_glass_approvals_current')&&adv.includes('break_glass_approver_current')],
- ['guardian successor is current-policy bound',adv.includes("smc_guardian_consents WHERE user_id=%d AND status='verified' AND policy_version=%s")],
+ ['guardian successor is current-policy bound',adv.includes("smc_guardian_consents WHERE user_id=%d AND is_current=1 AND status='verified' AND policy_version=%s")],
  ['age is recomputed synchronously',adv.includes("SMC_Security::decrypt( $app['date_of_birth_enc']")&&adv.includes('smc_age_from_dob( $dob )')&&adv.includes('smc_effective_minimum_age(')],
- ['release docs current',readme.includes('Stable tag: 1.2.18')&&readme.includes('= 1.2.18 =')],
- ['contracts preserved',main.includes("SMC_CONTRACT_VERSION', '1.2.0")&&main.includes("SMC_ADVANCED_TRUST_CONTRACT_VERSION', '1.0.0")],
+ ['release docs current',readme.includes('Stable tag: 1.2.32')&&readme.includes('= 1.2.32 =')],
+ ['contracts preserved',main.includes("SMC_CONTRACT_VERSION', '1.2.1")&&main.includes("SMC_ADVANCED_TRUST_CONTRACT_VERSION', '1.0.0")],
  ['ten-round trace closed honestly',trace.review_complete===true&&JSON.stringify(trace.rounds_with_defects)===JSON.stringify([1,2,3,4,5,6,7,8,9,10])&&JSON.stringify(trace.rounds_without_defects)===JSON.stringify([])&&trace.defects_found_total===10&&trace.defects_corrected_total===10&&trace.known_unresolved_repository_defects===0],
  ['external gates remain pending',trace.external_status.staging_accepted===false&&trace.external_status.live_deployed===false&&trace.external_status.operational===false],
 ];

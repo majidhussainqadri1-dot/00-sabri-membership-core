@@ -84,8 +84,10 @@ for (const required of [
   'includes/functions.php',
   'includes/class-smc-installer.php',
   'includes/class-smc-security.php',
+  'includes/class-smc-host-compat.php',
   'includes/class-smc-contracts.php',
   'includes/class-smc-workflow.php',
+  'includes/class-smc-contact-delivery.php',
   'includes/class-smc-admin.php',
   'includes/class-smc-privacy.php',
   'includes/class-smc-lifecycle.php',
@@ -154,11 +156,11 @@ assert(main.includes("add_action(\n\t'admin_init'"), 'Upgrade checks are admin-c
 assert(!main.includes('SMC_Installer::maybe_upgrade();\n\t\tSMC_'), 'Upgrade does not run on every frontend request');
 
 const workflow = text('includes/class-smc-workflow.php');
+const contactDelivery = text('includes/class-smc-contact-delivery.php');
 for (const symbol of [
   'smc_minimum_age_for_gender',
   'smc_is_professional_type',
   'smc_send_guardian_invitation',
-  'smc_send_contact_otp',
   'guardian_authority',
   'guardian_token',
   'otp_attempts',
@@ -173,6 +175,7 @@ for (const symbol of [
 ]) {
   assert(workflow.includes(symbol), `Workflow control: ${symbol}`);
 }
+assert(contactDelivery.includes('smc_send_contact_otp'), 'Contact-delivery service owns OTP dispatch');
 assert(workflow.includes("array( 'male'") || policy.includes("'male'"), 'Gender allowlist exists');
 assert(workflow.includes('/^[A-Z]{2}$/'), 'Issuing-country allowlist format exists');
 assert(workflow.includes('/^[A-Z0-9][A-Z0-9 -]{4,23}$/'), 'Identity number server format exists');

@@ -21,18 +21,18 @@ const js = read('source/sabri-membership-core/assets/membership.js');
 const css = read('source/sabri-membership-core/assets/membership.css');
 const registry = JSON.parse(read('qa/requirements-traceability.json'));
 
-assert(plugin.includes('Version: 1.2.18') && plugin.includes("define( 'SMC_VERSION', '1.2.18' )"), 'Runtime version 1.2.18');
-assert(plugin.includes("define( 'SMC_DB_VERSION', '1.3.0' )"), 'Schema version 1.3.0');
+assert(plugin.includes('Version: 1.2.32') && plugin.includes("define( 'SMC_VERSION', '1.2.32' )"), 'Runtime version 1.2.32');
+assert(plugin.includes("define( 'SMC_DB_VERSION', '1.4.3' )"), 'Schema version 1.4.3');
 assert(plugin.includes("require_once SMC_PATH . 'includes/class-smc-events.php'") && plugin.includes("require_once SMC_PATH . 'includes/class-smc-completion.php'"), 'Completion and events services load');
-assert(plugin.includes('SMC_Events::init()') && plugin.includes('SMC_Completion::init()'), 'Completion and events services initialize');
+assert(plugin.includes("array( 'SMC_Events', 'init' )") && plugin.includes("array( 'SMC_Completion', 'init' )"), 'Completion and events services initialize');
 
 assert((workflow.match(/data-smc-step="[1-7]"/g) || []).length === 7, 'Seven progressive application steps');
-assert(workflow.includes('smc-upload-progress') && js.includes("request.upload.addEventListener('progress'"), 'Upload progress is executable');
+assert(workflow.includes('smc-upload-progress') && js.includes("uploadProgress.removeAttribute('value')") && js.includes("native multipart/form-data submission"), 'Native multipart upload exposes indeterminate progress without XHR duplication');
 assert(js.includes('smc_save_application_draft') && completion.includes("const DRAFT_META = '_smc_application_draft_v1'"), 'Encrypted server-side autosave/resume');
-assert(completion.includes("SMC_Security::encrypt( wp_json_encode( $data ), 'application-draft'") && completion.includes("SMC_Security::decrypt( $receipt['envelope'], 'application-draft'"), 'Draft encryption round trip');
+assert(completion.includes("$sealed = wp_json_encode(") && completion.includes("SMC_Security::encrypt( $sealed, 'application-draft'") && completion.includes("SMC_Security::decrypt( $receipt['envelope'], 'application-draft'"), 'Draft encryption round trip');
 assert(!/localStorage|sessionStorage|indexedDB/.test(js), 'No sensitive browser persistence');
 assert(workflow.includes('$submission_receipt_key') && workflow.includes('add_user_meta( $user_id, $submission_receipt_key') && workflow.includes("'status' => 'completed'"), 'Concurrent duplicate submission receipt');
-assert(js.includes('failedSubmission') && js.includes("window.addEventListener('offline'") && js.includes("window.addEventListener('online'"), 'Network failure/recovery UX');
+assert(js.includes('smc-retry-submit') && js.includes('form.requestSubmit()') && js.includes("window.addEventListener('offline'") && js.includes("window.addEventListener('online'"), 'Network failure/recovery UX');
 assert(workflow.includes('residence_country') && workflow.includes("SMC_Security::encrypt( $address, 'residential-address'") && installer.includes('address_enc longtext NULL'), 'Private country/city/address constitution');
 assert(workflow.includes("name=\"terms\"") && workflow.includes("name=\"ethical\"") && workflow.includes("'membership_terms'") && workflow.includes("'ethical_use'"), 'Separate terms and ethical consent evidence');
 assert(functions.includes('function smc_effective_minimum_age') && functions.includes("apply_filters( 'smc_jurisdiction_minimum_age'") && functions.includes('return max('), 'Jurisdiction rule can only raise baseline');

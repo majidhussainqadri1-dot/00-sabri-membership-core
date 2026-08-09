@@ -294,7 +294,10 @@ final class SMC_CF01_Contract {
 			$wpdb->query( 'ROLLBACK' );
 			return false;
 		}
-		$wpdb->query( 'COMMIT' );
+		if ( false === $wpdb->query( 'COMMIT' ) ) {
+			$wpdb->query( 'ROLLBACK' );
+			return false;
+		}
 		return true;
 	}
 

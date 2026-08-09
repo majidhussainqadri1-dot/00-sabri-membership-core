@@ -38,6 +38,9 @@ final class SMC_Contracts {
 		$type = sanitize_key( get_user_meta( $user_id, '_sa_account_type', true ) );
 		$type = isset( smc_account_types()[ $type ] ) ? $type : 'member';
 		$now  = current_time( 'mysql', true );
+		$hold = array( 'operation'=>'register_account','target_status'=>'draft','started_at'=>time() );
+		update_user_meta( $user_id, '_smc_membership_effects_hold_v1', $hold );
+		if ( get_user_meta( $user_id, '_smc_membership_effects_hold_v1', true ) !== $hold ) { return; }
 		$wpdb->query( 'START TRANSACTION' );
 		$ok   = $wpdb->insert(
 			$wpdb->prefix . 'smc_applications',
@@ -54,15 +57,20 @@ final class SMC_Contracts {
 			array( '%d', '%s', '%s', '%s', '%s', '%d', '%s', '%s' )
 		);
 		$grant_ok = 1 === $ok && self::upsert_role_grant( $user_id, $type, 'pending', 1, 0 );
-		$role_ok = $grant_ok && self::sync_wordpress_roles( $user_id );
-		$audit_ok = $role_ok && SMC_Security::audit( 'account_imported', $user_id, array( 'source' => 'wordpress' ) );
-		if ( 1 !== $ok || ! $role_ok || ! $audit_ok ) {
+		$audit_ok = $grant_ok && SMC_Security::audit( 'account_imported', $user_id, array( 'source' => 'wordpress' ) );
+		if ( 1 !== $ok || ! $grant_ok || ! $audit_ok || false === $wpdb->query( 'COMMIT' ) ) {
 			$wpdb->query( 'ROLLBACK' );
+			delete_user_meta( $user_id, '_smc_membership_effects_hold_v1' );
 			clean_user_cache( $user_id );
 			SMC_Security::audit( 'account_import_failed', $user_id, array( 'db_error' => $wpdb->last_error ) );
 			return;
 		}
-		$wpdb->query( 'COMMIT' );
+		$role_ok = self::sync_wordpress_roles( $user_id );
+		if ( ! $role_ok ) {
+			if ( class_exists( 'SMC_Completion' ) ) { SMC_Completion::queue_effects_repair( $user_id, 'register_account', 'draft', 'postcommit_roles' ); }
+			clean_user_cache( $user_id ); return;
+		}
+		delete_user_meta( $user_id, '_smc_membership_effects_hold_v1' );
 		clean_user_cache( $user_id );
 	}
 
@@ -245,7 +253,7 @@ final class SMC_Contracts {
 		global $wpdb;
 		return (bool) $wpdb->get_var(
 			$wpdb->prepare(
-				"SELECT id FROM {$wpdb->prefix}smc_contact_otps WHERE user_id=%d AND channel=%s AND target_hash=%s AND verified_at IS NOT NULL LIMIT 1",
+				"SELECT id FROM {$wpdb->prefix}smc_contact_otps WHERE user_id=%d AND channel=%s AND target_hash=%s AND verified_at IS NOT NULL AND delivery_receipt_hash IS NOT NULL AND delivered_at IS NOT NULL LIMIT 1",
 				absint( $user_id ),
 				$channel,
 				$hash
@@ -277,7 +285,7 @@ final class SMC_Contracts {
 		global $wpdb;
 		return (bool) $wpdb->get_var(
 			$wpdb->prepare(
-				"SELECT id FROM {$wpdb->prefix}smc_guardian_consents WHERE user_id=%d AND status='verified' AND policy_version=%s AND withdrawn_at IS NULL LIMIT 1",
+				"SELECT id FROM {$wpdb->prefix}smc_guardian_consents WHERE user_id=%d AND is_current=1 AND status='verified' AND policy_version=%s AND withdrawn_at IS NULL ORDER BY generation DESC,id DESC LIMIT 1",
 				absint( $user_id ),
 				(string) smc_policy()['version']
 			)
@@ -442,24 +450,24 @@ final class SMC_Contracts {
 		return ! array_diff( $desired, $actual ) && ! array_diff( array_intersect( $actual, smc_membership_roles() ), $desired );
 	}
 
-	public static function approve_requested_roles( $user_id, $application_version, $actor_id ) {
+	public static function approve_requested_roles( $user_id, $application_version, $actor_id, $sync = true ) {
 		$types = self::requested_types( $user_id );
 		foreach ( $types as $type ) {
 			if ( ! self::upsert_role_grant( $user_id, $type, 'approved', $application_version, $actor_id ) ) {
 				return false;
 			}
 		}
-		return self::sync_wordpress_roles( $user_id );
+		return $sync ? self::sync_wordpress_roles( $user_id ) : true;
 	}
 
-	public static function set_all_roles_pending( $user_id, $application_version = 1 ) {
+	public static function set_all_roles_pending( $user_id, $application_version = 1, $sync = true ) {
 		$types = self::requested_types( $user_id );
 		foreach ( $types as $type ) {
 			if ( ! self::upsert_role_grant( $user_id, $type, 'pending', $application_version, 0 ) ) {
 				return false;
 			}
 		}
-		return self::sync_wordpress_roles( $user_id );
+		return $sync ? self::sync_wordpress_roles( $user_id ) : true;
 	}
 
 	/** Backward-compatible single-role mutation that preserves all other grants. */
@@ -550,22 +558,28 @@ final class SMC_Contracts {
 
 	public static function filter_profile_visibility( $allowed, $profile_user_id, $viewer_user_id ) {
 		$viewer = get_userdata( absint( $viewer_user_id ) );
-		if ( absint( $profile_user_id ) === absint( $viewer_user_id ) || ( $viewer && ( ! empty( $viewer->allcaps['smc_review_verification'] ) || ! empty( $viewer->allcaps['manage_options'] ) ) ) ) {
-			return true;
-		}
+		$privileged = $viewer && ( user_can( $viewer, 'smc_review_verification' ) || user_can( $viewer, 'smc_manage_membership' ) );
+		if ( absint( $profile_user_id ) === absint( $viewer_user_id ) ) { return true; }
+		if ( $privileged && absint( $viewer_user_id ) === get_current_user_id() && SMC_Security::session_is_verified( absint( $viewer_user_id ) ) && empty( SMC_Authorization::is_hard_blocked( absint( $viewer_user_id ) ) ) ) { return true; }
 		return self::assertions( $profile_user_id )['public_profile_allowed'];
 	}
 
-	private static function invalidate_contact_assertion( $user_id, $channel, $reason ) {
+	private static function invalidate_contact_assertion_db( $user_id, $channel, $reason ) {
 		global $wpdb;
-		$deleted = $wpdb->delete(
-			$wpdb->prefix . 'smc_contact_otps',
-			array( 'user_id' => absint( $user_id ), 'channel' => sanitize_key( $channel ) ),
-			array( '%d', '%s' )
-		);
+		$deleted = $wpdb->delete( $wpdb->prefix . 'smc_contact_otps', array( 'user_id'=>absint($user_id), 'channel'=>sanitize_key($channel) ), array('%d','%s') );
+		$audit_ok = false !== $deleted && SMC_Security::audit( 'contact_reverification_required', $user_id, array( 'channel'=>sanitize_key($channel), 'reason'=>sanitize_key($reason) ) );
+		return false !== $deleted && $audit_ok;
+	}
+
+	private static function finish_contact_invalidation( $user_id, $channel, $reason ) {
 		$sessions_ok = SMC_Security::revoke_all_sessions( $user_id, $reason );
-		$audit_ok = SMC_Security::audit( 'contact_reverification_required', $user_id, array( 'channel' => sanitize_key( $channel ), 'reason' => sanitize_key( $reason ) ) );
-		return false !== $deleted && $sessions_ok && $audit_ok;
+		if ( ! $sessions_ok ) {
+			update_user_meta( $user_id, '_smc_revalidation_required_at', time() );
+			if ( class_exists( 'SMC_Completion' ) ) { SMC_Completion::queue_effects_repair( $user_id, 'contact_change', 'reverification_required', 'session_revocation' ); }
+			return false;
+		}
+		delete_user_meta( $user_id, '_smc_membership_effects_hold_v1' );
+		return ! metadata_exists( 'user', $user_id, '_smc_membership_effects_hold_v1' );
 	}
 
 	public static function contact_changed( $meta_id, $user_id, $meta_key, $meta_value ) {
@@ -584,6 +598,9 @@ final class SMC_Contracts {
 			$phone_hash = null;
 		}
 		global $wpdb;
+		$hold = array( 'operation'=>'contact_change','channel'=>'mobile','started_at'=>time() );
+		update_user_meta( $user_id, '_smc_membership_effects_hold_v1', $hold );
+		if ( get_user_meta( $user_id, '_smc_membership_effects_hold_v1', true ) !== $hold ) { return; }
 		$wpdb->query( 'START TRANSACTION' );
 		$updated = $wpdb->update(
 			$wpdb->prefix . 'smc_applications',
@@ -592,15 +609,12 @@ final class SMC_Contracts {
 			array( '%s', '%s', '%d', '%s' ),
 			array( '%d', '%d' )
 		);
-		$invalidated = 1 === $updated && self::invalidate_contact_assertion( $user_id, 'mobile', 'contact_changed' );
-		if ( 1 !== $updated || ! $invalidated ) {
-			$wpdb->query( 'ROLLBACK' );
-			clean_user_cache( $user_id );
-			self::invalidate_contact_assertion( $user_id, 'mobile', 'contact_sync_failed' );
-			SMC_Security::audit( 'contact_sync_failed', $user_id, array( 'channel' => 'mobile' ) );
-			return;
+		$invalidated = 1 === $updated && self::invalidate_contact_assertion_db( $user_id, 'mobile', 'contact_changed' );
+		if ( 1 !== $updated || ! $invalidated || false === $wpdb->query( 'COMMIT' ) ) {
+			$wpdb->query( 'ROLLBACK' ); delete_user_meta( $user_id, '_smc_membership_effects_hold_v1' ); clean_user_cache( $user_id );
+			SMC_Security::audit( 'contact_sync_failed', $user_id, array( 'channel' => 'mobile' ) ); return;
 		}
-		$wpdb->query( 'COMMIT' );
+		self::finish_contact_invalidation( $user_id, 'mobile', 'contact_changed' );
 		clean_user_cache( $user_id );
 	}
 
@@ -609,7 +623,14 @@ final class SMC_Contracts {
 		if ( ! $current || ! $old_user_data instanceof WP_User || hash_equals( (string) $old_user_data->user_email, (string) $current->user_email ) ) {
 			return;
 		}
-		self::invalidate_contact_assertion( $user_id, 'email', 'email_changed' );
+		global $wpdb;
+		$hold = array( 'operation'=>'contact_change','channel'=>'email','started_at'=>time() );
+		update_user_meta( $user_id, '_smc_membership_effects_hold_v1', $hold );
+		if ( get_user_meta( $user_id, '_smc_membership_effects_hold_v1', true ) !== $hold ) { return; }
+		$wpdb->query( 'START TRANSACTION' );
+		$invalidated = self::invalidate_contact_assertion_db( $user_id, 'email', 'email_changed' );
+		if ( ! $invalidated || false === $wpdb->query( 'COMMIT' ) ) { $wpdb->query('ROLLBACK'); delete_user_meta($user_id,'_smc_membership_effects_hold_v1'); clean_user_cache($user_id); return; }
+		self::finish_contact_invalidation( $user_id, 'email', 'email_changed' ); clean_user_cache( $user_id );
 	}
 }
 

@@ -9,12 +9,12 @@ const failures = [];
 let passed = 0;
 function assert(condition, name) { if (condition) passed += 1; else failures.push(name); }
 
-assert(main.includes('Version: 1.2.18'), 'Plugin header is 1.2.18');
-assert(main.includes("define( 'SMC_VERSION', '1.2.18' )"), 'Runtime version is 1.2.18');
-assert(main.includes("define( 'SMC_DB_VERSION', '1.3.0' )"), 'Database version is 1.3.0');
+assert(main.includes('Version: 1.2.32'), 'Plugin header is 1.2.32');
+assert(main.includes("define( 'SMC_VERSION', '1.2.32' )"), 'Runtime version is 1.2.32');
+assert(main.includes("define( 'SMC_DB_VERSION', '1.4.3' )"), 'Database version is 1.4.3');
 assert(main.includes("define( 'SMC_CF01_CONTRACT_VERSION', '1.0.0' )"), 'CF-01 contract version is declared');
 assert(main.includes("require_once SMC_PATH . 'includes/class-smc-cf01-contract.php'"), 'CF-01 provider is loaded');
-assert(main.includes('SMC_CF01_Contract::init()'), 'CF-01 provider is initialized');
+assert(main.includes("array( 'SMC_CF01_Contract', 'init' )"), 'CF-01 provider is initialized');
 assert(contract.includes("const CONTRACT_NAME    = 'smc.cf01.membership-assurance'"), 'Named contract exists');
 assert(contract.includes("'result'           => 'unknown'"), 'Assertion defaults fail-unknown');
 assert(contract.includes("'key_recovery'           => false"), 'Membership never grants key recovery');

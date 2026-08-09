@@ -30,6 +30,7 @@ final class SMC_Lifecycle {
 	}
 
 	public static function daily() {
+		if ( class_exists( 'SMC_Completion' ) && SMC_Completion::safe_mode() ) { return; }
 		global $wpdb;
 		$lock = 'smc_lifecycle_' . substr( hash( 'sha256', DB_NAME . '|' . $wpdb->prefix ), 0, 32 );
 		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s,0)', $lock ) ) ) {
@@ -106,7 +107,7 @@ final class SMC_Lifecycle {
 			$user_id = (int) $app['user_id'];
 			$dob = SMC_Security::decrypt( $app['date_of_birth_enc'], 'date-of-birth', array( 'user_id' => $user_id ) );
 			$age = is_wp_error( $dob ) ? false : smc_age_from_dob( $dob );
-			$minimum_age = smc_minimum_age_for_gender( $app['gender'] );
+			$minimum_age = smc_effective_minimum_age( $app['gender'], $app['residence_country'] ?? '' );
 			$invalid = false === $age || false === $minimum_age || $age < $minimum_age || ( $age < 18 && smc_is_professional_type( $app['membership_type'] ) );
 
 			if ( $invalid ) {
@@ -119,14 +120,12 @@ final class SMC_Lifecycle {
 			}
 
 			if ( get_user_meta( $user_id, self::INSTITUTIONAL_AGE_META, true ) ) {
-				$wpdb->query( 'START TRANSACTION' );
+				$previous_attention = get_user_meta( $user_id, self::INSTITUTIONAL_AGE_META, true );
 				delete_user_meta( $user_id, self::INSTITUTIONAL_AGE_META );
 				$deleted = ! metadata_exists( 'user', $user_id, self::INSTITUTIONAL_AGE_META );
 				$audit_ok = $deleted && SMC_Security::audit( 'institutional_age_evidence_resolved', $user_id );
-				if ( $deleted && $audit_ok ) {
-					$wpdb->query( 'COMMIT' );
-				} else {
-					$wpdb->query( 'ROLLBACK' );
+				if ( ! $deleted || ! $audit_ok ) {
+					update_user_meta( $user_id, self::INSTITUTIONAL_AGE_META, $previous_attention );
 					clean_user_cache( $user_id );
 				}
 			}
@@ -134,8 +133,8 @@ final class SMC_Lifecycle {
 				$wpdb->query( 'START TRANSACTION' );
 				$updated = $wpdb->update( $wpdb->prefix . 'smc_applications', array( 'guardian_required' => 0, 'row_version' => (int) $app['row_version'] + 1, 'updated_at' => current_time( 'mysql', true ) ), array( 'id' => (int) $app['id'], 'row_version' => (int) $app['row_version'] ) );
 				$audit_ok = 1 === $updated && SMC_Security::audit( 'guardian_requirement_ended_at_adulthood', $user_id );
-				if ( 1 === $updated && $audit_ok ) {
-					$wpdb->query( 'COMMIT' );
+				if ( 1 === $updated && $audit_ok && false !== $wpdb->query( 'COMMIT' ) ) {
+					// committed
 				} else {
 					$wpdb->query( 'ROLLBACK' );
 				}
@@ -145,8 +144,12 @@ final class SMC_Lifecycle {
 	}
 
 	private static function is_institutional_user( $user_id ) {
-		$user = get_userdata( absint( $user_id ) );
-		return smc_is_founder( $user_id ) || ( $user && user_can( $user, 'manage_options' ) );
+		$user_id = absint( $user_id );
+		if ( function_exists( 'smc_is_institutional_account' ) ) { return (bool) smc_is_institutional_account( $user_id ); }
+		// Isolated repair/CLI contexts may load Lifecycle before functions.php. Preserve
+		// the canonical Founder/Admin rule and include the AI predicate when available.
+		$user = get_userdata( $user_id );
+		return smc_is_founder( $user_id ) || ( function_exists( 'smc_is_institutional_ai' ) && smc_is_institutional_ai( $user_id ) ) || ( $user && user_can( $user, 'manage_options' ) );
 	}
 
 	private static function record_institutional_age_attention( $user_id, $reason ) {
@@ -157,7 +160,8 @@ final class SMC_Lifecycle {
 			return true;
 		}
 		$state = array( 'reason' => $reason, 'audited_at' => current_time( 'mysql', true ) );
-		$wpdb->query( 'START TRANSACTION' );
+		$previous = get_user_meta( $user_id, self::INSTITUTIONAL_AGE_META, true );
+		$had_previous = metadata_exists( 'user', $user_id, self::INSTITUTIONAL_AGE_META );
 		update_user_meta( $user_id, self::INSTITUTIONAL_AGE_META, $state );
 		$stored = get_user_meta( $user_id, self::INSTITUTIONAL_AGE_META, true );
 		$stored_ok = is_array( $stored ) && $reason === ( $stored['reason'] ?? '' ) && ! empty( $stored['audited_at'] );
@@ -167,11 +171,10 @@ final class SMC_Lifecycle {
 			array( 'reason' => $reason )
 		);
 		if ( ! $stored_ok || ! $audit_ok ) {
-			$wpdb->query( 'ROLLBACK' );
+			if ( $had_previous ) { update_user_meta( $user_id, self::INSTITUTIONAL_AGE_META, $previous ); } else { delete_user_meta( $user_id, self::INSTITUTIONAL_AGE_META ); }
 			clean_user_cache( $user_id );
 			return false;
 		}
-		$wpdb->query( 'COMMIT' );
 		return true;
 	}
 
@@ -197,7 +200,7 @@ final class SMC_Lifecycle {
 		$decoded = isset( $row['details'] ) && is_string( $row['details'] ) ? json_decode( $row['details'], true ) : null;
 		return array(
 			'action' => isset( $row['action'] ) ? sanitize_key( $row['action'] ) : '',
-			'reason' => is_array( $decoded ) && isset( $decoded['reason'] ) ? sanitize_key( $decoded['reason'] ) : '',
+			'reason' => is_array( $decoded ) ? sanitize_key( $decoded['reason_code'] ?? $decoded['reason'] ?? '' ) : '',
 		);
 	}
 
@@ -267,7 +270,7 @@ final class SMC_Lifecycle {
 			$wpdb->query( 'ROLLBACK' );
 			return false;
 		}
-		$wpdb->query( 'COMMIT' );
+		if ( false === $wpdb->query( 'COMMIT' ) ) { $wpdb->query( 'ROLLBACK' ); return false; }
 		clean_user_cache( $user_id );
 		return true;
 	}
@@ -288,35 +291,44 @@ final class SMC_Lifecycle {
 
 	private static function restrict( $app, $reason, $status = 'suspended' ) {
 		global $wpdb;
-		$user_id = (int) $app['user_id'];
+		$user_id = absint( $app['user_id'] );
+		$now = current_time( 'mysql', true );
+		$hold = array( 'operation' => 'restrict', 'target_status' => sanitize_key( $status ), 'reason' => sanitize_key( $reason ), 'started_at' => time() );
+		update_user_meta( $user_id, '_smc_membership_effects_hold_v1', $hold );
+		if ( get_user_meta( $user_id, '_smc_membership_effects_hold_v1', true ) !== $hold ) { return false; }
 		$wpdb->query( 'START TRANSACTION' );
-		$updated = $wpdb->query(
-			$wpdb->prepare(
-				"UPDATE {$wpdb->prefix}smc_applications SET status=%s,row_version=row_version+1,updated_at=%s WHERE id=%d AND row_version=%d",
-				$status,
-				current_time( 'mysql', true ),
-				(int) $app['id'],
-				(int) $app['row_version']
-			)
-		);
-		$role_ok = 1 === $updated && SMC_Contracts::set_all_roles_pending( $user_id, (int) $app['row_version'] + 1 );
-		$sessions_ok = $role_ok && SMC_Security::revoke_all_sessions( $user_id, $reason );
-		$audit_ok = $sessions_ok && SMC_Security::audit( 'membership_restricted', $user_id, array( 'reason' => $reason ) );
-		if ( 1 !== $updated || ! $role_ok || ! $sessions_ok || ! $audit_ok ) {
-			$wpdb->query( 'ROLLBACK' );
-			clean_user_cache( $user_id );
+		$current = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}smc_applications WHERE id=%d AND user_id=%d LIMIT 1 FOR UPDATE", (int) $app['id'], $user_id ), ARRAY_A );
+		$request = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}smc_verification_requests WHERE user_id=%d LIMIT 1 FOR UPDATE", $user_id ), ARRAY_A );
+		if ( ! $current || (int) $current['row_version'] !== (int) $app['row_version'] ) { $wpdb->query( 'ROLLBACK' ); return false; }
+		$updated = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_applications SET status=%s,row_version=row_version+1,updated_at=%s WHERE id=%d AND row_version=%d", $status, $now, (int) $app['id'], (int) $app['row_version'] ) );
+		$request_ok = true;
+		if ( $request ) {
+			$request_ok = 1 === $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_verification_requests SET status=%s,queue_type='expiry',assigned_reviewer=0,assigned_at=NULL,conflict_status='undeclared',conflict_note=NULL,reason_code='security_restriction',reviewer_note=%s,row_version=row_version+1,updated_at=%s WHERE id=%d AND row_version=%d", $status, sanitize_text_field( $reason ), $now, (int) $request['id'], (int) $request['row_version'] ) );
+		}
+		$roles_db_ok = 1 === $updated && $request_ok && SMC_Contracts::set_all_roles_pending( $user_id, (int) $app['row_version'] + 1, false );
+		$audit_ok = $roles_db_ok && SMC_Security::audit( 'membership_restricted', $user_id, array( 'reason_code' => sanitize_key( $reason ), 'status' => sanitize_key( $status ) ) );
+		if ( ! $roles_db_ok || ! $audit_ok ) { $wpdb->query( 'ROLLBACK' ); return false; }
+		if ( false === $wpdb->query( 'COMMIT' ) ) { return false; }
+		$roles_wp_ok = SMC_Contracts::sync_wordpress_roles( $user_id );
+		$sessions_ok = $roles_wp_ok && SMC_Security::revoke_all_sessions( $user_id, $reason );
+		if ( ! $roles_wp_ok || ! $sessions_ok ) {
+			if ( class_exists( 'SMC_Completion' ) ) { SMC_Completion::queue_effects_repair( $user_id, 'restrict', $status, $reason ); }
 			return false;
 		}
-		$wpdb->query( 'COMMIT' );
-		clean_user_cache( $user_id );
-		return true;
+		delete_user_meta( $user_id, '_smc_membership_effects_hold_v1' );
+		return ! metadata_exists( 'user', $user_id, '_smc_membership_effects_hold_v1' );
 	}
 
 	private static function cleanup_database() {
 		global $wpdb;
 		$wpdb->query( "DELETE FROM {$wpdb->prefix}smc_rate_limits WHERE reset_at<UTC_TIMESTAMP() - INTERVAL 1 DAY" );
 		$wpdb->query( "DELETE FROM {$wpdb->prefix}smc_contact_otps WHERE expires_at<UTC_TIMESTAMP() - INTERVAL 7 DAY" );
-		$wpdb->query( "DELETE FROM {$wpdb->prefix}smc_auth_sessions WHERE expires_at<UTC_TIMESTAMP() - INTERVAL 30 DAY OR revoked_at<UTC_TIMESTAMP() - INTERVAL 30 DAY" );
+		$expired_sessions = $wpdb->get_results( "SELECT id,user_id,token_hash FROM {$wpdb->prefix}smc_auth_sessions WHERE expires_at<UTC_TIMESTAMP() - INTERVAL 30 DAY OR revoked_at<UTC_TIMESTAMP() - INTERVAL 30 DAY LIMIT 500", ARRAY_A );
+		foreach ( (array) $expired_sessions as $session ) {
+			if ( SMC_Security::delete_session_token_envelope( (int) $session['user_id'], (string) $session['token_hash'] ) ) { $wpdb->delete( $wpdb->prefix . 'smc_auth_sessions', array( 'id' => (int) $session['id'] ), array( '%d' ) ); }
+		}
+		$session_users = array_values( array_unique( array_map( 'absint', array_column( (array) $expired_sessions, 'user_id' ) ) ) );
+		foreach ( $session_users as $session_user_id ) { $live = $wpdb->get_col( $wpdb->prepare( "SELECT token_hash FROM {$wpdb->prefix}smc_auth_sessions WHERE user_id=%d AND revoked_at IS NULL AND expires_at>UTC_TIMESTAMP()", $session_user_id ) ); SMC_Security::sweep_session_token_envelopes( $session_user_id, $live ); }
 		$wpdb->query( "DELETE FROM {$wpdb->prefix}smc_file_jobs WHERE status='complete' AND updated_at<UTC_TIMESTAMP() - INTERVAL 30 DAY" );
 		$wpdb->query( "DELETE FROM {$wpdb->prefix}smc_event_outbox WHERE status='delivered' AND delivered_at<UTC_TIMESTAMP() - INTERVAL 90 DAY" );
 		$wpdb->query( "DELETE FROM {$wpdb->prefix}smc_event_inbox WHERE status='processed' AND processed_at<UTC_TIMESTAMP() - INTERVAL 90 DAY" );

@@ -33,6 +33,7 @@ final class SMC_Events {
 	}
 
 	public static function schedule_processor() {
+		if ( class_exists( 'SMC_Completion' ) && SMC_Completion::safe_mode() ) { return; }
 		if ( ! wp_next_scheduled( 'smc_process_event_outbox' ) ) {
 			wp_schedule_single_event( time() + 15, 'smc_process_event_outbox' );
 		}
@@ -139,6 +140,7 @@ final class SMC_Events {
 	}
 
 	public static function process_outbox( $limit = 25, $only_id = 0 ) {
+		if ( ! $only_id && class_exists( 'SMC_Completion' ) && SMC_Completion::safe_mode() ) { return 0; }
 		global $wpdb;
 		if ( ! self::table_exists( 'smc_event_outbox' ) ) {
 			return 0;
@@ -198,9 +200,9 @@ final class SMC_Events {
 					$delivery_error = 'Delivery adapter raised an exception.';
 				}
 				if ( true === $accepted ) {
-					$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_event_outbox SET status='delivered',delivered_at=%s,last_error=NULL,updated_at=%s WHERE id=%d AND status='processing'", current_time( 'mysql', true ), current_time( 'mysql', true ), (int) $row['id'] ) );
-					++$processed;
-					continue;
+					$acked = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_event_outbox SET status='delivered',delivered_at=%s,last_error=NULL,updated_at=%s WHERE id=%d AND status='processing'", current_time( 'mysql', true ), current_time( 'mysql', true ), (int) $row['id'] ) );
+					if ( 1 === $acked ) { ++$processed; continue; }
+					$delivery_error = 'Consumer acknowledged but delivery receipt CAS failed; replay requires consumer idempotency.';
 				}
 				$attempts = (int) $row['attempts'] + 1;
 				$status = $attempts >= 10 ? 'dead_letter' : 'retry';
@@ -255,12 +257,12 @@ final class SMC_Events {
 			$result = false;
 		}
 		if ( true !== $result ) {
-			$wpdb->delete( $wpdb->prefix . 'smc_event_inbox', array( 'consumer' => $consumer, 'event_id' => $event_id ), array( '%s', '%s' ) );
+			$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_event_inbox SET last_error=%s,updated_at=%s WHERE consumer=%s AND event_id=%s AND status='processing'", 'Consumer callback did not acknowledge processing; stale-claim retry is required.', $now, $consumer, $event_id ) );
 			return false;
 		}
 		$updated = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_event_inbox SET status='processed',processed_at=%s,updated_at=%s,last_error=NULL WHERE consumer=%s AND event_id=%s AND status='processing'", $now, $now, $consumer, $event_id ) );
 		if ( 1 !== $updated ) {
-			$wpdb->delete( $wpdb->prefix . 'smc_event_inbox', array( 'consumer' => $consumer, 'event_id' => $event_id ), array( '%s', '%s' ) );
+			$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_event_inbox SET last_error=%s,updated_at=%s WHERE consumer=%s AND event_id=%s AND status='processing'", 'Consumer completed but receipt CAS failed; preserve claim for controlled replay.', $now, $consumer, $event_id ) );
 			return false;
 		}
 		return true;

@@ -14,8 +14,8 @@ pass('safe-mode declaration cannot be filtered off', completion.includes('return
 pass('private document release requires current two-factor session', /serve_document[\s\S]{0,450}session_is_verified\( \$user_id \)/.test(security));
 pass('event inbox consumer uses canonical schema columns', events.includes('(consumer,event_id,status,attempts,received_at,updated_at)') && !events.includes('(consumer,event_id,dedupe_hash,status,created_at,updated_at)'));
 pass('event inbox idempotency matches unique consumer-event schema', installer.includes('UNIQUE KEY consumer_event (consumer,event_id)') && events.includes('WHERE consumer=%s AND event_id=%s'));
-pass('submission handler enforces lifecycle server-side', /handle_submit_application[\s\S]{0,650}existing_application[\s\S]{0,450}more_information[\s\S]{0,250}rejected/.test(workflow));
+pass('submission handler enforces lifecycle server-side', /handle_submit_application[\s\S]{0,500}existing_application[\s\S]{0,500}array\( 'draft', 'more_information' \)[\s\S]{0,180}redirect\( 'status', 'saved'/.test(workflow));
 pass('submission completion verifies idempotency persistence', workflow.includes('$last_key_ok = hash_equals') && workflow.includes('$receipt_ok = is_array') && workflow.includes('application_idempotency_receipt_failed'));
-pass('privacy exporter processes only requested page', privacy.includes('switch ( $page )') && !privacy.includes('1 => self::export_identity( $user->ID )'));
+pass('privacy exporter is deterministically bounded by page', privacy.includes('$offset = ( $page - 1 ) * $limit;') && privacy.includes('$limit + 1, $offset') && privacy.includes('$data = 1 === $page ? self::export_identity') && privacy.includes("'done'=>! $more"));
 pass('failed outbox delivery preserves retry scheduling', events.includes("status IN ('pending','retry')") && events.includes('$retry_backlog > 0'));
 console.log(`Second fresh static complete; failures: ${failed}`); process.exit(failed?1:0);

@@ -8,21 +8,22 @@ const privacy = read('includes/class-smc-privacy.php');
 const functions = read('includes/functions.php');
 const contracts = read('includes/class-smc-contracts.php');
 const workflow = read('includes/class-smc-workflow.php');
+const security = read('includes/class-smc-security.php');
 const main = read('sabri-membership-core.php');
 const readme = read('README.txt');
 const failures = [];
 let passed = 0;
 function check(c, n) { if (c) passed++; else failures.push(n); }
 
-check(main.includes('Version: 1.2.18'), 'plugin header 1.2.18');
-check(main.includes("define( 'SMC_VERSION', '1.2.18' )"), 'runtime version 1.2.18');
-check(main.includes("define( 'SMC_DB_VERSION', '1.3.0' )"), 'schema is 1.3.0');
-check(main.includes("define( 'SMC_CONTRACT_VERSION', '1.2.0' )"), 'contract stays 1.2.0');
-check(readme.includes('Stable tag: 1.2.18'), 'readme stable tag');
+check(main.includes('Version: 1.2.32'), 'plugin header 1.2.32');
+check(main.includes("define( 'SMC_VERSION', '1.2.32' )"), 'runtime version 1.2.32');
+check(main.includes("define( 'SMC_DB_VERSION', '1.4.3' )"), 'schema is 1.4.3');
+check(main.includes("define( 'SMC_CONTRACT_VERSION', '1.2.1' )"), 'contract stays 1.2.1');
+check(readme.includes('Stable tag: 1.2.32'), 'readme stable tag');
 
 check(admin.includes('private static function approval_gate'), 'approval gate helper exists');
 check(admin.includes("'pending_senior'"), 'senior pending state exists');
-check(admin.includes('BINARY evidence_snapshot=%s'), 'vote count bound to exact snapshot');
+check(admin.includes('approval_generation=%s AND decision=\'approve\'') && admin.includes('approval_snapshot_hash=%s'), 'vote count is bound to an immutable evidence-snapshot generation');
 check(admin.includes("'applicant_version' => (int) $request['applicant_version']"), 'snapshot uses submitted applicant generation');
 check(admin.includes("'version' => (int) $document['version']"), 'snapshot includes document version');
 check(admin.includes("'sha256'  => (string) $document['plain_sha256']"), 'snapshot includes document hash');
@@ -38,7 +39,7 @@ check(contracts.includes('if ( ! $user || smc_privacy_erasure_lock( $user_id )')
 check(privacy.includes('private static function lock_for_erasure'), 'erasure locks before deletion');
 check(privacy.includes("SMC_Security::revoke_all_sessions( $user_id, 'privacy_erasure_locked' )"), 'erasure revokes sessions');
 check(privacy.includes("$wpdb->query( 'START TRANSACTION' )"), 'record deletion starts transaction');
-check(privacy.includes("$wpdb->query( 'ROLLBACK' )"), 'record deletion rollback exists');
+check(/\$wpdb->query\(\s*'ROLLBACK'\s*\)/.test(privacy), 'record deletion rollback exists');
 check(privacy.includes("$wpdb->query( 'COMMIT' )"), 'record deletion commit exists');
 check(!privacy.includes("$wpdb->delete( $wpdb->prefix . 'smc_audit_log'"), 'audit chain rows are not deleted');
 check(privacy.includes('unchanged tamper-evident security audit evidence'), 'retained audit evidence disclosed');
@@ -47,15 +48,15 @@ check(workflow.includes('SELECT row_version FROM {$wpdb->prefix}smc_applications
 check(workflow.includes('applicant_version=%d,row_version=row_version+1'), 'resubmission advances verification applicant generation');
 check(workflow.includes("'applicant_version' => $next_applicant_version"), 'resubmission audit records the new applicant generation');
 check(privacy.includes("'pending'        => true"), 'private-storage failure keeps erasure retryable');
-check(privacy.includes('the eraser will retry until completion evidence is recorded'), 'audit-evidence failure keeps erasure incomplete');
+check(privacy.includes('Erasure completed, but completion audit evidence requires retry.') && privacy.includes("'done'=>false"), 'audit-evidence failure keeps erasure incomplete');
 
 const decryptPosition = workflow.indexOf("SMC_Security::decrypt( $receipt['envelope'], 'recovery-receipt'");
 const deletePosition = workflow.indexOf("self::delete_user_meta_verified( $user_id, '_smc_recovery_receipt_v2' )", decryptPosition);
 check(decryptPosition >= 0 && deletePosition > decryptPosition, 'v2 recovery receipt decrypts before verified one-time deletion');
-check(workflow.includes("self::delete_user_meta_verified( $user_id, '_smc_2fa_enabled' )"), 'incomplete 2FA setup verifiably rolls back enabled flag');
-check(workflow.includes("self::delete_user_meta_verified( $user_id, '_smc_totp_secret_enc' )"), 'incomplete 2FA setup verifiably removes encrypted TOTP secret');
-check(workflow.includes("SMC_Security::revoke_all_sessions( $user_id, 'two_factor_setup_rollback' )"), '2FA setup rollback revokes sessions');
-check(workflow.includes("$challenge = SMC_Security::verify_two_factor_challenge"), '2FA challenge result is checked');
+check(security.includes("if ($old_enabled) {update_user_meta($user_id,'_smc_2fa_enabled',$old_enabled);} else {delete_user_meta($user_id,'_smc_2fa_enabled');}"), 'incomplete 2FA setup restores the prior enabled flag');
+check(security.includes("if ( $old_secret ) { update_user_meta($user_id,'_smc_totp_secret_enc',$old_secret); } else { delete_user_meta($user_id,'_smc_totp_secret_enc'); }"), 'incomplete 2FA setup restores or removes the encrypted TOTP secret');
+check(security.includes("revoke_all_sessions( $user_id, 'two_factor_changed' )") && security.indexOf("$wpdb->query( 'COMMIT' )") < security.indexOf("revoke_all_sessions( $user_id, 'two_factor_changed' )"), 'committed 2FA changes revoke sessions after the atomic write');
+check(workflow.includes("$challenge = $user ? SMC_Security::verify_two_factor_challenge") && workflow.includes('true !== $challenge'), '2FA challenge result is checked exactly');
 
 if (failures.length) {
   console.error(`completion hardening contract: ${passed} PASS, ${failures.length} FAIL`);

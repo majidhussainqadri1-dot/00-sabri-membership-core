@@ -1,14 +1,16 @@
 # File 00 — Sabri Membership Core
 
-Three-plan corrective candidate: plugin `1.2.11`, contract `1.2.0`, schema `1.3.0`.
+Current corrective candidate: plugin `1.2.32`, public contract `1.2.1`, database schema `1.4.3`.
 
-Governing sources: Definitive Master Plan v3.0; All-Chats Directives v2.1; File 00 Final Plan.
+This release repairs the proven `smc_audit_log`-present / `smc_audit_tail`-missing upgrade state. File 00 now recognizes the original `1.0.1` audit-table shape, preserves every pre-HMAC row unchanged, seals its exact lower-assurance snapshot with a keyed create-once migration anchor, and starts the modern HMAC epoch without pretending that historical unhashed rows were cryptographically verifiable.
 
-Repository-correctable coding is 100% verified at `2618d9d75896ae3881c5404511103c23ffca8d04` by Three-Plan QA `31002935962` and Contract Integrity `31002938897`. Staging, live and operational acceptance remain pending.
+Unknown schemas, changed legacy snapshots, invalid modern hashes or links, key/anchor mismatches, recovery races, and previously initialized partial schemas remain fail-closed.
 
 ```bash
 npm ci --ignore-scripts
 npm run verify
 ```
 
-Package SHA-256: `0dca9b3fa9995736332c40d6a44f5dc36e2ff62d771c9cbea637d022cad9c715`.
+Candidate ZIP SHA-256: `7463935f3105ca8936284157b7d644ab85b982e42cfb353b6dc7ba90b8206c03`.
+
+Local deterministic packaging and static checks pass. GitHub PHP 7.4/8.3 runtime gates and controlled WordPress/MySQL staging acceptance remain separate required evidence.

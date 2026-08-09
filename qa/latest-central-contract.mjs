@@ -10,8 +10,8 @@ const latest = load('source/sabri-membership-core/includes/class-smc-latest-cent
 const css = load('source/sabri-membership-core/assets/membership.css');
 const doc = load('docs/FILE-00-LATEST-CENTRAL-TRACEABILITY-1.2.12.md');
 const checks = [
-  ['runtime 1.2.18', plugin.includes("define( 'SMC_VERSION', '1.2.18' );")],
-  ['latest central layer loaded', plugin.includes('class-smc-latest-central-2026.php') && plugin.includes('SMC_Latest_Central_2026::init()')],
+  ['runtime 1.2.32', plugin.includes("define( 'SMC_VERSION', '1.2.32' );")],
+  ['latest central layer loaded', plugin.includes('class-smc-latest-central-2026.php') && plugin.includes("array( 'SMC_Latest_Central_2026', 'init' )")],
   ['F00-CEN-01 single free tier', functions.includes("'single_free_tier'        => true") && functions.includes("'paid_unlocks_enabled'    => false") && functions.includes("'legacy_pricing_enabled'  => false")],
   ['F00-CEN-02 donor neutral', functions.includes("'donation_affects_rank'    => false") && functions.includes("'donation_affects_entitlement' => false") && functions.includes("'donation_affects_support'     => false")],
   ['zero commission', functions.includes("'commission_percent'       => 0")],
@@ -30,7 +30,7 @@ const checks = [
   ['F00-CEN-03 baseline actions cannot be removed by filter', latest.includes('array_merge(\n\t\t\t\t\tself::$revalidation_actions,') && latest.includes("apply_filters( 'smc_revalidation_audit_actions', self::$revalidation_actions )")],
   ['F00-CEN-03 marker cannot be satisfied by same-second old challenge', latest.includes('$stamp = max( time() + 1, $previous + 1 );') && security.includes("'_smc_revalidation_required_at'") && security.includes('max( $base_cutoff, $required_after )')],
   ['all guardian-state changes include adulthood transition', latest.includes("'guardian_consent_verified'") && latest.includes("'guardian_consent_withdrawn'") && latest.includes("'guardian_requirement_ended_at_adulthood'")],
-  ['successful TOTP clears revalidation marker before audit', security.includes('private static function clear_revalidation_requirement') && security.includes('$revalidation_ok = 1 === $updated && self::clear_revalidation_requirement( $user_id );') && security.includes("$audit_ok = $revalidation_ok && self::audit( 'two_factor_passed'")],
+  ['successful TOTP clears revalidation marker before audit', security.includes('private static function clear_revalidation_requirement') && security.includes('$revalidation_ok = false !== $factor_updated && 1 === $updated && self::clear_revalidation_requirement( $user_id );') && security.includes("$audit_ok = $revalidation_ok && self::audit( 'two_factor_passed'")],
   ['successful recovery challenge clears revalidation marker', security.includes('$revalidation_ok = 1 === $code_updated && 1 === $session_updated && self::clear_revalidation_requirement( $user_id );') && security.includes("$audit_ok = $revalidation_ok && self::audit( 'recovery_code_used'")],
   ['security changes invalidate File 26 projection', latest.includes("do_action(\n\t\t\t'smc_file26_projection_invalidated'")],
   ['traceability maps latest requirements', doc.includes('F00-CEN-01') && doc.includes('F00-CEN-02') && doc.includes('F00-CEN-03') && doc.includes('File 26') && doc.includes('AJ-25') && doc.includes('CV-280')],

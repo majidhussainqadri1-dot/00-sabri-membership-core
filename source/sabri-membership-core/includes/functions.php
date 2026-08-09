@@ -96,6 +96,14 @@ function smc_is_institutional_ai( $user_id ) {
 	return $user_id > 0 && absint( $user_id ) === smc_institutional_ai_user_id();
 }
 
+function smc_is_institutional_account( $user_id ) {
+	$user_id = absint( $user_id );
+	if ( ! $user_id ) { return false; }
+	if ( smc_is_founder( $user_id ) || smc_is_institutional_ai( $user_id ) ) { return true; }
+	$user = get_userdata( $user_id );
+	return $user && user_can( $user, 'manage_options' );
+}
+
 function smc_institutional_ai_policy() {
 	$activated = (string) get_option( 'smc_institutional_ai_activated_at', '' );
 	$probation_complete = $activated && strtotime( $activated . ' UTC' ) <= ( time() - 30 * DAY_IN_SECONDS );
@@ -288,6 +296,11 @@ function smc_membership_state( $user_id ) {
 	$account_class = smc_account_class_for_user( $user_id, $user );
 	$hard_blocks   = array( 'rejected', 'suspended', 'expired', 'appeal_review', 'erasure_pending' );
 	$erasure_lock = $user_id ? smc_privacy_erasure_lock( $user_id ) : false;
+	$effects_hold = $user_id ? get_user_meta( $user_id, '_smc_membership_effects_hold_v1', true ) : false;
+
+	if ( $effects_hold ) {
+		return array( 'contract_version' => SMC_CONTRACT_VERSION, 'user_id' => $user_id, 'application_exists' => (bool) $row, 'application_status' => $status, 'status' => 'effects_reconciliation', 'membership_type' => $type, 'institutional_account' => (bool) $institutional, 'account_class' => $account_class, 'approved' => false );
+	}
 
 	if ( $erasure_lock ) {
 		return array(

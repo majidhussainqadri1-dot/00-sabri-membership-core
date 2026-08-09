@@ -12,6 +12,7 @@ const admin = read('source/sabri-membership-core/includes/class-smc-admin.php');
 const security = read('source/sabri-membership-core/includes/class-smc-security.php');
 const lifecycle = read('source/sabri-membership-core/includes/class-smc-lifecycle.php');
 const workflow = read('source/sabri-membership-core/includes/class-smc-workflow.php');
+const contactDelivery = read('source/sabri-membership-core/includes/class-smc-contact-delivery.php');
 const cf01 = read('source/sabri-membership-core/includes/class-smc-cf01-contract.php');
 const uninstall = read('source/sabri-membership-core/uninstall.php');
 const ledger = read('docs/FORTY-ROUND-REVIEW-1.2.8.md');
@@ -19,11 +20,11 @@ const failures = [];
 let passed = 0;
 function assert(condition, label) { if (condition) passed += 1; else failures.push(label); }
 
-assert(plugin.includes('Version: 1.2.18'), 'Plugin header is 1.2.18');
-assert(plugin.includes("define( 'SMC_VERSION', '1.2.18' )"), 'Runtime version is 1.2.18');
-assert(plugin.includes("define( 'SMC_DB_VERSION', '1.3.0' )"), 'Schema is 1.3.0');
-assert(plugin.includes("define( 'SMC_CONTRACT_VERSION', '1.2.0' )"), 'Contract remains 1.2.0');
-assert(readme.includes('Stable tag: 1.2.18'), 'Plugin readme stable tag is 1.2.18');
+assert(plugin.includes('Version: 1.2.32'), 'Plugin header is 1.2.32');
+assert(plugin.includes("define( 'SMC_VERSION', '1.2.32' )"), 'Runtime version is 1.2.32');
+assert(plugin.includes("define( 'SMC_DB_VERSION', '1.4.3' )"), 'Schema is 1.4.3');
+assert(plugin.includes("define( 'SMC_CONTRACT_VERSION', '1.2.1' )"), 'Contract remains 1.2.1');
+assert(readme.includes('Stable tag: 1.2.32'), 'Plugin readme stable tag is 1.2.32');
 assert(plugin.includes("register_deactivation_hook( SMC_FILE, array( 'SMC_Installer', 'deactivate' ) )"), 'Deactivation hook is registered');
 assert(installer.includes('public static function deactivate()'), 'Installer exposes deactivation cleanup');
 for (const hook of ['smc_lifecycle_daily','smc_process_file_jobs','smc_continue_migration']) {
@@ -66,9 +67,9 @@ assert(security.includes('smc_identity_documents WHERE stored_name=%s'), 'Canoni
 assert(security.includes("status='processing' AND updated_at<UTC_TIMESTAMP() - INTERVAL 30 MINUTE"), 'Stale processing claims are recoverable');
 assert(security.includes("WHERE id=%d AND ((status IN ('pending','retry')"), 'File-job claim is atomic and state-conditional');
 assert(lifecycle.includes('GET_LOCK') && lifecycle.includes('RELEASE_LOCK'), 'Lifecycle job uses an advisory overlap lock');
-assert(workflow.indexOf('$wpdb->query( $sql )') < workflow.indexOf("apply_filters( 'smc_send_contact_otp'"), 'Contact OTP is persisted before provider delivery');
+assert(workflow.indexOf('$wpdb->query( $sql )') < workflow.indexOf('SMC_Contact_Delivery::send_otp') && contactDelivery.includes("add_filter( 'smc_send_contact_otp'"), 'Contact OTP is persisted before provider delivery');
 assert(workflow.includes("DELETE FROM {$wpdb->prefix}smc_contact_otps"), 'Failed contact delivery deletes the exact unverified OTP');
-assert(security.includes("last_totp_slice'] >= (int) $slice") && security.includes('last_totp_slice<%d'), 'TOTP replay slice is rejected under a row lock');
+assert(security.includes('smc_mfa_factor_state WHERE user_id=%d LIMIT 1 FOR UPDATE') && security.includes('$global_last >= (int) $slice') && security.includes('last_totp_slice<VALUES(last_totp_slice)'), 'TOTP replay slice is rejected under a factor-state row lock');
 assert(!security.includes("if ( 1 !== $updated ) {\n\t\t\treturn self::register_session"), 'TOTP replay failure cannot reset the session');
 const registerSection = security.slice(security.indexOf('public static function register_session'), security.indexOf('public static function session_is_verified'));
 assert(!registerSection.includes('revoked_at=NULL'), 'Session registration cannot resurrect revoked sessions');

@@ -16,7 +16,9 @@ final class SMC_Workflow {
 				'finish_2fa',
 				'challenge_2fa',
 				'rotate_recovery',
+				'ack_recovery_receipt',
 				'revoke_session',
+				'revoke_all_sessions',
 				'resubmit',
 				'appeal',
 				'withdraw_guardian',
@@ -43,14 +45,51 @@ final class SMC_Workflow {
 			'otp_verified'   => array( __( 'Contact ownership was verified.', 'sabri-membership-core' ), 'success' ),
 			'two_factor'     => array( __( 'Two-factor authentication is active. Save the one-time recovery codes now.', 'sabri-membership-core' ), 'success' ),
 			'challenge'      => array( __( 'This session passed the two-factor challenge.', 'sabri-membership-core' ), 'success' ),
+			'recovery_saved' => array( __( 'Recovery codes were acknowledged and the temporary receipt was removed.', 'sabri-membership-core' ), 'success' ),
+			'session_revoked'=> array( __( 'The selected session was revoked.', 'sabri-membership-core' ), 'success' ),
 			'resubmitted'    => array( __( 'The requested information was resubmitted for review.', 'sabri-membership-core' ), 'success' ),
 			'appealed'       => array( __( 'Your appeal was submitted for independent review.', 'sabri-membership-core' ), 'success' ),
 			'guardian'       => array( __( 'Guardian consent was verified.', 'sabri-membership-core' ), 'success' ),
 			'withdrawn'      => array( __( 'Guardian consent was withdrawn and the minor account was restricted.', 'sabri-membership-core' ), 'warning' ),
 			'provider'       => array( __( 'The required verification provider is unavailable. No approval state changed.', 'sabri-membership-core' ), 'error' ),
+			'cooldown'       => array( __( 'Please wait before requesting another verification code.', 'sabri-membership-core' ), 'warning' ),
 			'invalid'        => array( __( 'The request could not be verified. Review the fields and try again.', 'sabri-membership-core' ), 'error' ),
+			'totp_format'    => array( __( 'Enter exactly six digits from the authenticator app.', 'sabri-membership-core' ), 'error' ),
+			'totp_expired'   => array( __( 'This authenticator setup expired. Start a new authenticator setup and use the new secret.', 'sabri-membership-core' ), 'warning' ),
+			'totp_mismatch'  => array( __( 'The six-digit authenticator code does not match the pending setup secret. Use a time-based TOTP profile with SHA-1, six digits and a 30-second period, and keep the phone time automatic.', 'sabri-membership-core' ), 'error' ),
+			'totp_backend'   => array( __( 'The authenticator code was accepted, but File 00 could not complete the protected enrollment transaction. No successful 2FA state is being claimed.', 'sabri-membership-core' ), 'error' ),
+			'totp_audit'     => array( __( 'The authenticator code was accepted, but required security-audit evidence could not be committed. Two-factor enrollment remains fail-closed.', 'sabri-membership-core' ), 'error' ),
+			'totp_storage'   => array( __( 'The authenticator code was accepted, but protected factor or recovery-code state could not be stored. Two-factor enrollment remains fail-closed.', 'sabri-membership-core' ), 'error' ),
+			'totp_revalidate'=> array( __( 'Two-factor enrollment completed, but existing sessions could not be fully reconciled. Sign in again and verify the new authenticator before protected actions.', 'sabri-membership-core' ), 'warning' ),
 		);
-		return isset( $messages[ $key ] ) ? smc_notice( $messages[ $key ][0], $messages[ $key ][1] ) : '';
+		if ( ! isset( $messages[ $key ] ) ) {
+			return '';
+		}
+		$text = $messages[ $key ][0];
+		$trace_id = isset( $_GET['trace_id'] ) ? sanitize_text_field( wp_unslash( $_GET['trace_id'] ) ) : '';
+		if ( $trace_id && preg_match( '/^[0-9a-f-]{36}$/i', $trace_id ) ) {
+			$text .= ' ' . sprintf( __( 'Reference: %s', 'sabri-membership-core' ), strtolower( $trace_id ) );
+		}
+		if ( 'totp_audit' === $key && current_user_can( 'manage_options' ) ) {
+			$reason = isset( $_GET['smc_audit_reason'] ) ? sanitize_key( wp_unslash( $_GET['smc_audit_reason'] ) ) : '';
+			$chain = isset( $_GET['smc_chain_reason'] ) ? sanitize_key( wp_unslash( $_GET['smc_chain_reason'] ) ) : '';
+			$failed = isset( $_GET['smc_failed_id'] ) ? absint( $_GET['smc_failed_id'] ) : 0;
+			$tail = isset( $_GET['smc_tail_state'] ) ? sanitize_key( wp_unslash( $_GET['smc_tail_state'] ) ) : '';
+			$legacy = isset( $_GET['smc_legacy_state'] ) ? sanitize_key( wp_unslash( $_GET['smc_legacy_state'] ) ) : '';
+			if ( $reason ) {
+				$text .= ' ' . sprintf( __( 'Audit diagnostic: %s.', 'sabri-membership-core' ), $reason );
+			}
+			if ( $chain ) {
+				$text .= ' ' . sprintf( __( 'Chain status: %1$s%2$s.', 'sabri-membership-core' ), $chain, $failed ? ' (record ' . $failed . ')' : '' );
+			}
+			if ( $tail ) {
+				$text .= ' ' . sprintf( __( 'Audit tail: %s.', 'sabri-membership-core' ), $tail );
+			}
+			if ( $legacy && 'none' !== $legacy ) {
+				$text .= ' ' . sprintf( __( 'Legacy audit snapshot: %s.', 'sabri-membership-core' ), $legacy );
+			}
+		}
+		return smc_notice( $text, $messages[ $key ][1] );
 	}
 
 	private static function redirect( $key, $message, $args = array() ) {
@@ -66,7 +105,7 @@ final class SMC_Workflow {
 		}
 		$user_id = get_current_user_id();
 		$row = smc_application( $user_id );
-		if ( $row && ! in_array( $row['status'], array( 'draft', 'more_information', 'rejected' ), true ) ) {
+		if ( $row && ! in_array( $row['status'], array( 'draft', 'more_information' ), true ) ) {
 			return self::message() . smc_notice( __( 'The application is already in a controlled review state. Use Membership Status for the next permitted action.', 'sabri-membership-core' ) );
 		}
 		$user = wp_get_current_user();
@@ -74,6 +113,12 @@ final class SMC_Workflow {
 		$types = ! empty( $draft['membership_types'] ) ? smc_sanitize_membership_types( $draft['membership_types'] ) : SMC_Contracts::requested_types( $user_id );
 		$current_step = max( 1, min( 7, absint( $draft['current_step'] ?? 1 ) ) );
 		$idempotency = wp_generate_uuid4();
+		$existing_documents = array();
+		foreach ( smc_required_identity_documents() as $document_key => $document_label ) {
+			if ( SMC_Security::has_current_document( $user_id, $document_key ) ) { $existing_documents[ $document_key ] = true; }
+		}
+		$document_total = count( smc_required_identity_documents() );
+		$document_received = count( $existing_documents );
 		ob_start();
 		?>
 		<main class="smc-panel" aria-labelledby="smc-application-title">
@@ -85,9 +130,10 @@ final class SMC_Workflow {
 				<progress id="smc-application-progress" max="7" value="<?php echo absint( $current_step ); ?>"><?php echo absint( $current_step ); ?>/7</progress>
 				<span id="smc-step-label"></span><span id="smc-draft-status"></span>
 			</div>
-			<form id="smc-membership-application" method="post" enctype="multipart/form-data" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="smc-form" data-current-step="<?php echo absint( $current_step ); ?>" novalidate>
+			<form id="smc-membership-application" method="post" enctype="multipart/form-data" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="smc-form" data-current-step="<?php echo absint( $current_step ); ?>">
 				<input type="hidden" name="action" value="smc_submit_application">
 				<input type="hidden" name="submission_key" value="<?php echo esc_attr( $idempotency ); ?>">
+				<input type="hidden" name="expected_row_version" value="<?php echo esc_attr( $row ? (int) $row['row_version'] : 0 ); ?>">
 				<?php wp_nonce_field( 'smc_submit_application', 'smc_nonce' ); ?>
 
 				<fieldset class="smc-step" data-smc-step="1"><legend><?php esc_html_e( 'Step 1 of 7 — Account classes', 'sabri-membership-core' ); ?></legend>
@@ -105,7 +151,8 @@ final class SMC_Workflow {
 					<label><?php esc_html_e( 'Gender for the approved minimum-age rule', 'sabri-membership-core' ); ?><select name="gender" required><option value=""><?php esc_html_e( 'Select', 'sabri-membership-core' ); ?></option><?php foreach ( smc_allowed_genders() as $value => $label ) : ?><option value="<?php echo esc_attr( $value ); ?>" <?php selected( $draft['gender'] ?? '', $value ); ?>><?php echo esc_html( $label ); ?></option><?php endforeach; ?></select></label>
 					<label><?php esc_html_e( 'Country of residence (ISO two-letter code)', 'sabri-membership-core' ); ?><input name="residence_country" value="<?php echo esc_attr( $draft['residence_country'] ?? '' ); ?>" pattern="[A-Za-z]{2}" maxlength="2" required autocomplete="country"></label>
 					<label><?php esc_html_e( 'City', 'sabri-membership-core' ); ?><input name="city" value="<?php echo esc_attr( $draft['city'] ?? '' ); ?>" maxlength="120" required autocomplete="address-level2"></label>
-					<label><?php esc_html_e( 'Private residential address', 'sabri-membership-core' ); ?><textarea name="address" maxlength="500" required autocomplete="street-address"><?php echo esc_textarea( $draft['address'] ?? '' ); ?></textarea></label>
+					<label><?php esc_html_e( 'Private residential address', 'sabri-membership-core' ); ?><textarea name="address" maxlength="500" required autocomplete="street-address" aria-describedby="smc-address-privacy"><?php echo esc_textarea( $draft['address'] ?? '' ); ?></textarea></label>
+					<p id="smc-address-privacy" class="smc-muted"><?php esc_html_e( 'Purpose: jurisdiction and eligibility assurance. Visibility: private. Retention: governed by the File 00 retention/erasure policy and applicable holds.', 'sabri-membership-core' ); ?></p>
 					<p class="smc-age-status" role="status" aria-live="polite"></p>
 				</fieldset>
 
@@ -128,11 +175,14 @@ final class SMC_Workflow {
 					<p><?php esc_html_e( 'Document numbers and files are encrypted and private. They are not included in public profiles, search indexes, ordinary logs or event payloads.', 'sabri-membership-core' ); ?></p>
 					<label><?php esc_html_e( 'Document type', 'sabri-membership-core' ); ?><select name="identity_type"><option value="national_id" <?php selected( $draft['identity_type'] ?? 'national_id', 'national_id' ); ?>><?php esc_html_e( 'National identity card', 'sabri-membership-core' ); ?></option><option value="passport" <?php selected( $draft['identity_type'] ?? '', 'passport' ); ?>><?php esc_html_e( 'Passport', 'sabri-membership-core' ); ?></option></select></label>
 					<label><?php esc_html_e( 'Issuing country (ISO two-letter code)', 'sabri-membership-core' ); ?><input name="issuing_country" value="<?php echo esc_attr( $draft['issuing_country'] ?? '' ); ?>" pattern="[A-Za-z]{2}" maxlength="2" required autocomplete="country"></label>
-					<label><?php esc_html_e( 'Document number', 'sabri-membership-core' ); ?><input name="identity_number" autocomplete="off" minlength="5" maxlength="24" required></label>
-					<?php foreach ( smc_required_identity_documents() as $key => $label ) : ?>
-						<label><?php echo esc_html( $label ); ?><input type="file" name="<?php echo esc_attr( $key ); ?>" accept="<?php echo 'identity_selfie' === $key ? 'image/jpeg,image/png,image/webp' : 'image/jpeg,image/png,image/webp,application/pdf'; ?>" required></label>
+					<label><?php esc_html_e( 'Document number', 'sabri-membership-core' ); ?><input name="identity_number" autocomplete="off" minlength="5" maxlength="24" required aria-describedby="smc-identity-privacy"></label>
+					<p id="smc-identity-privacy" class="smc-muted"><?php esc_html_e( 'Purpose: identity assurance and duplicate-identity prevention. Visibility: restricted reviewers only. Retention: governed private evidence with controlled deletion/holds; never public.', 'sabri-membership-core' ); ?></p>
+					<?php foreach ( smc_required_identity_documents() as $key => $label ) : $already_received = ! empty( $existing_documents[ $key ] ); ?>
+						<label><?php echo esc_html( $label ); ?><input type="file" name="<?php echo esc_attr( $key ); ?>" accept="<?php echo 'identity_selfie' === $key ? 'image/jpeg,image/png,image/webp' : 'image/jpeg,image/png,image/webp,application/pdf'; ?>" <?php echo $already_received ? '' : 'required'; ?> aria-describedby="smc-doc-state-<?php echo esc_attr( $key ); ?>"></label>
+						<p id="smc-doc-state-<?php echo esc_attr( $key ); ?>" class="smc-muted"><?php echo esc_html( $already_received ? __( 'Secure evidence already received. Leave this blank to keep the accepted copy, or choose a new file to replace it.', 'sabri-membership-core' ) : __( 'Not yet received by the server. This evidence is required.', 'sabri-membership-core' ) ); ?></p>
 					<?php endforeach; ?>
-					<label><?php esc_html_e( 'Upload progress', 'sabri-membership-core' ); ?><progress id="smc-upload-progress" max="100" value="0">0%</progress></label>
+					<label><?php esc_html_e( 'Evidence checkpoint', 'sabri-membership-core' ); ?><progress id="smc-upload-progress" max="<?php echo absint( max( 1, $document_total ) ); ?>" value="<?php echo absint( $document_received ); ?>"><?php echo absint( $document_received ); ?>/<?php echo absint( $document_total ); ?></progress></label>
+					<p class="smc-muted"><?php esc_html_e( 'Interrupted submissions resume at the document checkpoint: evidence already accepted by the server is not uploaded again unless you deliberately select a replacement.', 'sabri-membership-core' ); ?></p>
 				</fieldset>
 
 				<fieldset class="smc-step" data-smc-step="6"><legend><?php esc_html_e( 'Step 6 of 7 — Consents', 'sabri-membership-core' ); ?></legend>
@@ -150,7 +200,7 @@ final class SMC_Workflow {
 					<button class="button" type="button" id="smc-retry-submit" hidden><?php esc_html_e( 'Retry submission', 'sabri-membership-core' ); ?></button>
 				</fieldset>
 
-				<div class="smc-step-controls"><button type="button" class="button" data-smc-prev><?php esc_html_e( 'Previous', 'sabri-membership-core' ); ?></button><button type="button" class="button button-primary" data-smc-next><?php esc_html_e( 'Next', 'sabri-membership-core' ); ?></button></div>
+				<div class="smc-step-controls"><button type="button" class="smc-button smc-button--secondary" data-smc-prev><?php esc_html_e( 'Previous', 'sabri-membership-core' ); ?></button><button type="button" class="smc-button" data-smc-next><?php esc_html_e( 'Next', 'sabri-membership-core' ); ?></button></div>
 			</form>
 			<noscript><p class="smc-notice smc-notice--info"><?php esc_html_e( 'JavaScript is optional. All steps remain visible and the server validates the complete application.', 'sabri-membership-core' ); ?></p></noscript>
 		</main>
@@ -162,11 +212,14 @@ final class SMC_Workflow {
 		self::guard_user_action( 'smc_submit_application' );
 		$user_id = get_current_user_id();
 		$existing_application = smc_application( $user_id );
-		if ( $existing_application && ! in_array( sanitize_key( $existing_application['status'] ?? '' ), array( 'draft', 'more_information', 'rejected' ), true ) ) {
+		if ( $existing_application && ! in_array( sanitize_key( $existing_application['status'] ?? '' ), array( 'draft', 'more_information' ), true ) ) {
 			self::redirect( 'status', 'saved' );
 		}
+		$is_resubmission = $existing_application && 'more_information' === sanitize_key( $existing_application['status'] ?? '' );
 		$submission_key = sanitize_text_field( wp_unslash( $_POST['submission_key'] ?? '' ) );
-		if ( ! preg_match( '/^[0-9a-f-]{36}$/i', $submission_key ) ) {
+		$expected_row_raw = sanitize_text_field( wp_unslash( $_POST['expected_row_version'] ?? '' ) );
+		$expected_row_version = preg_match( '/^\d+$/', $expected_row_raw ) ? (int) $expected_row_raw : -1;
+		if ( $expected_row_version < 0 || ! preg_match( '/^[0-9a-f-]{36}$/i', $submission_key ) ) {
 			self::redirect( 'application', 'invalid' );
 		}
 		if ( hash_equals( (string) get_user_meta( $user_id, '_smc_last_submission_key', true ), $submission_key ) ) {
@@ -253,7 +306,21 @@ final class SMC_Workflow {
 		$wpdb->query( 'START TRANSACTION' );
 		try {
 			$current = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}smc_applications WHERE user_id=%d LIMIT 1 FOR UPDATE", $user_id ), ARRAY_A );
-			$application_version = $current ? (int) $current['row_version'] + 1 : 1;
+			$current_version = $current ? (int) $current['row_version'] : 0;
+			$current_status = $current ? sanitize_key( $current['status'] ?? '' ) : '';
+			if ( $current_version !== $expected_row_version || ( $current && ! in_array( $current_status, array( 'draft', 'more_information' ), true ) ) ) {
+				throw new RuntimeException( 'The membership application changed after this form was loaded.' );
+			}
+			// Repeat uniqueness checks under the same transaction used for the write.
+			// Unique indexes remain the final database invariant; these locked reads
+			// provide a deterministic conflict path before encrypted state is mutated.
+			$duplicate_phone_locked = $wpdb->get_var( $wpdb->prepare( "SELECT user_id FROM {$wpdb->prefix}smc_applications WHERE phone_hash=%s AND user_id<>%d LIMIT 1 FOR UPDATE", $phone_hash, $user_id ) );
+			$duplicate_id_locked = $wpdb->get_var( $wpdb->prepare( "SELECT user_id FROM {$wpdb->prefix}smc_identity_records WHERE document_number_hash=%s AND user_id<>%d LIMIT 1 FOR UPDATE", $id_hash, $user_id ) );
+			if ( $duplicate_phone_locked || $duplicate_id_locked ) {
+				throw new RuntimeException( 'A phone or identity uniqueness conflict was detected during the authoritative transaction.' );
+			}
+			$is_resubmission = $current && 'more_information' === $current_status;
+			$application_version = $current_version + 1;
 			$app_data = array(
 				'legal_name'         => $legal_name,
 				'date_of_birth_enc'  => $dob_enc,
@@ -306,7 +373,9 @@ final class SMC_Workflow {
 			self::record_consent( $user_id, 'identity_verification', __( 'I consent to identity verification, protected evidence review, documented retention, and the published privacy process.', 'sabri-membership-core' ), 'self' );
 			self::record_consent( $user_id, 'membership_terms', __( 'I accept the platform membership terms and governed account rules.', 'sabri-membership-core' ), 'self' );
 			self::record_consent( $user_id, 'ethical_use', __( 'I accept truthful conduct, ethical use, and the prohibition of impersonation or misuse.', 'sabri-membership-core' ), 'self' );
-			$wpdb->query( 'COMMIT' );
+			if ( false === $wpdb->query( 'COMMIT' ) ) {
+				throw new RuntimeException( 'The membership application transaction could not be committed.' );
+			}
 		} catch ( Throwable $error ) {
 			$wpdb->query( 'ROLLBACK' );
 			delete_user_meta( $user_id, $submission_receipt_key );
@@ -315,7 +384,8 @@ final class SMC_Workflow {
 		}
 		$stored_documents = array();
 		foreach ( smc_required_identity_documents() as $key => $label ) {
-			$result = SMC_Security::store_uploaded_document( $key, $label, $user_id, $key );
+			$upload_supplied = ! empty( $_FILES[ $key ] ) && is_array( $_FILES[ $key ] ) && UPLOAD_ERR_NO_FILE !== (int) ( $_FILES[ $key ]['error'] ?? UPLOAD_ERR_NO_FILE );
+			$result = ( ! $upload_supplied && SMC_Security::has_current_document( $user_id, $key ) ) ? true : SMC_Security::store_uploaded_document( $key, $label, $user_id, $key );
 			if ( is_wp_error( $result ) ) {
 				$repair_trace = SMC_Completion::record_repair( $user_id, 'application_document_incomplete', array( 'document_key' => $key, 'stored_documents' => $stored_documents, 'reason' => $result->get_error_message(), 'application_version' => $application_version ), $trace_id );
 				SMC_Contracts::set_all_roles_pending( $user_id, $application_version );
@@ -330,8 +400,8 @@ final class SMC_Workflow {
 			$repair_trace = SMC_Completion::record_repair( $user_id, 'guardian_delivery_pending', array( 'application_version' => $application_version ), $trace_id );
 			self::redirect( 'application', 'provider', array( 'trace_id' => $repair_trace ?: $trace_id ) );
 		}
-		$status = $guardian_required ? 'guardian_pending' : 'submitted';
-		if ( ! self::submit_request( $user_id, $status, array( 'age' => $age, 'type' => $type, 'role_types' => $types, 'guardian_required' => $guardian_required, 'trace_id' => $trace_id ) ) ) {
+		$status = $guardian_required ? 'guardian_pending' : ( $is_resubmission ? 'resubmitted' : 'submitted' );
+		if ( ! self::submit_request( $user_id, $status, array( 'age' => $age, 'type' => $type, 'role_types' => $types, 'guardian_required' => $guardian_required, 'resubmission' => $is_resubmission, 'trace_id' => $trace_id ) ) ) {
 			delete_user_meta( $user_id, $submission_receipt_key );
 			SMC_Completion::record_repair( $user_id, 'application_submission_reconciliation', array( 'application_version' => $application_version, 'status' => $status ), $trace_id );
 			self::redirect( 'application', 'invalid', array( 'trace_id' => $trace_id ) );
@@ -342,8 +412,9 @@ final class SMC_Workflow {
 		update_user_meta( $user_id, $submission_receipt_key, $completed_receipt );
 		$stored_receipt = get_user_meta( $user_id, $submission_receipt_key, true );
 		$receipt_ok = is_array( $stored_receipt ) && 'completed' === ( $stored_receipt['status'] ?? '' ) && hash_equals( $trace_id, (string) ( $stored_receipt['trace_id'] ?? '' ) );
-		if ( ! $last_key_ok && ! $receipt_ok ) {
-			SMC_Security::audit( 'application_idempotency_receipt_failed', $user_id, array( 'trace_id' => $trace_id ) );
+		if ( ! $last_key_ok || ! $receipt_ok ) {
+			SMC_Completion::record_repair( $user_id, 'application_idempotency_receipt', array( 'last_key_ok'=>(bool)$last_key_ok, 'receipt_ok'=>(bool)$receipt_ok ), $trace_id );
+			SMC_Security::audit( 'application_idempotency_receipt_failed', $user_id, array( 'trace_id' => $trace_id, 'last_key_ok'=>(bool)$last_key_ok, 'receipt_ok'=>(bool)$receipt_ok ) );
 		}
 		SMC_Completion::clear_draft( $user_id );
 		self::redirect( 'status', 'saved', array( 'trace_id' => $trace_id ) );
@@ -376,9 +447,7 @@ final class SMC_Workflow {
 		$email = sanitize_email( wp_unslash( $_POST['guardian_email'] ?? '' ) );
 		$phone = smc_normalize_phone( wp_unslash( $_POST['guardian_phone'] ?? '' ) );
 		$relationship = sanitize_key( wp_unslash( $_POST['guardian_relationship'] ?? '' ) );
-		if ( ! $name || ! is_email( $email ) || is_wp_error( $phone ) || ! in_array( $relationship, array( 'parent', 'legal_guardian' ), true ) || empty( $_POST['guardian_authority'] ) ) {
-			return false;
-		}
+		if ( ! $name || ! is_email( $email ) || is_wp_error( $phone ) || ! in_array( $relationship, array( 'parent', 'legal_guardian' ), true ) || empty( $_POST['guardian_authority'] ) ) { return false; }
 		$code = (string) random_int( 100000, 999999 );
 		$token = wp_generate_password( 48, false, false );
 		$context = array( 'user_id' => absint( $user_id ) );
@@ -389,31 +458,55 @@ final class SMC_Workflow {
 		$phone_hash = SMC_Security::blind_index( $phone, 'guardian-phone' );
 		$lookup = SMC_Security::blind_index( $code, 'guardian-otp' );
 		$token_hash = SMC_Security::blind_index( $token, 'guardian-invitation' );
-		foreach ( array( $name_enc, $email_enc, $phone_enc, $email_hash, $phone_hash, $lookup, $token_hash ) as $value ) {
-			if ( is_wp_error( $value ) ) {
-				return false;
-			}
-		}
-		$text = __( 'I confirm that I am the parent or lawful guardian, consent to this minor using the platform under its published rules, and understand that I may withdraw consent.', 'sabri-membership-core' );
+		foreach ( array( $name_enc, $email_enc, $phone_enc, $email_hash, $phone_hash, $lookup, $token_hash ) as $value ) { if ( is_wp_error( $value ) ) { return false; } }
+		$consent_text = __( 'I confirm that I am the parent or lawful guardian, consent to this minor using the platform under its published rules, and understand that I may withdraw consent.', 'sabri-membership-core' );
 		$link = add_query_arg( 'guardian_token', rawurlencode( $token ), smc_page_url( 'guardian', '/guardian-consent/' ) );
-		$sent = apply_filters( 'smc_send_guardian_invitation', false, array( 'user_id' => $user_id, 'guardian_name' => $name, 'guardian_email' => $email, 'guardian_phone' => $phone, 'code' => $code, 'link' => $link, 'expires_in' => 900 ) );
-		if ( true !== $sent ) {
-			SMC_Security::audit( 'guardian_invitation_delivery_failed', $user_id );
-			return false;
-		}
 		global $wpdb;
 		$now = current_time( 'mysql', true );
-		$sql = $wpdb->prepare(
-			"INSERT INTO {$wpdb->prefix}smc_guardian_consents
-			(user_id,guardian_name_enc,guardian_email_enc,guardian_email_hash,guardian_phone_enc,guardian_phone_hash,relationship,legal_authority_confirmed,status,consent_text,consent_hash,policy_version,otp_hash,otp_lookup_hash,invitation_token_hash,otp_attempts,otp_expires_at,requested_at,ip_hash,device_hash)
-			VALUES (%d,%s,%s,%s,%s,%s,%s,1,'pending',%s,%s,%s,%s,%s,%s,0,%s,%s,%s,%s)
-			ON DUPLICATE KEY UPDATE guardian_name_enc=VALUES(guardian_name_enc),guardian_email_enc=VALUES(guardian_email_enc),guardian_email_hash=VALUES(guardian_email_hash),guardian_phone_enc=VALUES(guardian_phone_enc),guardian_phone_hash=VALUES(guardian_phone_hash),relationship=VALUES(relationship),legal_authority_confirmed=1,status='pending',consent_text=VALUES(consent_text),consent_hash=VALUES(consent_hash),policy_version=VALUES(policy_version),otp_hash=VALUES(otp_hash),otp_lookup_hash=VALUES(otp_lookup_hash),invitation_token_hash=VALUES(invitation_token_hash),otp_attempts=0,otp_expires_at=VALUES(otp_expires_at),requested_at=VALUES(requested_at),verified_at=NULL,withdrawn_at=NULL,ip_hash=VALUES(ip_hash),device_hash=VALUES(device_hash)",
-			$user_id, $name_enc, $email_enc, $email_hash, $phone_enc, $phone_hash, $relationship, $text, hash( 'sha256', $text ), smc_policy()['version'], wp_hash_password( $code ), $lookup, $token_hash, gmdate( 'Y-m-d H:i:s', time() + 15 * MINUTE_IN_SECONDS ), $now, hash( 'sha256', (string) ( $_SERVER['REMOTE_ADDR'] ?? '' ) . wp_salt( 'nonce' ) ), hash( 'sha256', (string) ( $_SERVER['HTTP_USER_AGENT'] ?? '' ) . wp_salt( 'nonce' ) )
-		);
-		if ( false === $wpdb->query( $sql ) ) {
+		$wpdb->query( 'START TRANSACTION' );
+		$previous = $wpdb->get_row( $wpdb->prepare( "SELECT id,generation FROM {$wpdb->prefix}smc_guardian_consents WHERE user_id=%d AND is_current=1 ORDER BY generation DESC,id DESC LIMIT 1 FOR UPDATE", $user_id ), ARRAY_A );
+		$generation = $previous ? (int) $previous['generation'] + 1 : 1;
+		if ( $previous && 1 !== $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_guardian_consents SET is_current=0,withdrawn_at=IF(status='pending',%s,withdrawn_at),status=IF(status='pending','superseded',status) WHERE id=%d AND user_id=%d AND is_current=1", $now, (int) $previous['id'], $user_id ) ) ) { $wpdb->query( 'ROLLBACK' ); return false; }
+		$inserted = $wpdb->insert( $wpdb->prefix . 'smc_guardian_consents', array(
+			'user_id'=>$user_id,'generation'=>$generation,'is_current'=>1,'guardian_name_enc'=>$name_enc,'guardian_email_enc'=>$email_enc,'guardian_email_hash'=>$email_hash,'guardian_phone_enc'=>$phone_enc,'guardian_phone_hash'=>$phone_hash,'relationship'=>$relationship,'legal_authority_confirmed'=>1,'status'=>'pending','consent_text'=>$consent_text,'consent_hash'=>hash('sha256',$consent_text),'policy_version'=>smc_policy()['version'],'otp_hash'=>wp_hash_password($code),'otp_lookup_hash'=>$lookup,'invitation_token_hash'=>$token_hash,'delivery_receipt_hash'=>null,'delivered_at'=>null,'otp_attempts'=>0,'otp_expires_at'=>gmdate('Y-m-d H:i:s',time()+15*MINUTE_IN_SECONDS),'requested_at'=>$now,'verified_at'=>null,'withdrawn_at'=>null,'ip_hash'=>SMC_Security::blind_index($_SERVER['REMOTE_ADDR']??'','guardian-ip'),'device_hash'=>SMC_Security::blind_index($_SERVER['HTTP_USER_AGENT']??'','guardian-device')
+		) );
+		if ( 1 !== $inserted ) { $wpdb->query( 'ROLLBACK' ); return false; }
+		$consent_id = (int) $wpdb->insert_id;
+		if ( ! SMC_Security::audit( 'guardian_invitation_created', $user_id, array( 'consent_id'=>$consent_id,'generation'=>$generation ) ) ) { $wpdb->query( 'ROLLBACK' ); return false; }
+		if ( false === $wpdb->query( 'COMMIT' ) ) { return false; }
+		$sent = apply_filters( 'smc_send_guardian_invitation', false, array( 'user_id'=>$user_id,'consent_id'=>$consent_id,'generation'=>$generation,'guardian_name'=>$name,'guardian_email'=>$email,'guardian_phone'=>$phone,'code'=>$code,'link'=>$link,'expires_in'=>900 ) );
+		$accepted = true === $sent || ( is_array( $sent ) && ! empty( $sent['accepted'] ) );
+		$provider_receipt = is_array( $sent ) ? (string) ( $sent['receipt_id'] ?? $sent['provider_reference'] ?? '' ) : '';
+		if ( ! $accepted || '' === $provider_receipt ) {
+			$wpdb->query( 'START TRANSACTION' );
+			$new_failed = 1 === $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_guardian_consents SET status='delivery_failed',is_current=0,withdrawn_at=%s WHERE id=%d AND user_id=%d AND status='pending' AND is_current=1", current_time('mysql',true), $consent_id, $user_id ) );
+			$old_restored = ! $previous || 1 === $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_guardian_consents SET is_current=1,withdrawn_at=IF(status='superseded',NULL,withdrawn_at),status=IF(status='superseded','pending',status) WHERE id=%d AND user_id=%d AND is_current=0", (int) $previous['id'], $user_id ) );
+			$audit_ok = $new_failed && $old_restored && SMC_Security::audit( 'guardian_invitation_delivery_failed', $user_id, array( 'consent_id'=>$consent_id,'generation'=>$generation ) );
+			if ( ! $new_failed || ! $old_restored || ! $audit_ok || false === $wpdb->query( 'COMMIT' ) ) { $wpdb->query( 'ROLLBACK' ); return false; }
 			return false;
 		}
-		return true;
+		$receipt_hash = SMC_Security::blind_index( $provider_receipt . '|' . $consent_id . '|' . $generation, 'guardian-delivery-receipt' );
+		$receipt_saved = false;
+		$delivery_audit_ok = false;
+		if ( ! is_wp_error( $receipt_hash ) ) {
+			$wpdb->query( 'START TRANSACTION' );
+			$locked_delivery = $wpdb->get_row( $wpdb->prepare( "SELECT id FROM {$wpdb->prefix}smc_guardian_consents WHERE id=%d AND user_id=%d AND status='pending' AND is_current=1 LIMIT 1 FOR UPDATE", $consent_id, $user_id ), ARRAY_A );
+			$receipt_saved = $locked_delivery ? $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_guardian_consents SET delivery_receipt_hash=%s,delivered_at=%s WHERE id=%d AND user_id=%d AND status='pending' AND is_current=1", $receipt_hash, current_time( 'mysql', true ), $consent_id, $user_id ) ) : false;
+			$delivery_audit_ok = 1 === $receipt_saved && SMC_Security::audit( 'guardian_invitation_delivered', $user_id, array( 'consent_id'=>$consent_id,'generation'=>$generation,'receipt_hash'=>$receipt_hash ) );
+			if ( 1 === $receipt_saved && $delivery_audit_ok && false !== $wpdb->query( 'COMMIT' ) ) {
+				return true;
+			}
+			$wpdb->query( 'ROLLBACK' );
+		}
+		// A provider may already have delivered the code. Make that generation
+		// unverifiable and restore the previous canonical generation so a delivery
+		// without durable receipt/audit evidence cannot become trusted consent.
+		$wpdb->query( 'START TRANSACTION' );
+		$new_failed = 1 === $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_guardian_consents SET status='delivery_failed',is_current=0,withdrawn_at=%s WHERE id=%d AND user_id=%d AND status='pending' AND is_current=1", current_time( 'mysql', true ), $consent_id, $user_id ) );
+		$old_restored = ! $previous || 1 === $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_guardian_consents SET is_current=1,withdrawn_at=IF(status='superseded',NULL,withdrawn_at),status=IF(status='superseded','pending',status) WHERE id=%d AND user_id=%d AND is_current=0", (int) $previous['id'], $user_id ) );
+		$failure_audit_ok = $new_failed && $old_restored && SMC_Security::audit( 'guardian_invitation_receipt_failed', $user_id, array( 'consent_id'=>$consent_id,'generation'=>$generation ) );
+		if ( ! $new_failed || ! $old_restored || ! $failure_audit_ok || false === $wpdb->query( 'COMMIT' ) ) { $wpdb->query( 'ROLLBACK' ); }
+		return false;
 	}
 
 	private static function submit_request( $user_id, $status, $audit_details = array() ) {
@@ -424,7 +517,7 @@ final class SMC_Workflow {
 		}
 		$audit_details = is_array( $audit_details ) ? $audit_details : array();
 		$trace_id = ! empty( $audit_details['trace_id'] ) && preg_match( '/^[0-9a-f-]{36}$/i', (string) $audit_details['trace_id'] ) ? strtolower( (string) $audit_details['trace_id'] ) : wp_generate_uuid4();
-		$queue_type = 'guardian_pending' === $status ? 'guardian' : ( 'resubmitted' === $status ? 'resubmitted' : 'new' );
+		$queue_type = 'guardian_pending' === $status ? ( ! empty( $audit_details['resubmission'] ) ? 'guardian_resubmission' : 'guardian' ) : ( 'resubmitted' === $status ? 'resubmitted' : 'new' );
 		$submitted_roles = ! empty( $audit_details['role_types'] ) ? smc_sanitize_membership_types( $audit_details['role_types'] ) : array( $audit_details['type'] ?? 'member' );
 		if ( array_intersect( $submitted_roles, smc_professional_types() ) ) {
 			$queue_type = 'professional';
@@ -433,13 +526,16 @@ final class SMC_Workflow {
 		$sla_hours = max( 1, absint( SMC_Completion::service_levels()['review_queue_target_hours'] ?? 72 ) );
 		$sla_due = gmdate( 'Y-m-d H:i:s', time() + $sla_hours * HOUR_IN_SECONDS );
 		$applicant_version = (int) $app['row_version'] + 1;
+		$hold = array( 'operation' => 'submit', 'target_status' => sanitize_key( $status ), 'started_at' => time() );
+		update_user_meta( $user_id, '_smc_membership_effects_hold_v1', $hold );
+		if ( get_user_meta( $user_id, '_smc_membership_effects_hold_v1', true ) !== $hold ) { return false; }
 		$wpdb->query( 'START TRANSACTION' );
 		$ok1 = $wpdb->query(
 			$wpdb->prepare(
 				"INSERT INTO {$wpdb->prefix}smc_verification_requests
 				(user_id,status,queue_type,assigned_reviewer,assigned_at,conflict_status,conflict_note,reason_code,trace_id,sla_due_at,reviewer_note,applicant_version,row_version,submitted_at,created_at,updated_at)
 				VALUES (%d,%s,%s,0,NULL,'undeclared',NULL,NULL,%s,%s,NULL,%d,1,%s,%s,%s)
-				ON DUPLICATE KEY UPDATE status=VALUES(status),queue_type=VALUES(queue_type),assigned_reviewer=0,assigned_at=NULL,conflict_status='undeclared',conflict_note=NULL,reason_code=NULL,trace_id=VALUES(trace_id),sla_due_at=VALUES(sla_due_at),reviewer_note=NULL,applicant_version=VALUES(applicant_version),row_version=row_version+1,submitted_at=VALUES(submitted_at),decided_at=NULL,updated_at=VALUES(updated_at)",
+				ON DUPLICATE KEY UPDATE status=VALUES(status),queue_type=VALUES(queue_type),assigned_reviewer=0,assigned_at=NULL,conflict_status='undeclared',conflict_note=NULL,reason_code=NULL,trace_id=VALUES(trace_id),sla_due_at=VALUES(sla_due_at),reviewer_note=NULL,applicant_version=VALUES(applicant_version),approval_generation=NULL,approval_snapshot_hash=NULL,row_version=row_version+1,submitted_at=VALUES(submitted_at),decided_at=NULL,updated_at=VALUES(updated_at)",
 				$user_id, $status, $queue_type, $trace_id, $sla_due, $applicant_version, $now, $now, $now
 			)
 		);
@@ -449,18 +545,29 @@ final class SMC_Workflow {
 				$status, $now, $now, $user_id, (int) $app['row_version']
 			)
 		);
-		$role_ok = false !== $ok1 && 1 === $ok2 && SMC_Contracts::set_all_roles_pending( $user_id, $applicant_version );
-		$sessions_ok = $role_ok && SMC_Security::revoke_all_sessions( $user_id, 'membership_application_submitted' );
+		$role_ok = false !== $ok1 && 1 === $ok2 && SMC_Contracts::set_all_roles_pending( $user_id, $applicant_version, false );
 		$audit_details['queue_type'] = $queue_type;
 		$audit_details['trace_id'] = $trace_id;
 		$audit_details['applicant_version'] = $applicant_version;
-		$audit_ok = $sessions_ok && SMC_Security::audit( 'membership_application_submitted', $user_id, $audit_details );
-		if ( false === $ok1 || 1 !== $ok2 || ! $role_ok || ! $sessions_ok || ! $audit_ok ) {
+		$audit_ok = $role_ok && SMC_Security::audit( 'membership_application_submitted', $user_id, $audit_details );
+		if ( false === $ok1 || 1 !== $ok2 || ! $role_ok || ! $audit_ok || false === $wpdb->query( 'COMMIT' ) ) {
 			$wpdb->query( 'ROLLBACK' );
+			delete_user_meta( $user_id, '_smc_membership_effects_hold_v1' );
 			clean_user_cache( $user_id );
 			return false;
 		}
-		$wpdb->query( 'COMMIT' );
+		$roles_wp_ok = SMC_Contracts::sync_wordpress_roles( $user_id );
+		$sessions_ok = $roles_wp_ok && SMC_Security::revoke_all_sessions( $user_id, 'membership_application_submitted' );
+		if ( ! $roles_wp_ok || ! $sessions_ok ) {
+			SMC_Completion::queue_effects_repair( $user_id, 'submit', $status, 'postcommit_effects' );
+			clean_user_cache( $user_id );
+			return false;
+		}
+		delete_user_meta( $user_id, '_smc_membership_effects_hold_v1' );
+		if ( metadata_exists( 'user', $user_id, '_smc_membership_effects_hold_v1' ) ) {
+			SMC_Completion::queue_effects_repair( $user_id, 'submit', $status, 'hold_release_failed' );
+			return false;
+		}
 		clean_user_cache( $user_id );
 		return true;
 	}
@@ -476,17 +583,41 @@ final class SMC_Workflow {
 			return smc_notice( __( 'No membership application exists yet.', 'sabri-membership-core' ), 'warning' );
 		}
 		$a = SMC_Contracts::assertions( $user_id );
+		global $wpdb;
+		$request = $wpdb->get_row( $wpdb->prepare( "SELECT status,queue_type,sla_due_at,submitted_at,updated_at FROM {$wpdb->prefix}smc_verification_requests WHERE user_id=%d ORDER BY id DESC LIMIT 1", $user_id ), ARRAY_A );
+		$next_action = __( 'No immediate action. The authoritative review state will update here.', 'sabri-membership-core' );
+		if ( ! $a['email_verified'] ) { $next_action = __( 'Verify email ownership using the configured delivery provider.', 'sabri-membership-core' ); }
+		elseif ( ! $a['phone_verified'] ) { $next_action = __( 'Verify mobile ownership using the configured SMS provider.', 'sabri-membership-core' ); }
+		elseif ( ! $a['two_factor_ready'] ) { $next_action = __( 'Enable two-factor authentication in Membership Security.', 'sabri-membership-core' ); }
+		elseif ( ! $a['guardian_verified'] ) { $next_action = __( 'Complete the current guardian-consent generation.', 'sabri-membership-core' ); }
+		elseif ( 'more_information' === $a['status'] ) { $next_action = __( 'Provide the requested correction and resubmit.', 'sabri-membership-core' ); }
+		elseif ( in_array( $a['status'], array( 'rejected','suspended' ), true ) ) { $next_action = __( 'Use the governed appeal path if you have corrective evidence.', 'sabri-membership-core' ); }
+		$application_label = smc_statuses()[ $a['status']] ?? $a['status'];
+		if ( ! empty( $a['institutional_account'] ) && 'verified' === $a['status'] && ( ! $a['email_verified'] || ! $a['phone_verified'] || ! $a['two_factor_ready'] ) ) {
+			$application_label = __( 'Institutionally recognized — security/contact setup incomplete', 'sabri-membership-core' );
+		}
+		$blockers = array();
+		if ( class_exists( 'SMC_Completion' ) && SMC_Completion::safe_mode() ) { $blockers[] = __( 'Safe Mode is active; risky writes are restricted.', 'sabri-membership-core' ); }
+		if ( metadata_exists( 'user', $user_id, '_smc_membership_effects_hold_v1' ) ) { $blockers[] = __( 'A membership side-effect repair is pending.', 'sabri-membership-core' ); }
+		if ( ! $a['email_verified'] && class_exists( 'SMC_Contact_Delivery' ) && ! SMC_Contact_Delivery::email_provider_ready() ) { $blockers[] = __( 'Email delivery readiness is not advertised by File 19.', 'sabri-membership-core' ); }
+		if ( ! $a['phone_verified'] && class_exists( 'SMC_Contact_Delivery' ) && ! SMC_Contact_Delivery::mobile_provider_ready() ) { $blockers[] = __( 'SMS delivery readiness is not advertised by File 19.', 'sabri-membership-core' ); }
 		ob_start();
 		?>
 		<main class="smc-panel" aria-labelledby="smc-status-title">
 			<?php echo self::message(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 			<h1 id="smc-status-title"><?php esc_html_e( 'Membership Status', 'sabri-membership-core' ); ?></h1>
+			<nav class="smc-status-journey" aria-label="<?php esc_attr_e( 'Membership journey', 'sabri-membership-core' ); ?>"><a class="smc-button" href="<?php echo esc_url( smc_page_url( 'application', '/membership-application/' ) ); ?>"><?php esc_html_e( 'Membership Application', 'sabri-membership-core' ); ?></a> <a class="smc-button" href="<?php echo esc_url( smc_page_url( 'security', '/membership-security/' ) ); ?>"><?php esc_html_e( 'Security Center', 'sabri-membership-core' ); ?></a> <a class="smc-button" href="<?php echo esc_url( home_url( '/' ) ); ?>"><?php esc_html_e( 'Home', 'sabri-membership-core' ); ?></a></nav>
 			<dl class="smc-status-grid">
-				<div><dt><?php esc_html_e( 'Application', 'sabri-membership-core' ); ?></dt><dd><?php echo esc_html( smc_statuses()[ $a['status']] ?? $a['status'] ); ?></dd></div>
+				<div><dt><?php esc_html_e( 'Application', 'sabri-membership-core' ); ?></dt><dd><?php echo esc_html( $application_label ); ?></dd></div>
 				<div><dt><?php esc_html_e( 'Email ownership', 'sabri-membership-core' ); ?></dt><dd><?php echo $a['email_verified'] ? esc_html__( 'Verified', 'sabri-membership-core' ) : esc_html__( 'Pending', 'sabri-membership-core' ); ?></dd></div>
 				<div><dt><?php esc_html_e( 'Mobile ownership', 'sabri-membership-core' ); ?></dt><dd><?php echo $a['phone_verified'] ? esc_html__( 'Verified', 'sabri-membership-core' ) : esc_html__( 'Pending', 'sabri-membership-core' ); ?></dd></div>
 				<div><dt><?php esc_html_e( 'Guardian consent', 'sabri-membership-core' ); ?></dt><dd><?php echo $a['guardian_verified'] ? esc_html__( 'Verified or not required', 'sabri-membership-core' ) : esc_html__( 'Pending', 'sabri-membership-core' ); ?></dd></div>
 				<div><dt><?php esc_html_e( 'Two-factor security', 'sabri-membership-core' ); ?></dt><dd><?php echo $a['two_factor_ready'] ? esc_html__( 'Enabled', 'sabri-membership-core' ) : esc_html__( 'Required', 'sabri-membership-core' ); ?></dd></div>
+				<div><dt><?php esc_html_e( 'Submitted', 'sabri-membership-core' ); ?></dt><dd><?php echo esc_html( (string) ( $row['submitted_at'] ?: ( $request['submitted_at'] ?? '—' ) ) ); ?></dd></div>
+				<div><dt><?php esc_html_e( 'Last updated', 'sabri-membership-core' ); ?></dt><dd><?php echo esc_html( (string) ( $row['updated_at'] ?? '—' ) ); ?></dd></div>
+				<div><dt><?php esc_html_e( 'Review state', 'sabri-membership-core' ); ?></dt><dd><?php echo esc_html( (string) ( $request['status'] ?? __( 'Not queued', 'sabri-membership-core' ) ) ); ?></dd></div>
+				<div><dt><?php esc_html_e( 'Next action', 'sabri-membership-core' ); ?></dt><dd><?php echo esc_html( $next_action ); ?></dd></div>
+				<div><dt><?php esc_html_e( 'Known blockers', 'sabri-membership-core' ); ?></dt><dd><?php echo esc_html( $blockers ? implode( ' ', $blockers ) : __( 'None currently reported by File 00.', 'sabri-membership-core' ) ); ?></dd></div>
 			</dl>
 			<?php self::contact_forms( $user_id ); ?>
 			<p><a class="smc-button" href="<?php echo esc_url( smc_page_url( 'security', '/membership-security/' ) ); ?>"><?php esc_html_e( 'Open Security Center', 'sabri-membership-core' ); ?></a></p>
@@ -512,6 +643,8 @@ final class SMC_Workflow {
 			}
 			?>
 			<section class="smc-subpanel"><h2><?php echo esc_html( $label . ' ' . __( 'Verification', 'sabri-membership-core' ) ); ?></h2>
+				<?php $provider_ready = class_exists( 'SMC_Contact_Delivery' ) && ( 'email' === $channel ? SMC_Contact_Delivery::email_provider_ready() : SMC_Contact_Delivery::mobile_provider_ready() ); ?>
+				<?php if ( ! $provider_ready ) : ?><p class="smc-notice smc-notice--warning <?php echo 'email' === $channel ? 'smc-email-provider-warning' : 'smc-sms-provider-warning'; ?>"><?php echo esc_html( 'email' === $channel ? __( 'Email OTP provider readiness is not advertised. File 19 must supply a receipt-bearing delivery adapter; the send action remains available so a configured adapter can respond authoritatively.', 'sabri-membership-core' ) : __( 'Mobile SMS provider readiness is not advertised. File 19 must supply a receipt-bearing SMS adapter; the send action remains available so a configured adapter can respond authoritatively.', 'sabri-membership-core' ) ); ?></p><?php endif; ?>
 				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"><input type="hidden" name="action" value="smc_request_contact_otp"><input type="hidden" name="channel" value="<?php echo esc_attr( $channel ); ?>"><?php wp_nonce_field( 'smc_request_contact_otp', 'smc_nonce' ); ?><button class="smc-button"><?php echo esc_html( sprintf( __( 'Send %s Code', 'sabri-membership-core' ), $label ) ); ?></button></form>
 				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="smc-inline-form"><input type="hidden" name="action" value="smc_verify_contact_otp"><input type="hidden" name="channel" value="<?php echo esc_attr( $channel ); ?>"><?php wp_nonce_field( 'smc_verify_contact_otp', 'smc_nonce' ); ?><label><?php esc_html_e( 'Six-digit code', 'sabri-membership-core' ); ?><input name="code" inputmode="numeric" pattern="[0-9]{6}" required></label><button class="smc-button"><?php esc_html_e( 'Verify', 'sabri-membership-core' ); ?></button></form>
 			</section>
@@ -523,11 +656,12 @@ final class SMC_Workflow {
 		self::guard_user_action( 'smc_request_contact_otp' );
 		$user_id = get_current_user_id();
 		$channel = sanitize_key( wp_unslash( $_POST['channel'] ?? '' ) );
-		if ( ! in_array( $channel, array( 'email', 'mobile' ), true ) || SMC_Security::rate_limited( 'contact-otp|' . $user_id . '|' . $channel, 4, HOUR_IN_SECONDS ) ) {
+		if ( ! in_array( $channel, array( 'email', 'mobile' ), true ) || SMC_Contracts::contact_verified( $user_id, $channel ) || SMC_Security::rate_limited( 'contact-otp|' . $user_id . '|' . $channel, 4, HOUR_IN_SECONDS ) ) {
 			self::redirect( 'status', 'invalid' );
 		}
 		$user = get_userdata( $user_id );
 		$app = smc_application( $user_id );
+		if ( ! $user ) { self::redirect( 'status', 'invalid' ); }
 		$target = 'email' === $channel ? $user->user_email : self::decrypt_phone( $app );
 		if ( ! $target || is_wp_error( $target ) ) {
 			self::redirect( 'status', 'invalid' );
@@ -539,21 +673,44 @@ final class SMC_Workflow {
 			self::redirect( 'status', 'invalid' );
 		}
 		global $wpdb;
+		$last_created = $wpdb->get_var( $wpdb->prepare( "SELECT created_at FROM {$wpdb->prefix}smc_contact_otps WHERE user_id=%d AND channel=%s AND verified_at IS NULL LIMIT 1", $user_id, $channel ) );
+		if ( $last_created && strtotime( $last_created . ' UTC' ) > time() - 60 ) {
+			self::redirect( 'status', 'cooldown' );
+		}
 		$now = current_time( 'mysql', true );
 		$sql = $wpdb->prepare(
-			"INSERT INTO {$wpdb->prefix}smc_contact_otps (user_id,channel,target_hash,code_lookup_hash,code_hash,attempts,expires_at,verified_at,created_at)
-			VALUES (%d,%s,%s,%s,%s,0,%s,NULL,%s)
-			ON DUPLICATE KEY UPDATE target_hash=VALUES(target_hash),code_lookup_hash=VALUES(code_lookup_hash),code_hash=VALUES(code_hash),attempts=0,expires_at=VALUES(expires_at),verified_at=NULL,created_at=VALUES(created_at)",
+			"INSERT INTO {$wpdb->prefix}smc_contact_otps (user_id,channel,target_hash,code_lookup_hash,code_hash,attempts,expires_at,delivery_receipt_hash,delivered_at,verified_at,created_at)
+			VALUES (%d,%s,%s,%s,%s,0,%s,NULL,NULL,NULL,%s)
+			ON DUPLICATE KEY UPDATE target_hash=VALUES(target_hash),code_lookup_hash=VALUES(code_lookup_hash),code_hash=VALUES(code_hash),attempts=0,expires_at=VALUES(expires_at),delivery_receipt_hash=NULL,delivered_at=NULL,verified_at=NULL,created_at=VALUES(created_at)",
 			$user_id, $channel, $target_hash, $lookup, wp_hash_password( $code ), gmdate( 'Y-m-d H:i:s', time() + 10 * MINUTE_IN_SECONDS ), $now
 		);
 		if ( false === $wpdb->query( $sql ) ) {
 			self::redirect( 'status', 'invalid' );
 		}
-		$sent = apply_filters( 'smc_send_contact_otp', false, array( 'user_id' => $user_id, 'channel' => $channel, 'target' => $target, 'code' => $code, 'expires_in' => 600 ) );
-		if ( true !== $sent ) {
+		$sent = class_exists( 'SMC_Contact_Delivery' ) ? SMC_Contact_Delivery::send_otp( array( 'user_id' => $user_id, 'channel' => $channel, 'target' => $target, 'code' => $code, 'expires_in' => 600 ) ) : false;
+		$accepted = true === $sent || ( is_array( $sent ) && ! empty( $sent['accepted'] ) );
+		if ( ! $accepted ) {
 			$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->prefix}smc_contact_otps WHERE user_id=%d AND channel=%s AND target_hash=%s AND code_lookup_hash=%s AND verified_at IS NULL", $user_id, $channel, $target_hash, $lookup ) );
 			SMC_Security::audit( 'contact_otp_delivery_failed', $user_id, array( 'channel' => $channel ) );
 			self::redirect( 'status', 'provider' );
+		}
+		$provider_receipt = is_array( $sent ) ? (string) ( $sent['receipt_id'] ?? $sent['provider_reference'] ?? '' ) : '';
+		if ( '' === $provider_receipt ) {
+			$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->prefix}smc_contact_otps WHERE user_id=%d AND channel=%s AND target_hash=%s AND code_lookup_hash=%s AND verified_at IS NULL", $user_id, $channel, $target_hash, $lookup ) );
+			SMC_Security::audit( 'contact_otp_provider_receipt_missing', $user_id, array( 'channel' => $channel ) );
+			self::redirect( 'status', 'provider' );
+		}
+		$receipt_hash = SMC_Security::blind_index( $provider_receipt . '|' . $channel . '|' . $target_hash . '|' . $lookup, 'contact-delivery-receipt' );
+		$delivered_at = current_time( 'mysql', true );
+		$wpdb->query( 'START TRANSACTION' );
+		$locked_otp = is_wp_error( $receipt_hash ) ? null : $wpdb->get_row( $wpdb->prepare( "SELECT id FROM {$wpdb->prefix}smc_contact_otps WHERE user_id=%d AND channel=%s AND target_hash=%s AND code_lookup_hash=%s AND verified_at IS NULL LIMIT 1 FOR UPDATE", $user_id, $channel, $target_hash, $lookup ), ARRAY_A );
+		$receipt_saved = $locked_otp ? $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_contact_otps SET delivery_receipt_hash=%s,delivered_at=%s WHERE id=%d AND verified_at IS NULL", $receipt_hash, $delivered_at, (int) $locked_otp['id'] ) ) : false;
+		$delivery_audit_ok = 1 === $receipt_saved && SMC_Security::audit( 'contact_otp_delivered', $user_id, array( 'channel' => $channel, 'receipt_hash' => $receipt_hash ) );
+		if ( 1 !== $receipt_saved || ! $delivery_audit_ok || false === $wpdb->query( 'COMMIT' ) ) {
+			$wpdb->query( 'ROLLBACK' );
+			$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->prefix}smc_contact_otps WHERE user_id=%d AND channel=%s AND target_hash=%s AND code_lookup_hash=%s AND verified_at IS NULL", $user_id, $channel, $target_hash, $lookup ) );
+			SMC_Security::audit( 'contact_otp_delivery_receipt_failed', $user_id, array( 'channel' => $channel ) );
+			self::redirect( 'status', 'invalid' );
 		}
 		self::redirect( 'status', 'otp_sent' );
 	}
@@ -568,20 +725,27 @@ final class SMC_Workflow {
 		}
 		global $wpdb;
 		$lookup = SMC_Security::blind_index( $code, 'contact-otp' );
-		$row = is_wp_error( $lookup ) ? null : $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}smc_contact_otps WHERE user_id=%d AND channel=%s AND code_lookup_hash=%s AND verified_at IS NULL AND expires_at>UTC_TIMESTAMP() LIMIT 1", $user_id, $channel, $lookup ), ARRAY_A );
-		if ( ! $row || (int) $row['attempts'] >= 7 || ! wp_check_password( $code, $row['code_hash'] ) ) {
+		if ( is_wp_error( $lookup ) ) { self::redirect( 'status', 'invalid' ); }
+		$user = get_userdata( $user_id );
+		$app = smc_application( $user_id );
+		$current_target = 'email' === $channel ? ( $user ? $user->user_email : '' ) : self::decrypt_phone( $app );
+		$current_target_hash = ( ! $current_target || is_wp_error( $current_target ) ) ? false : SMC_Security::blind_index( $current_target, 'contact-target' );
+		if ( is_wp_error( $current_target_hash ) || ! is_string( $current_target_hash ) ) { self::redirect( 'status', 'invalid' ); }
+		$wpdb->query( 'START TRANSACTION' );
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}smc_contact_otps WHERE user_id=%d AND channel=%s AND code_lookup_hash=%s AND verified_at IS NULL AND delivery_receipt_hash IS NOT NULL AND delivered_at IS NOT NULL AND expires_at>UTC_TIMESTAMP() LIMIT 1 FOR UPDATE", $user_id, $channel, $lookup ), ARRAY_A );
+		$target_is_current = $row && hash_equals( (string) $row['target_hash'], $current_target_hash );
+		if ( ! $row || ! $target_is_current || (int) $row['attempts'] >= 7 || ! wp_check_password( $code, $row['code_hash'] ) ) {
 			if ( $row ) {
 				$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_contact_otps SET attempts=attempts+1 WHERE id=%d AND verified_at IS NULL", (int) $row['id'] ) );
 			}
+			if ( false === $wpdb->query( 'COMMIT' ) ) { $wpdb->query( 'ROLLBACK' ); }
 			self::redirect( 'status', 'invalid' );
 		}
 		$now = current_time( 'mysql', true );
-		$ok = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_contact_otps SET verified_at=%s WHERE id=%d AND verified_at IS NULL", $now, (int) $row['id'] ) );
-		if ( 1 !== $ok ) {
-			self::redirect( 'status', 'invalid' );
-		}
-		if ( ! SMC_Security::audit( $channel . '_ownership_verified', $user_id ) ) {
-			$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_contact_otps SET verified_at=NULL WHERE id=%d AND verified_at=%s", (int) $row['id'], $now ) );
+		$ok = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_contact_otps SET verified_at=%s,code_hash='',code_lookup_hash='',expires_at=%s WHERE id=%d AND verified_at IS NULL AND delivery_receipt_hash IS NOT NULL AND delivered_at IS NOT NULL", $now, $now, (int) $row['id'] ) );
+		$audit_ok = 1 === $ok && SMC_Security::audit( $channel . '_ownership_verified', $user_id, array( 'delivery_receipt_hash' => (string) $row['delivery_receipt_hash'] ) );
+		if ( 1 !== $ok || ! $audit_ok || false === $wpdb->query( 'COMMIT' ) ) {
+			$wpdb->query( 'ROLLBACK' );
 			self::redirect( 'status', 'invalid' );
 		}
 		self::redirect( 'status', 'otp_verified' );
@@ -614,22 +778,42 @@ final class SMC_Workflow {
 		<main class="smc-panel" aria-labelledby="smc-security-title">
 			<?php echo self::message(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 			<h1 id="smc-security-title"><?php esc_html_e( 'Membership Security', 'sabri-membership-core' ); ?></h1>
-			<?php if ( $receipt ) : ?><section class="smc-subpanel" role="status"><h2><?php esc_html_e( 'One-time recovery codes', 'sabri-membership-core' ); ?></h2><p><?php esc_html_e( 'Save these now. They will not be displayed again.', 'sabri-membership-core' ); ?></p><ol><?php foreach ( $receipt as $code ) : ?><li><code><?php echo esc_html( $code ); ?></code></li><?php endforeach; ?></ol></section><?php endif; ?>
+			<?php if ( $receipt ) : ?><section class="smc-subpanel" role="status" id="smc-recovery-receipt"><h2><?php esc_html_e( 'One-time recovery codes', 'sabri-membership-core' ); ?></h2><p><?php esc_html_e( 'Save these now. This protected receipt remains available for five minutes or until you explicitly confirm that it was saved.', 'sabri-membership-core' ); ?></p><ol id="smc-recovery-codes"><?php foreach ( $receipt as $code ) : ?><li><code><?php echo esc_html( $code ); ?></code></li><?php endforeach; ?></ol><div class="smc-actions"><button class="smc-button smc-button--secondary" type="button" data-smc-copy-recovery><?php esc_html_e( 'Copy Recovery Codes', 'sabri-membership-core' ); ?></button><button class="smc-button smc-button--secondary" type="button" data-smc-print-recovery><?php esc_html_e( 'Print Recovery Codes', 'sabri-membership-core' ); ?></button></div><p class="smc-muted" aria-live="polite" data-smc-recovery-feedback></p><form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"><input type="hidden" name="action" value="smc_ack_recovery_receipt"><?php wp_nonce_field( 'smc_ack_recovery_receipt', 'smc_nonce' ); ?><button class="smc-button"><?php esc_html_e( 'I saved these recovery codes', 'sabri-membership-core' ); ?></button></form></section><?php endif; ?>
 			<?php if ( ! $enabled && ! $secret ) : ?>
 				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"><input type="hidden" name="action" value="smc_start_2fa"><?php wp_nonce_field( 'smc_start_2fa', 'smc_nonce' ); ?><button class="smc-button"><?php esc_html_e( 'Begin Authenticator Setup', 'sabri-membership-core' ); ?></button></form>
-			<?php elseif ( ! $enabled ) : ?>
-				<section class="smc-subpanel"><h2><?php esc_html_e( 'Authenticator setup', 'sabri-membership-core' ); ?></h2><p><?php esc_html_e( 'Enter this secret in a standards-compatible authenticator, then confirm a current code.', 'sabri-membership-core' ); ?></p><p><code><?php echo esc_html( $secret ); ?></code></p>
-				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="smc-inline-form"><input type="hidden" name="action" value="smc_finish_2fa"><?php wp_nonce_field( 'smc_finish_2fa', 'smc_nonce' ); ?><label><?php esc_html_e( 'Six-digit code', 'sabri-membership-core' ); ?><input name="code" inputmode="numeric" pattern="[0-9]{6}" required></label><button class="smc-button"><?php esc_html_e( 'Enable Two-Factor Authentication', 'sabri-membership-core' ); ?></button></form></section>
+			<?php elseif ( $secret ) : ?>
+				<section class="smc-subpanel"><h2><?php esc_html_e( 'Authenticator setup', 'sabri-membership-core' ); ?></h2><p><?php esc_html_e( 'Enter this secret in a standards-compatible authenticator, then confirm a current code.', 'sabri-membership-core' ); ?></p><p><strong><?php esc_html_e( 'Required authenticator profile:', 'sabri-membership-core' ); ?></strong> <?php esc_html_e( 'Time-based TOTP, SHA-1, six digits, 30-second period.', 'sabri-membership-core' ); ?></p><p><?php echo esc_html( sprintf( __( 'This setup secret expires in about %d minute(s).', 'sabri-membership-core' ), max( 1, (int) ceil( ( $expires - time() ) / MINUTE_IN_SECONDS ) ) ) ); ?></p><p><code><?php echo esc_html( $secret ); ?></code></p>
+				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="smc-inline-form"><input type="hidden" name="action" value="smc_finish_2fa"><?php wp_nonce_field( 'smc_finish_2fa', 'smc_nonce' ); ?><label><?php esc_html_e( 'Six-digit code', 'sabri-membership-core' ); ?><input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required></label><button class="smc-button"><?php esc_html_e( 'Enable Two-Factor Authentication', 'sabri-membership-core' ); ?></button></form></section>
 			<?php elseif ( ! SMC_Security::session_is_verified( $user_id ) ) : ?>
 				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="smc-inline-form"><input type="hidden" name="action" value="smc_challenge_2fa"><?php wp_nonce_field( 'smc_challenge_2fa', 'smc_nonce' ); ?><label><?php esc_html_e( 'Authenticator or recovery code', 'sabri-membership-core' ); ?><input name="code" autocomplete="one-time-code" required></label><button class="smc-button"><?php esc_html_e( 'Verify This Session', 'sabri-membership-core' ); ?></button></form>
 			<?php else : ?>
 				<p><?php esc_html_e( 'This session has a current two-factor verification.', 'sabri-membership-core' ); ?></p>
 				<?php self::session_list( $user_id ); ?>
+				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="smc-form"><input type="hidden" name="action" value="smc_revoke_all_sessions"><?php wp_nonce_field( 'smc_revoke_all_sessions', 'smc_nonce' ); ?><label class="smc-check"><input type="checkbox" name="confirm_revoke_all" value="1" required> <?php esc_html_e( 'I understand this signs out every device, including this one.', 'sabri-membership-core' ); ?></label><button class="smc-button smc-button--danger"><?php esc_html_e( 'Revoke All Sessions', 'sabri-membership-core' ); ?></button></form>
+				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="smc-form"><input type="hidden" name="action" value="smc_start_2fa"><?php wp_nonce_field( 'smc_start_2fa', 'smc_nonce' ); ?><h2><?php esc_html_e( 'Replace Authenticator', 'sabri-membership-core' ); ?></h2><label><?php esc_html_e( 'Current password', 'sabri-membership-core' ); ?><input name="password" type="password" autocomplete="current-password" required></label><label><?php esc_html_e( 'Current authenticator or recovery code', 'sabri-membership-core' ); ?><input name="current_code" autocomplete="one-time-code" required></label><button class="smc-button"><?php esc_html_e( 'Start Secure Authenticator Replacement', 'sabri-membership-core' ); ?></button></form>
 				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="smc-form"><input type="hidden" name="action" value="smc_rotate_recovery"><?php wp_nonce_field( 'smc_rotate_recovery', 'smc_nonce' ); ?><label><?php esc_html_e( 'Current password', 'sabri-membership-core' ); ?><input name="password" type="password" autocomplete="current-password" required></label><label><?php esc_html_e( 'Current authenticator code', 'sabri-membership-core' ); ?><input name="code" inputmode="numeric" pattern="[0-9]{6}" required></label><button class="smc-button"><?php esc_html_e( 'Replace Recovery Codes', 'sabri-membership-core' ); ?></button></form>
 			<?php endif; ?>
+			<section class="smc-subpanel"><h2><?php esc_html_e( 'Recovery guidance', 'sabri-membership-core' ); ?></h2><p><?php esc_html_e( 'Keep recovery codes offline and private. If you lose the authenticator and all recovery codes, use the governed account-recovery path; support staff cannot simply take over or bypass identity assurance.', 'sabri-membership-core' ); ?></p></section>
+			<?php self::security_event_list( $user_id ); ?>
 		</main>
 		<?php
 		return ob_get_clean();
+	}
+
+	private static function security_event_list( $user_id ) {
+		global $wpdb;
+		$subject_hash = SMC_Security::blind_index( (string) absint( $user_id ), 'audit-subject' );
+		if ( is_wp_error( $subject_hash ) ) { return; }
+		$actions = array( 'two_factor_enabled','two_factor_replaced','two_factor_challenge_passed','recovery_codes_rotated','recovery_code_used','membership_session_revoked','sessions_revoked','email_ownership_verified','mobile_ownership_verified' );
+		$placeholders = implode( ',', array_fill( 0, count( $actions ), '%s' ) );
+		$params = array_merge( array( $subject_hash ), $actions );
+		$sql = $wpdb->prepare( "SELECT action,created_at FROM {$wpdb->prefix}smc_audit_log WHERE subject_hash=%s AND action IN ({$placeholders}) ORDER BY id DESC LIMIT 10", $params );
+		$rows = $wpdb->get_results( $sql, ARRAY_A );
+		echo '<section class="smc-subpanel"><h2>' . esc_html__( 'Recent security events', 'sabri-membership-core' ) . '</h2><ul>';
+		if ( $rows ) {
+			foreach ( $rows as $row ) { echo '<li><code>' . esc_html( (string) $row['action'] ) . '</code> · ' . esc_html( (string) $row['created_at'] ) . '</li>'; }
+		} else { echo '<li>' . esc_html__( 'No recent File 00 security events were found.', 'sabri-membership-core' ) . '</li>'; }
+		echo '</ul></section>';
 	}
 
 	private static function session_list( $user_id ) {
@@ -657,6 +841,20 @@ final class SMC_Workflow {
 	}
 
 
+	public static function handle_revoke_all_sessions() {
+		self::guard_user_action( 'smc_revoke_all_sessions' );
+		$user_id = get_current_user_id();
+		if ( empty( $_POST['confirm_revoke_all'] ) || ! SMC_Security::session_is_verified( $user_id ) ) {
+			self::redirect( 'security', 'invalid' );
+		}
+		if ( ! SMC_Security::revoke_all_sessions( $user_id, 'user_requested_revoke_all' ) ) {
+			self::redirect( 'security', 'invalid' );
+		}
+		wp_clear_auth_cookie();
+		wp_safe_redirect( add_query_arg( 'smc_sessions_revoked', '1', home_url( '/' ) ) );
+		exit;
+	}
+
 	private static function write_user_meta_verified( $user_id, $key, $value ) {
 		update_user_meta( $user_id, $key, $value );
 		$stored = get_user_meta( $user_id, $key, true );
@@ -671,8 +869,14 @@ final class SMC_Workflow {
 	public static function handle_start_2fa() {
 		self::guard_user_action( 'smc_start_2fa' );
 		$user_id = get_current_user_id();
+		$replacing = SMC_Security::two_factor_ready( $user_id );
+		if ( $replacing ) {
+			$password = (string) wp_unslash( $_POST['password'] ?? '' ); $current_code = (string) wp_unslash( $_POST['current_code'] ?? '' ); $user = wp_get_current_user();
+			if ( ! SMC_Security::session_is_verified( $user_id ) || ! wp_check_password( $password, $user->user_pass, $user_id ) || ( ! SMC_Security::verify_current_factor_without_session_rotation( $user_id, $current_code ) ) ) { self::redirect( 'security', 'invalid' ); }
+			$receipt = SMC_Security::create_factor_replacement_receipt( $user_id ); if ( is_wp_error( $receipt ) ) { self::redirect( 'security', 'invalid' ); }
+		}
 		$secret = SMC_Security::base32_secret();
-		$expires = time() + 10 * MINUTE_IN_SECONDS;
+		$expires = time() + 20 * MINUTE_IN_SECONDS;
 		$enc = SMC_Security::encrypt( $secret, 'totp-pending', array( 'user_id' => $user_id, 'expires' => $expires ) );
 		if ( is_wp_error( $enc ) ) {
 			self::redirect( 'security', 'invalid' );
@@ -691,43 +895,67 @@ final class SMC_Workflow {
 	public static function handle_finish_2fa() {
 		self::guard_user_action( 'smc_finish_2fa' );
 		$user_id = get_current_user_id();
-		$expires = (int) get_user_meta( $user_id, '_smc_totp_pending_expires', true );
-		$enc = get_user_meta( $user_id, '_smc_totp_pending_enc', true );
-		$secret = $expires > time() ? SMC_Security::decrypt( $enc, 'totp-pending', array( 'user_id' => $user_id, 'expires' => $expires ) ) : false;
 		$code = preg_replace( '/\D/', '', wp_unslash( $_POST['code'] ?? '' ) );
-		if ( ! is_string( $secret ) || ! SMC_Security::verify_setup_code( $secret, $code ) ) {
-			self::redirect( 'security', 'invalid' );
+		$pending = get_user_meta( $user_id, '_smc_totp_pending_enc', true );
+		$expires = absint( get_user_meta( $user_id, '_smc_totp_pending_expires', true ) );
+
+		if ( 6 !== strlen( $code ) ) {
+			self::redirect( 'security', 'totp_format' );
 		}
-		$saved = SMC_Security::set_two_factor_secret( $user_id, $secret );
-		if ( is_wp_error( $saved ) ) {
-			self::redirect( 'security', 'invalid' );
+		if ( ! $pending || ! $expires || $expires <= time() ) {
+			self::delete_user_meta_verified( $user_id, '_smc_totp_pending_enc' );
+			self::delete_user_meta_verified( $user_id, '_smc_totp_pending_expires' );
+			self::redirect( 'security', 'totp_expired' );
 		}
-		$enabled_ok = self::write_user_meta_verified( $user_id, '_smc_2fa_enabled', 1 );
-		$pending_enc_deleted = self::delete_user_meta_verified( $user_id, '_smc_totp_pending_enc' );
-		$pending_expiry_deleted = self::delete_user_meta_verified( $user_id, '_smc_totp_pending_expires' );
-		$codes = $enabled_ok && $pending_enc_deleted && $pending_expiry_deleted
-			? SMC_Security::recovery_codes(
-				$user_id,
-				8,
-				static function ( $generated_codes ) use ( $user_id ) {
-					return self::store_recovery_receipt( $user_id, $generated_codes );
-				}
-			)
-			: new WP_Error( 'smc_two_factor_metadata', __( 'Two-factor setup metadata could not be committed.', 'sabri-membership-core' ) );
-		if ( is_wp_error( $codes ) ) {
-			global $wpdb;
-			self::delete_user_meta_verified( $user_id, '_smc_2fa_enabled' );
-			self::delete_user_meta_verified( $user_id, '_smc_totp_secret_enc' );
-			self::delete_user_meta_verified( $user_id, '_smc_recovery_receipt_v2' );
-			$wpdb->delete( $wpdb->prefix . 'smc_recovery_codes', array( 'user_id' => $user_id ), array( '%d' ) );
-			SMC_Security::revoke_all_sessions( $user_id, 'two_factor_setup_rollback' );
-			SMC_Security::audit( 'two_factor_setup_rolled_back', $user_id, array( 'reason' => $codes->get_error_message() ) );
-			self::redirect( 'security', 'invalid' );
+
+		$secret = SMC_Security::decrypt( $pending, 'totp-pending', array( 'user_id' => $user_id, 'expires' => $expires ) );
+		if ( is_wp_error( $secret ) || ! is_string( $secret ) || '' === $secret ) {
+			SMC_Security::audit( 'two_factor_pending_decrypt_failed', $user_id );
+			self::redirect( 'security', 'totp_backend' );
 		}
-		$challenge = SMC_Security::verify_two_factor_challenge( $user_id, $code );
-		if ( is_wp_error( $challenge ) || false === $challenge ) {
-			self::redirect( 'security', 'invalid' );
+
+		/*
+		 * Distinguish an actual TOTP mismatch from a later fail-closed storage/audit
+		 * failure. Previously every downstream WP_Error was collapsed into "invalid",
+		 * so a mathematically correct authenticator code could look wrong to the user.
+		 */
+		if ( ! SMC_Security::verify_setup_code( $secret, $code ) ) {
+			SMC_Security::audit( 'two_factor_setup_code_mismatch', $user_id );
+			self::redirect( 'security', 'totp_mismatch' );
 		}
+
+		$replacement = SMC_Security::two_factor_ready( $user_id );
+		$result = SMC_Security::commit_factor_enrollment_or_replacement( $user_id, $secret, $code, $replacement, array( __CLASS__, 'store_recovery_receipt' ) );
+
+		if ( is_wp_error( $result ) ) {
+			$error_code = (string) $result->get_error_code();
+			if ( 'smc_factor_session_revoke' === $error_code && SMC_Security::two_factor_ready( $user_id ) ) {
+				self::delete_user_meta_verified( $user_id, '_smc_totp_pending_enc' );
+				self::delete_user_meta_verified( $user_id, '_smc_totp_pending_expires' );
+				self::redirect( 'security', 'totp_revalidate' );
+			}
+			if ( in_array( $error_code, array( 'smc_recovery_transaction', 'smc_recovery_reset', 'smc_recovery_store', 'smc_recovery_receipt', 'smc_factor_state_store' ), true ) ) {
+				self::redirect( 'security', 'totp_storage' );
+			}
+			if ( in_array( $error_code, array( 'smc_recovery_audit', 'smc_factor_replace_audit' ), true ) ) {
+				$data = $result->get_error_data();
+				$health = is_array( $data ) && isset( $data['audit_health'] ) && is_array( $data['audit_health'] ) ? $data['audit_health'] : SMC_Security::audit_health_snapshot();
+				self::redirect( 'security', 'totp_audit', array(
+					'smc_audit_reason' => sanitize_key( (string) ( is_array( $data ) ? ( $data['audit_error'] ?? '' ) : '' ) ),
+					'smc_chain_reason' => sanitize_key( (string) ( $health['chain_reason'] ?? '' ) ),
+					'smc_failed_id'    => absint( $health['failed_id'] ?? 0 ),
+					'smc_tail_state'   => sanitize_key( (string) ( $health['tail_state'] ?? '' ) ),
+					'smc_legacy_state' => sanitize_key( (string) ( $health['legacy_state'] ?? '' ) ),
+				) );
+			}
+			self::redirect( 'security', 'totp_backend' );
+		}
+		if ( false === $result ) {
+			self::redirect( 'security', 'totp_backend' );
+		}
+
+		self::delete_user_meta_verified( $user_id, '_smc_totp_pending_enc' );
+		self::delete_user_meta_verified( $user_id, '_smc_totp_pending_expires' );
 		self::redirect( 'security', 'two_factor' );
 	}
 
@@ -789,7 +1017,7 @@ final class SMC_Workflow {
 			wp_safe_redirect( home_url( '/' ) );
 			exit;
 		}
-		self::redirect( 'security', 'challenge' );
+		self::redirect( 'security', 'session_revoked' );
 	}
 
 	private static function store_recovery_receipt( $user_id, $codes ) {
@@ -837,10 +1065,19 @@ final class SMC_Workflow {
 			return array();
 		}
 		$codes = json_decode( $json, true );
-		if ( ! is_array( $codes ) || ! self::delete_user_meta_verified( $user_id, '_smc_recovery_receipt_v2' ) ) {
-			return array();
-		}
+		if ( ! is_array( $codes ) ) { return array(); }
 		return $codes;
+	}
+
+
+	public static function handle_ack_recovery_receipt() {
+		self::guard_user_action( 'smc_ack_recovery_receipt' );
+		$user_id = get_current_user_id();
+		$receipt = get_user_meta( $user_id, '_smc_recovery_receipt_v2', true );
+		if ( ! is_array( $receipt ) || empty( $receipt['envelope'] ) || absint( $receipt['expires'] ?? 0 ) < time() ) { self::redirect( 'security', 'invalid' ); }
+		if ( ! SMC_Security::audit( 'recovery_codes_receipt_acknowledged', $user_id, array( 'receipt_version'=>(int)($receipt['version']??0) ) ) ) { self::redirect( 'security', 'invalid' ); }
+		if ( ! self::delete_user_meta_verified( $user_id, '_smc_recovery_receipt_v2' ) ) { self::redirect( 'security', 'invalid' ); }
+		self::redirect( 'security', 'recovery_saved' );
 	}
 
 	public static function guardian_shortcode() {
@@ -851,6 +1088,7 @@ final class SMC_Workflow {
 			<?php echo self::message(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 			<h1 id="smc-guardian-title"><?php esc_html_e( 'Verified Guardian Consent', 'sabri-membership-core' ); ?></h1>
 			<p><?php esc_html_e( 'Only a parent or legally authorized guardian may complete this independent verification.', 'sabri-membership-core' ); ?></p>
+			<section class="smc-subpanel" aria-labelledby="smc-guardian-scope"><h2 id="smc-guardian-scope"><?php esc_html_e( 'Consent scope', 'sabri-membership-core' ); ?></h2><p><?php echo esc_html( sprintf( __( 'Policy version: %s. This consent authorizes the minor membership eligibility and identity-assurance workflow only.', 'sabri-membership-core' ), smc_policy()['version'] ) ); ?></p><ul><li><?php esc_html_e( 'Allowed: governed account eligibility, private identity review, and age-appropriate platform access after approval.', 'sabri-membership-core' ); ?></li><li><?php esc_html_e( 'Not authorized by this consent: unrestricted direct messaging, marketplace sale, public live broadcasting, clinical consent, or disclosure of private guardian contact.', 'sabri-membership-core' ); ?></li></ul><p><?php esc_html_e( 'Consent can later be withdrawn through the governed account route; withdrawal restricts the minor account and is audited.', 'sabri-membership-core' ); ?></p></section>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="smc-form"><input type="hidden" name="action" value="smc_verify_guardian"><input type="hidden" name="guardian_token" value="<?php echo esc_attr( $token ); ?>"><?php wp_nonce_field( 'smc_verify_guardian', 'smc_nonce' ); ?><label><?php esc_html_e( 'Six-digit guardian code', 'sabri-membership-core' ); ?><input name="code" inputmode="numeric" pattern="[0-9]{6}" required></label><label class="smc-check"><input type="checkbox" name="consent" value="1" required> <?php esc_html_e( 'I am the named parent or lawful guardian, I have legal authority, and I give the stated consent.', 'sabri-membership-core' ); ?></label><button class="smc-button"><?php esc_html_e( 'Verify and Consent', 'sabri-membership-core' ); ?></button></form>
 		</main>
 		<?php
@@ -859,6 +1097,7 @@ final class SMC_Workflow {
 
 	public static function handle_verify_guardian() {
 		check_admin_referer( 'smc_verify_guardian', 'smc_nonce' );
+		if ( ! self::request_is_same_origin() ) { wp_die( esc_html__( 'The protected request origin could not be verified.', 'sabri-membership-core' ), '', array( 'response'=>403 ) ); }
 		$token = sanitize_text_field( wp_unslash( $_POST['guardian_token'] ?? '' ) );
 		$code = preg_replace( '/\D/', '', wp_unslash( $_POST['code'] ?? '' ) );
 		$token_hash = SMC_Security::blind_index( $token, 'guardian-invitation' );
@@ -867,10 +1106,13 @@ final class SMC_Workflow {
 			self::redirect( 'guardian', 'invalid' );
 		}
 		global $wpdb;
-		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}smc_guardian_consents WHERE invitation_token_hash=%s AND otp_lookup_hash=%s AND status='pending' AND otp_expires_at>UTC_TIMESTAMP() LIMIT 1", $token_hash, $lookup ), ARRAY_A );
-		if ( ! $row || (int) $row['otp_attempts'] >= 7 || ! wp_check_password( $code, $row['otp_hash'] ) ) {
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}smc_guardian_consents WHERE invitation_token_hash=%s AND status='pending' AND is_current=1 AND delivery_receipt_hash IS NOT NULL AND delivered_at IS NOT NULL AND otp_expires_at>UTC_TIMESTAMP() LIMIT 1", $token_hash ), ARRAY_A );
+		$lookup_matches = $row && ! empty( $row['otp_lookup_hash'] ) && hash_equals( (string) $row['otp_lookup_hash'], (string) $lookup );
+		$password_matches = $row && ! empty( $row['otp_hash'] ) && wp_check_password( $code, (string) $row['otp_hash'] );
+		if ( ! $row || ! $lookup_matches || (int) $row['otp_attempts'] >= 7 || ! $password_matches ) {
 			if ( $row ) {
-				$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_guardian_consents SET otp_attempts=otp_attempts+1 WHERE id=%d AND status='pending'", (int) $row['id'] ) );
+				$attempted = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_guardian_consents SET otp_attempts=otp_attempts+1 WHERE id=%d AND status='pending' AND is_current=1", (int) $row['id'] ) );
+				if ( 1 !== $attempted ) { SMC_Security::audit( 'guardian_otp_attempt_record_failed', (int) $row['user_id'] ); }
 			}
 			self::redirect( 'guardian', 'invalid' );
 		}
@@ -878,13 +1120,16 @@ final class SMC_Workflow {
 		$wpdb->query( 'START TRANSACTION' );
 		try {
 			$app = $wpdb->get_row( $wpdb->prepare( "SELECT row_version FROM {$wpdb->prefix}smc_applications WHERE user_id=%d AND status='guardian_pending' LIMIT 1 FOR UPDATE", (int) $row['user_id'] ), ARRAY_A );
-			if ( ! $app ) {
+			$request = $wpdb->get_row( $wpdb->prepare( "SELECT queue_type FROM {$wpdb->prefix}smc_verification_requests WHERE user_id=%d AND status='guardian_pending' LIMIT 1 FOR UPDATE", (int) $row['user_id'] ), ARRAY_A );
+			if ( ! $app || ! $request ) {
 				throw new RuntimeException( 'Guardian applicant generation is unavailable.' );
 			}
+			$next_status = 'guardian_resubmission' === sanitize_key( $request['queue_type'] ?? '' ) ? 'resubmitted' : 'submitted';
+			$next_queue = 'resubmitted' === $next_status ? 'resubmitted' : 'new';
 			$next_applicant_version = (int) $app['row_version'] + 1;
-			$ok1 = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_guardian_consents SET status='verified',verified_at=%s,otp_hash=NULL,otp_lookup_hash=NULL,invitation_token_hash=NULL WHERE id=%d AND status='pending'", $now, (int) $row['id'] ) );
-			$ok2 = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_applications SET status='submitted',row_version=%d,updated_at=%s WHERE user_id=%d AND status='guardian_pending' AND row_version=%d", $next_applicant_version, $now, (int) $row['user_id'], (int) $app['row_version'] ) );
-			$ok3 = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_verification_requests SET status='submitted',applicant_version=%d,row_version=row_version+1,updated_at=%s WHERE user_id=%d AND status='guardian_pending'", $next_applicant_version, $now, (int) $row['user_id'] ) );
+			$ok1 = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_guardian_consents SET status='verified',verified_at=%s,otp_hash=NULL,otp_lookup_hash=NULL,invitation_token_hash=NULL WHERE id=%d AND status='pending' AND is_current=1", $now, (int) $row['id'] ) );
+			$ok2 = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_applications SET status=%s,row_version=%d,updated_at=%s WHERE user_id=%d AND status='guardian_pending' AND row_version=%d", $next_status, $next_applicant_version, $now, (int) $row['user_id'], (int) $app['row_version'] ) );
+			$ok3 = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_verification_requests SET status=%s,queue_type=%s,applicant_version=%d,row_version=row_version+1,updated_at=%s WHERE user_id=%d AND status='guardian_pending'", $next_status, $next_queue, $next_applicant_version, $now, (int) $row['user_id'] ) );
 			if ( 1 !== $ok1 || 1 !== $ok2 || 1 !== $ok3 ) {
 				throw new RuntimeException( 'Guardian consent state changed concurrently.' );
 			}
@@ -892,7 +1137,9 @@ final class SMC_Workflow {
 			if ( ! SMC_Security::audit( 'guardian_consent_verified', (int) $row['user_id'], array( 'applicant_version' => $next_applicant_version ) ) ) {
 				throw new RuntimeException( 'Guardian consent audit evidence could not be recorded.' );
 			}
-			$wpdb->query( 'COMMIT' );
+			if ( false === $wpdb->query( 'COMMIT' ) ) {
+				throw new RuntimeException( 'Guardian consent verification could not be committed.' );
+			}
 		} catch ( Throwable $error ) {
 			$wpdb->query( 'ROLLBACK' );
 			SMC_Security::audit( 'guardian_consent_transaction_failed', (int) $row['user_id'], array( 'reason' => $error->getMessage() ) );
@@ -943,6 +1190,7 @@ final class SMC_Workflow {
 		}
 		$current_version = (int) $app['row_version'];
 		$next_applicant_version = $current_version + 1;
+		$queue_type = 'appeal_review' === $new ? 'appeal' : ( 'resubmitted' === $new ? 'resubmitted' : $new );
 		$ok1 = $wpdb->query(
 			$wpdb->prepare(
 				"UPDATE {$wpdb->prefix}smc_applications SET status=%s,row_version=%d,updated_at=%s WHERE user_id=%d AND status=%s AND row_version=%d",
@@ -956,8 +1204,9 @@ final class SMC_Workflow {
 		);
 		$ok2 = $wpdb->query(
 			$wpdb->prepare(
-				"UPDATE {$wpdb->prefix}smc_verification_requests SET status=%s,reviewer_note=%s,assigned_reviewer=0,applicant_version=%d,row_version=row_version+1,updated_at=%s WHERE user_id=%d AND status=%s",
+				"UPDATE {$wpdb->prefix}smc_verification_requests SET status=%s,queue_type=%s,reviewer_note=%s,assigned_reviewer=0,assigned_at=NULL,conflict_status='undeclared',conflict_note=NULL,approval_generation=NULL,approval_snapshot_hash=NULL,applicant_version=%d,row_version=row_version+1,decided_at=NULL,updated_at=%s WHERE user_id=%d AND status=%s",
 				$new,
+				$queue_type,
 				$note,
 				$next_applicant_version,
 				$now,
@@ -977,7 +1226,10 @@ final class SMC_Workflow {
 			$wpdb->query( 'ROLLBACK' );
 			return false;
 		}
-		$wpdb->query( 'COMMIT' );
+		if ( false === $wpdb->query( 'COMMIT' ) ) {
+			$wpdb->query( 'ROLLBACK' );
+			return false;
+		}
 		return true;
 	}
 
@@ -991,27 +1243,114 @@ final class SMC_Workflow {
 		}
 		$now = current_time( 'mysql', true );
 		$next_applicant_version = (int) $app['row_version'] + 1;
+		$hold = array( 'operation'=>'guardian_withdrawal','target_status'=>'suspended','started_at'=>time() );
+		update_user_meta( $user_id, '_smc_membership_effects_hold_v1', $hold );
+		if ( get_user_meta( $user_id, '_smc_membership_effects_hold_v1', true ) !== $hold ) { self::redirect( 'status', 'invalid' ); }
 		$wpdb->query( 'START TRANSACTION' );
-		$ok1 = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_guardian_consents SET status='withdrawn',withdrawn_at=%s WHERE user_id=%d AND status='verified'", $now, $user_id ) );
+		$ok1 = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_guardian_consents SET status='withdrawn',is_current=0,withdrawn_at=%s WHERE user_id=%d AND status='verified' AND is_current=1", $now, $user_id ) );
 		$ok2 = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_applications SET status='suspended',row_version=%d,updated_at=%s WHERE user_id=%d AND guardian_required=1 AND row_version=%d", $next_applicant_version, $now, $user_id, (int) $app['row_version'] ) );
 		$ok3 = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_verification_requests SET status='suspended',reviewer_note=%s,applicant_version=%d,row_version=row_version+1,decided_at=%s,updated_at=%s WHERE user_id=%d", __( 'Guardian consent was withdrawn.', 'sabri-membership-core' ), $next_applicant_version, $now, $now, $user_id ) );
-		$role_ok = 1 === $ok1 && 1 === $ok2 && 1 === $ok3 && SMC_Contracts::set_all_roles_pending( $user_id, $next_applicant_version );
-		$sessions_ok = $role_ok && SMC_Security::revoke_all_sessions( $user_id, 'guardian_consent_withdrawn' );
-		$audit_ok = $sessions_ok && SMC_Security::audit( 'guardian_consent_withdrawn', $user_id, array( 'applicant_version' => $next_applicant_version ) );
-		if ( 1 !== $ok1 || 1 !== $ok2 || 1 !== $ok3 || ! $role_ok || ! $sessions_ok || ! $audit_ok ) {
+		$role_ok = 1 === $ok1 && 1 === $ok2 && 1 === $ok3 && SMC_Contracts::set_all_roles_pending( $user_id, $next_applicant_version, false );
+		$audit_ok = $role_ok && SMC_Security::audit( 'guardian_consent_withdrawn', $user_id, array( 'applicant_version' => $next_applicant_version ) );
+		if ( 1 !== $ok1 || 1 !== $ok2 || 1 !== $ok3 || ! $role_ok || ! $audit_ok || false === $wpdb->query( 'COMMIT' ) ) {
 			$wpdb->query( 'ROLLBACK' );
+			delete_user_meta( $user_id, '_smc_membership_effects_hold_v1' );
 			clean_user_cache( $user_id );
 			self::redirect( 'status', 'invalid' );
 		}
-		$wpdb->query( 'COMMIT' );
+		$roles_wp_ok = SMC_Contracts::sync_wordpress_roles( $user_id );
+		$sessions_ok = $roles_wp_ok && SMC_Security::revoke_all_sessions( $user_id, 'guardian_consent_withdrawn' );
+		if ( ! $roles_wp_ok || ! $sessions_ok ) {
+			SMC_Completion::queue_effects_repair( $user_id, 'guardian_withdrawal', 'suspended', 'postcommit_effects' );
+			clean_user_cache( $user_id );
+			self::redirect( 'status', 'invalid' );
+		}
+		delete_user_meta( $user_id, '_smc_membership_effects_hold_v1' );
 		clean_user_cache( $user_id );
 		self::redirect( 'status', 'withdrawn' );
+	}
+
+	private static function request_is_same_origin() {
+		/*
+		 * The WordPress nonce remains the primary CSRF control. This host check is
+		 * defence-in-depth and must tolerate a site's canonical www/non-www alias
+		 * and WordPress installations where Home URL and Site URL differ.
+		 *
+		 * Prefer Origin when the browser sends it. Only fall back to Referer when
+		 * Origin is absent; requiring both headers to match caused legitimate
+		 * Hostinger/proxy requests to fail even though their nonce was valid.
+		 */
+		$normalize_host = static function ( $host ) {
+			$host = strtolower( rtrim( trim( (string) $host ), '.' ) );
+			if ( 0 === strpos( $host, 'www.' ) ) {
+				$host = substr( $host, 4 );
+			}
+			return $host;
+		};
+
+		$trusted_hosts = array();
+		foreach ( array( home_url( '/' ), site_url( '/' ), admin_url( '/' ) ) as $trusted_url ) {
+			$trusted_host = $normalize_host( wp_parse_url( $trusted_url, PHP_URL_HOST ) );
+			if ( '' !== $trusted_host ) {
+				$trusted_hosts[ $trusted_host ] = true;
+			}
+		}
+		if ( empty( $trusted_hosts ) ) {
+			return false;
+		}
+
+		$origin  = isset( $_SERVER['HTTP_ORIGIN'] ) ? esc_url_raw( wp_unslash( $_SERVER['HTTP_ORIGIN'] ) ) : '';
+		$referer = isset( $_SERVER['HTTP_REFERER'] ) ? esc_url_raw( wp_unslash( $_SERVER['HTTP_REFERER'] ) ) : '';
+		$source  = '' !== $origin ? $origin : $referer;
+
+		/* Browsers/proxies may omit both headers. The nonce below still fails
+		 * closed for forged requests, so omission alone must not brick wp-admin. */
+		if ( '' === $source ) {
+			return true;
+		}
+
+		$scheme = strtolower( (string) wp_parse_url( $source, PHP_URL_SCHEME ) );
+		$host   = $normalize_host( wp_parse_url( $source, PHP_URL_HOST ) );
+		if ( ! in_array( $scheme, array( 'http', 'https' ), true ) || '' === $host ) {
+			return false;
+		}
+
+		return isset( $trusted_hosts[ $host ] );
 	}
 
 	private static function guard_user_action( $action ) {
 		if ( ! is_user_logged_in() ) {
 			auth_redirect();
 		}
+
+		/*
+		 * WordPress nonces are bound to the authenticated user/session and are the
+		 * authoritative CSRF gate for File 00's logged-in admin-post actions.
+		 *
+		 * Hostinger/reverse-proxy stacks can legitimately rewrite, suppress, or
+		 * canonicalize Origin/Referer independently of WordPress Home/Site URL.
+		 * Treating that defence-in-depth signal as a hard prerequisite locked real
+		 * users out of 2FA and other protected actions even with a valid session
+		 * nonce. Verify the nonce first and never downgrade a valid authenticated
+		 * request solely because those optional browser headers disagree.
+		 */
 		check_admin_referer( $action, 'smc_nonce' );
+
+		try {
+			if ( ! self::request_is_same_origin() ) {
+				/*
+				 * Keep the host signal observable without storing raw Origin/Referer
+				 * values or blocking the nonce-authenticated request. A failed audit must
+				 * not turn this compatibility diagnostic back into an availability gate.
+				 */
+				SMC_Security::audit(
+					'protected_request_origin_mismatch_nonce_valid',
+					get_current_user_id(),
+					array( 'action' => sanitize_key( (string) $action ) )
+				);
+			}
+		} catch ( Throwable $diagnostic_error ) {
+			// Compatibility diagnostics must never become an authenticated-action blocker.
+		}
 	}
 }

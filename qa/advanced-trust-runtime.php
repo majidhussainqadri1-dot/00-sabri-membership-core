@@ -4,7 +4,7 @@ define('ABSPATH', __DIR__ . '/');
 define('MINUTE_IN_SECONDS', 60);
 define('DAY_IN_SECONDS', 86400);
 define('YEAR_IN_SECONDS', 31536000);
-define('SMC_VERSION', '1.2.18');
+define('SMC_VERSION', '1.2.32');
 $meta=[]; $options=[]; $actions=[]; $filters=[]; $current_user_id=1;
 class WP_Error { public $code; public function __construct($c,$m=''){ $this->code=$c; } }
 function is_wp_error($v){ return $v instanceof WP_Error; }
