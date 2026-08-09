@@ -1,36 +1,7 @@
-# Source Provenance
+# Source Provenance — File 00
 
-| Field | Value |
-|---|---|
-| File number | `00` |
-| Module | `Sabri Membership Core` |
-| Original archive | `00 sabri-membership-core-1.0.1.zip` |
-| Archive SHA-256 | `1418dff3410ebd66f6d440453f4bc4fe487828920d8fdaf8190df42844d426af` |
-| Archive size | `59,278` bytes |
-| Archive entries | `24` |
-| Source files inside archive | `20` |
-| Extracted source size | `196,001` bytes |
-| Declared plugin version | `1.0.1` |
-| Baseline branch | `baseline/file-00-original-import` |
-| Import date | `2026-07-29` |
+The current corrective branch derives from audited baseline `3a84c32a6ddad151f2ed09d244fa8aa536a58108` and incorporates the verified 32-finding GitHub code-only corrective line plus subsequent Hostinger live-test fixes materialized through runtime `1.2.32`, database schema `1.4.3`, public contract `1.2.1`.
 
-## Initial controls
+The Hostinger testing sequence exposed activation, action transport, origin/nonce, TOTP diagnostics, audit schema bootstrap, missing-tail recovery, and historical audit-key transition paths that were not fully exercised by the original fresh-install CI environment. These fixes are preserved in repository source rather than only in local test ZIPs.
 
-- ZIP integrity test passed locally.
-- All nine PHP files passed local syntax lint.
-- No embedded real password, API key, private key, access token, Hostinger credential, or patient record was found by the initial indicator scan.
-- The README contains a placeholder example for `SMC_MASTER_KEY`; no production key is present.
-
-## Limitation
-
-This archive upload proves source custody only. It does not establish security, privacy, runtime, architecture, staging, or production approval.
-
-## Baseline restoration and corrective lineage
-
-The initial GitHub checkout copy of the archive was 15,008 bytes and failed ZIP integrity despite the repository recording the correct 59,278-byte checksum. On the controlled repair branch it was replaced by the verified attached original:
-
-- Restored size: `59,278` bytes
-- Restored SHA-256: `1418dff3410ebd66f6d440453f4bc4fe487828920d8fdaf8190df42844d426af`
-- ZIP integrity: passed
-
-Release `1.2.0` is rebuilt from the restored baseline as editable source. It does not overwrite or mislabel the preserved `1.0.1` evidence.
+The current `v1.2.32` historical-key transition remains subject to final live confirmation against the site's existing audit record 16. Source provenance and repository merge must not be represented as live production acceptance.
