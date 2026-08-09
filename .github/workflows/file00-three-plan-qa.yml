@@ -1,10 +1,10 @@
-name: File 00 1.2.18 Fifth-Fresh-Ten-Review QA
+name: File 00 1.2.32 Legacy Audit Recovery QA
 
 on:
   pull_request:
     branches: [main]
   push:
-    branches: [main, 'codex/**']
+    branches: [main, 'codex/**', 'agent/**']
   workflow_dispatch:
 
 permissions:
@@ -35,20 +35,22 @@ jobs:
           tools: none
       - run: npm ci --ignore-scripts
       - run: npm run verify
-      - name: Exact fifth-fresh review and governing traceability
+      - name: Exact current release and retained governing traceability
         run: |
           set -euo pipefail
-          grep -Fq 'Version: 1.2.18' source/sabri-membership-core/sabri-membership-core.php
-          grep -Fq '"version": "1.2.18"' package.json
-          test "$(node -p "require('./package-lock.json').version")" = '1.2.18'
-          test "$(node -p "require('./package-lock.json').packages[''].version")" = '1.2.18'
-          grep -Fq "define( 'SMC_CONTRACT_VERSION', '1.2.0' )" source/sabri-membership-core/sabri-membership-core.php
+          grep -Fq 'Version: 1.2.32' source/sabri-membership-core/sabri-membership-core.php
+          grep -Fq '"version": "1.2.32"' package.json
+          test "$(node -p "require('./package-lock.json').version")" = '1.2.32'
+          test "$(node -p "require('./package-lock.json').packages[''].version")" = '1.2.32'
+          grep -Fq "define( 'SMC_DB_VERSION', '1.4.3' )" source/sabri-membership-core/sabri-membership-core.php
+          grep -Fq "define( 'SMC_CONTRACT_VERSION', '1.2.1' )" source/sabri-membership-core/sabri-membership-core.php
           grep -Fq "define( 'SMC_ADVANCED_TRUST_CONTRACT_VERSION', '1.0.0' )" source/sabri-membership-core/sabri-membership-core.php
           node qa/fifth-fresh-review-contract.mjs
           php qa/fifth-fresh-review-runtime.php
-          test -f dist/00-sabri-membership-core-1.2.18.zip
+          test -f dist/00-sabri-membership-core-1.2.32.zip
           test -z "$(git ls-files 'dist/*')"
-          grep -Fq 'Runtime implementation release: `1.2.18`' docs/FILE-00-MASTER-PLAN-2026.md
+          grep -Fq 'Runtime implementation release: `1.2.32`' docs/FILE-00-MASTER-PLAN-2026.md
+          test -f docs/RELEASE-1.2.32-LEGACY-AUDIT-BRIDGE.md
           grep -Fq 'Total: **10 unique defects; corrected 10/10**.' docs/FILE-00-FIFTH-FRESH-TEN-ROUND-REVIEW-1.2.18.md
           test -f docs/FILE-00-FOURTH-FRESH-TEN-ROUND-REVIEW-1.2.17.md
           python3 - <<'PY'
@@ -79,10 +81,11 @@ jobs:
           test ! -e .github/workflows/apply-fifth-round10-fix.yml
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: 00-sabri-membership-core-1.2.18-${{ github.sha }}
+          name: 00-sabri-membership-core-1.2.32-${{ github.sha }}
           path: |
-            dist/00-sabri-membership-core-1.2.18.zip
+            dist/00-sabri-membership-core-1.2.32.zip
             dist/CHECKSUMS.sha256
+            docs/RELEASE-1.2.32-LEGACY-AUDIT-BRIDGE.md
             docs/RELEASE-1.2.18-FIFTH-FRESH-TEN-REVIEW.md
             docs/FILE-00-FIFTH-FRESH-TEN-ROUND-REVIEW-1.2.18.md
             docs/FILE-00-FOURTH-FRESH-TEN-ROUND-REVIEW-1.2.17.md

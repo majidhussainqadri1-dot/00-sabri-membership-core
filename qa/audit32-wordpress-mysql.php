@@ -22,8 +22,8 @@ $check    = static function ( $condition, $label ) use ( &$failures, &$passed ) 
 };
 
 global $wpdb;
-$check( defined( 'SMC_VERSION' ) && '1.2.20' === SMC_VERSION, 'runtime 1.2.20 loaded in real WordPress' );
-$check( defined( 'SMC_DB_VERSION' ) && '1.4.0' === SMC_DB_VERSION, 'database contract 1.4.0 loaded' );
+$check( defined( 'SMC_VERSION' ) && '1.2.32' === SMC_VERSION, 'runtime 1.2.32 loaded in real WordPress' );
+$check( defined( 'SMC_DB_VERSION' ) && '1.4.3' === SMC_DB_VERSION, 'database contract 1.4.3 loaded' );
 $check( class_exists( 'SMC_Security' ) && class_exists( 'SMC_Installer' ), 'File 00 runtime classes loaded' );
 
 $tables = $wpdb->get_col( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $wpdb->prefix . 'smc_' ) . '%' ) );

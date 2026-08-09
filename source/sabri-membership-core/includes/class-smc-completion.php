@@ -20,6 +20,8 @@ final class SMC_Completion {
 		add_action( 'admin_post_smc_retry_outbox', array( __CLASS__, 'retry_outbox' ) );
 		add_action( 'admin_post_smc_post_restore_reconcile', array( __CLASS__, 'post_restore_reconcile' ) );
 		add_action( 'admin_post_smc_download_backup_manifest', array( __CLASS__, 'download_backup_manifest' ) );
+		add_action( 'admin_post_smc_create_retention_hold', array( __CLASS__, 'create_retention_hold' ) );
+		add_action( 'admin_post_smc_release_retention_hold', array( __CLASS__, 'release_retention_hold' ) );
 		add_action( 'smc_reconcile_applications', array( __CLASS__, 'reconcile_applications' ) );
 	}
 
@@ -36,7 +38,7 @@ final class SMC_Completion {
 		}
 		$action = sanitize_key( wp_unslash( $_REQUEST['action'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$allowed = array(
-			'smc_challenge_2fa', 'smc_revoke_session', 'smc_retry_repair', 'smc_retry_outbox',
+			'smc_challenge_2fa', 'smc_revoke_session', 'smc_revoke_all_sessions', 'smc_retry_repair', 'smc_retry_outbox',
 			'smc_post_restore_reconcile', 'smc_download_backup_manifest',
 		);
 		if ( 0 === strpos( $action, 'smc_' ) && ! in_array( $action, $allowed, true ) ) {
@@ -53,7 +55,10 @@ final class SMC_Completion {
 		}
 		nocache_headers();
 		header( 'X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex', true );
-		header( 'Referrer-Policy: same-origin', true );
+		header( 'Referrer-Policy: no-referrer', true );
+		header( 'X-Content-Type-Options: nosniff', true );
+		header( 'X-Frame-Options: SAMEORIGIN', true );
+		header( 'Permissions-Policy: camera=(), microphone=(), geolocation=()', true );
 	}
 
 	public static function private_robots( $robots ) {
@@ -73,12 +78,29 @@ final class SMC_Completion {
 			$headers['Pragma']        = 'no-cache';
 			$headers['Expires']       = 'Wed, 11 Jan 1984 05:00:00 GMT';
 			$headers['X-Robots-Tag']  = 'noindex, nofollow, noarchive, nosnippet, noimageindex';
+			$headers['Referrer-Policy'] = 'no-referrer';
+			$headers['X-Content-Type-Options'] = 'nosniff';
+			$headers['X-Frame-Options'] = 'SAMEORIGIN';
+			$headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()';
 		}
 		return $headers;
 	}
 
 	private static function draft_context( $user_id ) {
-		return array( 'user_id' => absint( $user_id ), 'policy_version' => smc_policy()['version'] );
+		$user_id = absint( $user_id );
+		$token = wp_get_session_token();
+		if ( ! $user_id || ! is_string( $token ) || '' === $token ) {
+			return new WP_Error( 'smc_draft_session_missing', __( 'A current authenticated session is required for the protected application draft.', 'sabri-membership-core' ) );
+		}
+		$session_hash = SMC_Security::blind_index( $token, 'application-draft-session' );
+		if ( is_wp_error( $session_hash ) ) {
+			return $session_hash;
+		}
+		return array(
+			'user_id'        => $user_id,
+			'policy_version' => smc_policy()['version'],
+			'session_hash'   => $session_hash,
+		);
 	}
 
 	public static function load_draft( $user_id ) {
@@ -89,7 +111,12 @@ final class SMC_Completion {
 			delete_user_meta( absint( $user_id ), self::DRAFT_META );
 			return array();
 		}
-		$context = array_merge( self::draft_context( $user_id ), array( 'issued_at'=>$issued_at, 'expires_at'=>$expires_at ) );
+		$base_context = self::draft_context( $user_id );
+		if ( is_wp_error( $base_context ) ) {
+			delete_user_meta( absint( $user_id ), self::DRAFT_META );
+			return array();
+		}
+		$context = array_merge( $base_context, array( 'issued_at'=>$issued_at, 'expires_at'=>$expires_at ) );
 		$json = SMC_Security::decrypt( $receipt['envelope'], 'application-draft', $context );
 		if ( is_wp_error( $json ) ) {
 			delete_user_meta( absint( $user_id ), self::DRAFT_META );
@@ -145,7 +172,9 @@ final class SMC_Completion {
 		$issued_at = time();
 		$expires_at = $issued_at + self::DRAFT_TTL;
 		$sealed = wp_json_encode( array( 'issued_at'=>$issued_at, 'expires_at'=>$expires_at, 'draft'=>$data ) );
-		$context = array_merge( self::draft_context( $user_id ), array( 'issued_at'=>$issued_at, 'expires_at'=>$expires_at ) );
+		$base_context = self::draft_context( $user_id );
+		if ( is_wp_error( $base_context ) ) { wp_send_json_error( array( 'code'=>'session_unavailable' ), 401 ); }
+		$context = array_merge( $base_context, array( 'issued_at'=>$issued_at, 'expires_at'=>$expires_at ) );
 		$envelope = SMC_Security::encrypt( $sealed, 'application-draft', $context );
 		if ( is_wp_error( $envelope ) ) { wp_send_json_error( array( 'code'=>'encryption_unavailable' ), 503 ); }
 		$receipt = array( 'envelope'=>$envelope, 'issued_at'=>$issued_at, 'expires'=>$expires_at, 'updated_at'=>$issued_at );
@@ -249,7 +278,8 @@ final class SMC_Completion {
 		global $wpdb;
 		$key_ready = SMC_Security::key_ready() && '' !== SMC_Security::key_id();
 		$dir = $key_ready ? SMC_Security::private_dir() : new WP_Error( 'key', 'Key configuration unavailable' );
-		$audit = SMC_Security::verify_audit_chain( 5000 );
+		// Health/restore truth must verify the complete chain, including the serialized tail.
+		$audit = SMC_Security::verify_audit_chain();
 		return array(
 			'version'             => SMC_VERSION,
 			'database_version'    => get_option( 'smc_db_version', '' ),
@@ -266,6 +296,10 @@ final class SMC_Completion {
 			'repair_backlog'      => (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}smc_application_repairs WHERE status IN ('pending','retry','processing','dead_letter')" ),
 			'outbox_backlog'      => (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}smc_event_outbox WHERE status IN ('pending','retry','processing','dead_letter')" ),
 			'review_overdue'      => (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}smc_verification_requests WHERE status NOT IN ('approved','rejected') AND sla_due_at IS NOT NULL AND sla_due_at<UTC_TIMESTAMP()" ),
+			// Legacy releases could create non-expiring holds. New holds require expiry,
+			// while any legacy indefinite hold remains fail-closed and is surfaced as
+			// an explicit governance blocker until an authorized operator releases it.
+			'indefinite_hold_blockers' => (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}smc_retention_holds WHERE released_at IS NULL AND expires_at IS NULL" ),
 			'last_restore_test'   => get_option( 'smc_last_restore_test', array() ),
 			'owners'              => self::operational_owners(),
 			'slos'                => self::service_levels(),
@@ -310,6 +344,12 @@ final class SMC_Completion {
 		}
 	}
 
+	private static function require_retention_authority() {
+		if ( ! current_user_can( 'smc_manage_retention_holds' ) || ! SMC_Security::session_is_verified( get_current_user_id() ) ) {
+			wp_die( esc_html__( 'A current two-factor session and retention-hold capability are required.', 'sabri-membership-core' ), '', array( 'response' => 403 ) );
+		}
+	}
+
 	public static function health_page() {
 		self::require_high_risk_authority();
 		global $wpdb;
@@ -333,6 +373,23 @@ final class SMC_Completion {
 		foreach ( $outbox as $row ) { echo '<tr><td>' . absint( $row['id'] ) . '</td><td>' . esc_html( $row['event_type'] ) . '</td><td><code>' . esc_html( $row['correlation_id'] ) . '</code></td><td>' . esc_html( $row['status'] ) . '</td><td>' . absint( $row['attempts'] ) . '</td><td>' . esc_html( $row['last_error'] ) . '</td><td><form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="smc_retry_outbox"><input type="hidden" name="event_id" value="' . absint( $row['id'] ) . '">'; wp_nonce_field( 'smc_retry_outbox_' . $row['id'], 'smc_nonce' ); echo '<button class="button">' . esc_html__( 'Replay safely', 'sabri-membership-core' ) . '</button></form></td></tr>'; }
 		if ( ! $outbox ) { echo '<tr><td colspan="7">' . esc_html__( 'No event delivery dead letters.', 'sabri-membership-core' ) . '</td></tr>'; }
 		echo '</tbody></table>';
+		if ( current_user_can( 'smc_manage_retention_holds' ) ) {
+			$holds = $wpdb->get_results( "SELECT id,user_id,hold_type,reason,created_by,created_at,expires_at,released_at FROM {$wpdb->prefix}smc_retention_holds ORDER BY id DESC LIMIT 100", ARRAY_A );
+			echo '<h2>' . esc_html__( 'Retention Holds', 'sabri-membership-core' ) . '</h2><p>' . esc_html__( 'Create only documented legal, safety, security, regulatory or dispute holds. Active holds pause privacy erasure until release or expiry.', 'sabri-membership-core' ) . '</p>';
+			echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="smc-form"><input type="hidden" name="action" value="smc_create_retention_hold">'; wp_nonce_field( 'smc_create_retention_hold', 'smc_nonce' );
+			echo '<label>' . esc_html__( 'User ID', 'sabri-membership-core' ) . '<input name="user_id" type="number" min="1" required></label> <label>' . esc_html__( 'Hold type', 'sabri-membership-core' ) . '<select name="hold_type" required><option value="legal">Legal</option><option value="safety">Safety</option><option value="security">Security</option><option value="regulatory">Regulatory</option><option value="dispute">Dispute</option></select></label> <label>' . esc_html__( 'Documented reason', 'sabri-membership-core' ) . '<input name="reason" minlength="12" maxlength="500" required></label> <label>' . esc_html__( 'Required review/expiry date (UTC)', 'sabri-membership-core' ) . '<input name="expires_on" type="date" required></label> <button class="button button-primary">' . esc_html__( 'Create retention hold', 'sabri-membership-core' ) . '</button></form>';
+			echo '<table class="widefat striped"><thead><tr><th>ID</th><th>User</th><th>Type</th><th>Reason</th><th>Created</th><th>Expires</th><th>Status</th><th></th></tr></thead><tbody>';
+			foreach ( $holds as $hold ) {
+				$legacy_indefinite = empty( $hold['released_at'] ) && empty( $hold['expires_at'] );
+				$active = empty( $hold['released_at'] ) && ( $legacy_indefinite || strtotime( $hold['expires_at'] . ' UTC' ) > time() );
+				$status_label = $legacy_indefinite ? __( 'Legacy indefinite — release and recreate with an expiry', 'sabri-membership-core' ) : ( $active ? __( 'Active', 'sabri-membership-core' ) : __( 'Released / expired', 'sabri-membership-core' ) );
+				echo '<tr><td>' . absint( $hold['id'] ) . '</td><td>' . absint( $hold['user_id'] ) . '</td><td>' . esc_html( $hold['hold_type'] ) . '</td><td>' . esc_html( $hold['reason'] ) . '</td><td>' . esc_html( $hold['created_at'] ) . '</td><td>' . esc_html( $hold['expires_at'] ?: '—' ) . '</td><td>' . esc_html( $status_label ) . '</td><td>';
+				if ( $active ) { echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="smc_release_retention_hold"><input type="hidden" name="hold_id" value="' . absint( $hold['id'] ) . '">'; wp_nonce_field( 'smc_release_retention_hold_' . $hold['id'], 'smc_nonce' ); echo '<button class="button">' . esc_html__( 'Release hold', 'sabri-membership-core' ) . '</button></form>'; }
+				echo '</td></tr>';
+			}
+			if ( ! $holds ) { echo '<tr><td colspan="8">' . esc_html__( 'No retention holds recorded.', 'sabri-membership-core' ) . '</td></tr>'; }
+			echo '</tbody></table>';
+		}
 		echo '<h2>' . esc_html__( 'Backup and Restore Evidence', 'sabri-membership-core' ) . '</h2><p><a class="button" href="' . esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=smc_download_backup_manifest' ), 'smc_download_backup_manifest', 'smc_nonce' ) ) . '">' . esc_html__( 'Download privacy-safe backup manifest', 'sabri-membership-core' ) . '</a></p>';
 		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="smc_post_restore_reconcile">'; wp_nonce_field( 'smc_post_restore_reconcile', 'smc_nonce' ); echo '<label>' . esc_html__( 'Restore evidence reference', 'sabri-membership-core' ) . '<input name="evidence_reference" required maxlength="190"></label> <button class="button button-primary">' . esc_html__( 'Run post-restore reconciliation', 'sabri-membership-core' ) . '</button></form></div>';
 	}
@@ -363,9 +420,48 @@ final class SMC_Completion {
 		wp_safe_redirect( admin_url( 'admin.php?page=smc-health-repair' ) ); exit;
 	}
 
+	public static function create_retention_hold() {
+		self::require_retention_authority();
+		check_admin_referer( 'smc_create_retention_hold', 'smc_nonce' );
+		$user_id = absint( $_POST['user_id'] ?? 0 );
+		$hold_type = sanitize_key( wp_unslash( $_POST['hold_type'] ?? '' ) );
+		$reason = sanitize_textarea_field( wp_unslash( $_POST['reason'] ?? '' ) );
+		$expires_on = sanitize_text_field( wp_unslash( $_POST['expires_on'] ?? '' ) );
+		if ( ! $user_id || ! get_userdata( $user_id ) || ! in_array( $hold_type, array( 'legal','safety','security','regulatory','dispute' ), true ) || strlen( $reason ) < 12 ) {
+			wp_die( esc_html__( 'The retention hold request is invalid.', 'sabri-membership-core' ), '', array( 'response' => 400 ) );
+		}
+		if ( '' === $expires_on ) { wp_die( esc_html__( 'Retention holds must be time-bound with a future UTC review/expiry date.', 'sabri-membership-core' ), '', array( 'response'=>400 ) ); }
+		$date = DateTimeImmutable::createFromFormat( '!Y-m-d', $expires_on, new DateTimeZone( 'UTC' ) );
+		if ( ! $date || $date->format( 'Y-m-d' ) !== $expires_on || $date->getTimestamp() <= time() ) { wp_die( esc_html__( 'Retention hold expiry must be a future UTC date.', 'sabri-membership-core' ), '', array( 'response' => 400 ) ); }
+		$expires_at = $date->setTime( 23, 59, 59 )->format( 'Y-m-d H:i:s' );
+		global $wpdb;
+		$wpdb->query( 'START TRANSACTION' );
+		$created_at = current_time( 'mysql', true );
+		$inserted = $wpdb->insert( $wpdb->prefix . 'smc_retention_holds', array( 'user_id'=>$user_id,'hold_type'=>$hold_type,'reason'=>$reason,'created_by'=>get_current_user_id(),'created_at'=>$created_at,'expires_at'=>$expires_at,'released_at'=>null ), array('%d','%s','%s','%d','%s','%s','%s') );
+		$hold_id = 1 === $inserted ? (int) $wpdb->insert_id : 0;
+		$audit_ok = $hold_id && SMC_Security::audit( 'retention_hold_created', $user_id, array( 'hold_id'=>$hold_id,'hold_type'=>$hold_type,'reason'=>$reason,'expires_at'=>$expires_at ?: '' ) );
+		if ( ! $hold_id || ! $audit_ok || false === $wpdb->query( 'COMMIT' ) ) { $wpdb->query( 'ROLLBACK' ); wp_die( esc_html__( 'The retention hold could not be committed with its audit evidence.', 'sabri-membership-core' ), '', array( 'response' => 503 ) ); }
+		wp_safe_redirect( admin_url( 'admin.php?page=smc-health-repair' ) ); exit;
+	}
+
+	public static function release_retention_hold() {
+		self::require_retention_authority();
+		$hold_id = absint( $_POST['hold_id'] ?? 0 );
+		check_admin_referer( 'smc_release_retention_hold_' . $hold_id, 'smc_nonce' );
+		global $wpdb;
+		$wpdb->query( 'START TRANSACTION' );
+		$hold = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}smc_retention_holds WHERE id=%d LIMIT 1 FOR UPDATE", $hold_id ), ARRAY_A );
+		if ( ! $hold || ! empty( $hold['released_at'] ) ) { $wpdb->query( 'ROLLBACK' ); wp_die( esc_html__( 'This retention hold is unavailable or already released.', 'sabri-membership-core' ), '', array( 'response' => 409 ) ); }
+		$released_at = current_time( 'mysql', true );
+		$updated = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_retention_holds SET released_at=%s WHERE id=%d AND released_at IS NULL", $released_at, $hold_id ) );
+		$audit_ok = 1 === $updated && SMC_Security::audit( 'retention_hold_released', (int) $hold['user_id'], array( 'hold_id'=>$hold_id,'hold_type'=>(string)$hold['hold_type'] ) );
+		if ( 1 !== $updated || ! $audit_ok || false === $wpdb->query( 'COMMIT' ) ) { $wpdb->query( 'ROLLBACK' ); wp_die( esc_html__( 'The retention hold release could not be committed with its audit evidence.', 'sabri-membership-core' ), '', array( 'response' => 503 ) ); }
+		wp_safe_redirect( admin_url( 'admin.php?page=smc-health-repair' ) ); exit;
+	}
+
 	public static function backup_manifest() {
 		global $wpdb;
-		$tables = array( 'smc_applications','smc_identity_records','smc_identity_documents','smc_guardian_consents','smc_verification_requests','smc_approval_votes','smc_verification_events','smc_consents','smc_contact_otps','smc_auth_sessions','smc_recovery_codes','smc_rate_limits','smc_file_jobs','smc_retention_holds','smc_audit_log','smc_migrations','smc_role_grants','smc_event_outbox','smc_event_inbox','smc_application_repairs' );
+		$tables = array( 'smc_applications','smc_identity_records','smc_identity_documents','smc_guardian_consents','smc_verification_requests','smc_approval_votes','smc_verification_events','smc_consents','smc_contact_otps','smc_auth_sessions','smc_mfa_factor_state','smc_recovery_codes','smc_rate_limits','smc_file_jobs','smc_retention_holds','smc_audit_log','smc_audit_tail','smc_migrations','smc_role_grants','smc_event_outbox','smc_event_inbox','smc_application_repairs' );
 		$counts = array();
 		foreach ( $tables as $suffix ) { $counts[ $suffix ] = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}{$suffix}" ); }
 		$dir = SMC_Security::private_dir();
@@ -377,8 +473,9 @@ final class SMC_Completion {
 			'manifest_version' => '1.0.0', 'generated_at' => gmdate( 'c' ), 'plugin_version' => SMC_VERSION,
 			'database_version' => SMC_DB_VERSION, 'contract_version' => SMC_CONTRACT_VERSION,
 			'table_counts' => $counts, 'private_file_count' => $files,
-			'audit_tail_hash' => (string) $wpdb->get_var( "SELECT row_hash FROM {$wpdb->prefix}smc_audit_log ORDER BY id DESC LIMIT 1" ),
-			'key_identifier' => (string) apply_filters( 'smc_backup_key_identifier', defined( 'SMC_MASTER_KEY_ID' ) ? sanitize_key( (string) SMC_MASTER_KEY_ID ) : '' ),
+			'audit_tail_hash' => (string) $wpdb->get_var( "SELECT row_hash FROM {$wpdb->prefix}smc_audit_tail WHERE id=1" ),
+			'audit_log_last_hash' => (string) $wpdb->get_var( "SELECT row_hash FROM {$wpdb->prefix}smc_audit_log ORDER BY id DESC LIMIT 1" ),
+			'key_identifier' => (string) apply_filters( 'smc_backup_key_identifier', SMC_Security::key_id() ),
 			'required_components' => array( 'database', 'encrypted_private_evidence', 'key_recovery_metadata', 'retention_holds', 'audit_chain', 'migration_registry' ),
 		);
 	}
@@ -397,7 +494,7 @@ final class SMC_Completion {
 		$required = array( 'restore_run_id','manifest_verified','isolated_restore','component_digests_match','row_counts_match','private_files_match','decrypt_samples_pass','key_recovery_pass','audit_chain_pass','retention_holds_reconciled','migrations_reconciled' );
 		$ok = is_array( $proof ) && strlen( $reference ) >= 8;
 		foreach ( $required as $key ) { if ( ! $ok || empty( $proof[ $key ] ) ) { $ok = false; break; } }
-		$health = self::health_snapshot(); $ok = $ok && $health['key_ready'] && $health['private_storage'] && $health['audit_valid'] && SMC_DB_VERSION === $health['database_version'] && 0 === (int) $health['file_job_failed'];
+		$health = self::health_snapshot(); $ok = $ok && $health['key_ready'] && $health['private_storage'] && $health['audit_valid'] && SMC_DB_VERSION === $health['database_version'] && 0 === (int) $health['file_job_failed'] && 0 === (int) ( $health['indefinite_hold_blockers'] ?? 0 );
 		$result = $ok ? 'passed' : 'failed';
 		if ( ! SMC_Security::audit( 'post_restore_reconciliation_' . $result, 0, array( 'evidence_reference'=>$reference,'restore_run_id'=>is_array($proof)?sanitize_text_field($proof['restore_run_id']??''):'' ) ) ) { wp_die( esc_html__( 'Restore reconciliation evidence could not be appended to the audit chain.', 'sabri-membership-core' ), '', array( 'response'=>503 ) ); }
 		$record = array( 'evidence_reference'=>$reference,'restore_run_id'=>is_array($proof)?sanitize_text_field($proof['restore_run_id']??''):'','checked_at'=>current_time('mysql',true),'result'=>$result,'health'=>$health );

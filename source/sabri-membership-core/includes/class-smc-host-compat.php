@@ -10,15 +10,10 @@ defined( 'ABSPATH' ) || exit;
  * admin-post actions therefore pass through one bounded dispatcher that records
  * diagnostics, fails closed, and returns the user to a safe screen.
  */
-if ( ! function_exists( 'mb_strtolower' ) ) {
-	function mb_strtolower( $string, $encoding = null ) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound
-		unset( $encoding );
-		return strtolower( (string) $string );
-	}
-}
-
 final class SMC_Host_Compat {
 	private static $initialized = false;
+
+	public static function lowercase( $value ) { return function_exists( 'mb_strtolower' ) ? mb_strtolower( (string) $value, 'UTF-8' ) : strtolower( (string) $value ); }
 	private static $protected   = false;
 
 	public static function init() {
@@ -48,6 +43,7 @@ final class SMC_Host_Compat {
 			'rotate_recovery'        => array( 'callback' => array( 'SMC_Workflow', 'handle_rotate_recovery' ), 'target' => 'security' ),
 			'ack_recovery_receipt'   => array( 'callback' => array( 'SMC_Workflow', 'handle_ack_recovery_receipt' ), 'target' => 'security' ),
 			'revoke_session'         => array( 'callback' => array( 'SMC_Workflow', 'handle_revoke_session' ), 'target' => 'security' ),
+			'revoke_all_sessions'    => array( 'callback' => array( 'SMC_Workflow', 'handle_revoke_all_sessions' ), 'target' => 'security' ),
 			'resubmit'               => array( 'callback' => array( 'SMC_Workflow', 'handle_resubmit' ), 'target' => 'status' ),
 			'appeal'                 => array( 'callback' => array( 'SMC_Workflow', 'handle_appeal' ), 'target' => 'status' ),
 			'withdraw_guardian'      => array( 'callback' => array( 'SMC_Workflow', 'handle_withdraw_guardian' ), 'target' => 'status' ),
@@ -57,6 +53,13 @@ final class SMC_Host_Compat {
 			'assign_review'          => array( 'callback' => array( 'SMC_Admin', 'handle_assignment' ), 'target' => 'admin' ),
 			'declare_conflict'       => array( 'callback' => array( 'SMC_Admin', 'handle_conflict' ), 'target' => 'admin' ),
 			'save_founder'           => array( 'callback' => array( 'SMC_Admin', 'save_founder' ), 'target' => 'admin' ),
+			'retry_repair'           => array( 'callback' => array( 'SMC_Completion', 'retry_repair' ), 'target' => 'admin' ),
+			'retry_outbox'           => array( 'callback' => array( 'SMC_Completion', 'retry_outbox' ), 'target' => 'admin' ),
+			'post_restore_reconcile' => array( 'callback' => array( 'SMC_Completion', 'post_restore_reconcile' ), 'target' => 'admin' ),
+			'download_backup_manifest' => array( 'callback' => array( 'SMC_Completion', 'download_backup_manifest' ), 'target' => 'admin', 'streaming' => true ),
+			'create_retention_hold'  => array( 'callback' => array( 'SMC_Completion', 'create_retention_hold' ), 'target' => 'admin' ),
+			'release_retention_hold' => array( 'callback' => array( 'SMC_Completion', 'release_retention_hold' ), 'target' => 'admin' ),
+			'save_institutional_ai'  => array( 'callback' => array( 'SMC_Three_Plan', 'save_institutional_ai' ), 'target' => 'admin' ),
 			'private_document'       => array( 'callback' => array( 'SMC_Security', 'serve_document' ), 'target' => 'admin', 'streaming' => true ),
 		);
 	}
@@ -114,12 +117,13 @@ final class SMC_Host_Compat {
 
 	private static function record_failure( $action, Throwable $error ) {
 		$user_id = get_current_user_id();
+		$message = sanitize_text_field( $error->getMessage() );
 		$record  = array(
-			'action'      => sanitize_key( (string) $action ),
-			'user_id'     => absint( $user_id ),
-			'error_class' => get_class( $error ),
-			'message'     => sanitize_text_field( $error->getMessage() ),
-			'updated_at'  => current_time( 'mysql', true ),
+			'action'         => sanitize_key( (string) $action ),
+			'user_id'        => absint( $user_id ),
+			'error_class'    => sanitize_key( get_class( $error ) ),
+			'message_digest' => hash( 'sha256', $message ),
+			'updated_at'     => current_time( 'mysql', true ),
 		);
 		update_option( 'smc_last_action_runtime_failure', $record, false );
 		if ( $user_id > 0 ) {
@@ -153,6 +157,12 @@ final class SMC_Host_Compat {
 		);
 		$key = isset( $paths[ $target ] ) ? $target : 'status';
 		$url = smc_page_url( $key, $paths[ $key ] );
+		if ( 'guardian' === $key && ! empty( $_POST['guardian_token'] ) ) {
+			$guardian_token = sanitize_text_field( wp_unslash( $_POST['guardian_token'] ) );
+			if ( preg_match( '/^[A-Za-z0-9]{20,80}$/', $guardian_token ) ) {
+				$url = add_query_arg( 'guardian_token', rawurlencode( $guardian_token ), $url );
+			}
+		}
 		if ( $runtime_failure ) {
 			$url = add_query_arg(
 				array(

@@ -296,6 +296,7 @@ final class SMC_Advanced_Trust_2026 {
 	}
 
 	public static function daily_reverification_sweep() {
+		if ( class_exists( 'SMC_Completion' ) && SMC_Completion::safe_mode() ) { return; }
 		global $wpdb;
 		$batch = 200;
 		$last_id = max( 0, absint( get_option( self::REVERIFY_CURSOR_OPTION, 0 ) ) );
@@ -504,68 +505,89 @@ final class SMC_Advanced_Trust_2026 {
 		if ( ! self::actor_meets_step_up( $actor_id, 'account_merge', 'smc_manage_membership' ) ) {
 			return new WP_Error( 'smc_merge_authorization', __( 'Account merge review requires membership authority and the required current step-up assurance.', 'sabri-membership-core' ) );
 		}
-		$request = array(
-			'id' => wp_generate_uuid4(),
-			'primary_user_id' => $primary_user_id,
-			'duplicate_user_id' => $duplicate_user_id,
-			'state' => 'evidence_review',
-			'reason' => sanitize_text_field( $reason ),
-			'opened_by' => $actor_id,
-			'opened_at' => time(),
-		);
-		$old_primary = self::meta_snapshot( $primary_user_id, self::MERGE_META );
-		$old_duplicate = self::meta_snapshot( $duplicate_user_id, self::MERGE_META );
-		if ( ! self::write_user_meta_verified( $primary_user_id, self::MERGE_META, $request ) || ! self::write_user_meta_verified( $duplicate_user_id, self::MERGE_META, $request ) ) {
-			self::restore_meta_snapshot( $primary_user_id, self::MERGE_META, $old_primary );
-			self::restore_meta_snapshot( $duplicate_user_id, self::MERGE_META, $old_duplicate );
-			return new WP_Error( 'smc_merge_store', __( 'Account merge proposal could not be stored consistently.', 'sabri-membership-core' ) );
+		$lock = self::acquire_account_merge_lock();
+		if ( false === $lock ) { return new WP_Error( 'smc_merge_busy', __( 'Account merge governance is busy; retry safely.', 'sabri-membership-core' ) ); }
+		try {
+			$existing_primary = get_user_meta( $primary_user_id, self::MERGE_META, true );
+			$existing_duplicate = get_user_meta( $duplicate_user_id, self::MERGE_META, true );
+			if ( self::merge_request_is_active( $existing_primary ) || self::merge_request_is_active( $existing_duplicate ) ) {
+				return new WP_Error( 'smc_merge_overlap', __( 'One of these accounts already has an active merge workflow.', 'sabri-membership-core' ) );
+			}
+			$request = array(
+				'id' => wp_generate_uuid4(),
+				'primary_user_id' => $primary_user_id,
+				'duplicate_user_id' => $duplicate_user_id,
+				'state' => 'evidence_review',
+				'reason' => sanitize_text_field( $reason ),
+				'opened_by' => $actor_id,
+				'opened_at' => time(),
+			);
+			$old_primary = self::meta_snapshot( $primary_user_id, self::MERGE_META );
+			$old_duplicate = self::meta_snapshot( $duplicate_user_id, self::MERGE_META );
+			if ( ! self::write_user_meta_verified( $primary_user_id, self::MERGE_META, $request ) || ! self::write_user_meta_verified( $duplicate_user_id, self::MERGE_META, $request ) ) {
+				self::restore_meta_snapshot( $primary_user_id, self::MERGE_META, $old_primary );
+				self::restore_meta_snapshot( $duplicate_user_id, self::MERGE_META, $old_duplicate );
+				return new WP_Error( 'smc_merge_store', __( 'Account merge proposal could not be stored consistently.', 'sabri-membership-core' ) );
+			}
+			if ( ! SMC_Security::audit( 'account_merge_proposed', $primary_user_id, array( 'request_id' => $request['id'], 'duplicate_subject' => self::subject_reference( $duplicate_user_id ) ) ) ) {
+				self::restore_meta_snapshot( $primary_user_id, self::MERGE_META, $old_primary );
+				self::restore_meta_snapshot( $duplicate_user_id, self::MERGE_META, $old_duplicate );
+				return new WP_Error( 'smc_merge_audit', __( 'Account merge proposal could not be audited.', 'sabri-membership-core' ) );
+			}
+			return $request;
+		} finally {
+			self::release_account_merge_lock( $lock );
 		}
-		if ( ! SMC_Security::audit( 'account_merge_proposed', $primary_user_id, array( 'request_id' => $request['id'], 'duplicate_subject' => self::subject_reference( $duplicate_user_id ) ) ) ) {
-			self::restore_meta_snapshot( $primary_user_id, self::MERGE_META, $old_primary );
-			self::restore_meta_snapshot( $duplicate_user_id, self::MERGE_META, $old_duplicate );
-			return new WP_Error( 'smc_merge_audit', __( 'Account merge proposal could not be audited.', 'sabri-membership-core' ) );
-		}
-		return $request;
 	}
 
 	public static function approve_account_merge( $request_id, $primary_user_id, $reviewer_id ) {
 		$primary_user_id = absint( $primary_user_id );
 		$reviewer_id = absint( $reviewer_id );
-		$request = get_user_meta( $primary_user_id, self::MERGE_META, true );
-		if ( ! is_array( $request ) || ! hash_equals( (string) ( $request['id'] ?? '' ), (string) $request_id ) || 'evidence_review' !== ( $request['state'] ?? '' ) ) {
-			return new WP_Error( 'smc_merge_state', __( 'The account merge request is not current.', 'sabri-membership-core' ) );
+		$lock = self::acquire_account_merge_lock();
+		if ( false === $lock ) { return new WP_Error( 'smc_merge_busy', __( 'Account merge governance is busy; retry safely.', 'sabri-membership-core' ) ); }
+		try {
+			$request = get_user_meta( $primary_user_id, self::MERGE_META, true );
+			if ( ! is_array( $request ) || ! hash_equals( (string) ( $request['id'] ?? '' ), (string) $request_id ) || 'evidence_review' !== ( $request['state'] ?? '' ) ) {
+				return new WP_Error( 'smc_merge_state', __( 'The account merge request is not current.', 'sabri-membership-core' ) );
+			}
+			if ( absint( $request['opened_by'] ?? 0 ) === $reviewer_id || ! self::actor_meets_step_up( $reviewer_id, 'account_merge', 'smc_finalize_verification' ) ) {
+				return new WP_Error( 'smc_merge_separation', __( 'Independent senior review with a fresh security challenge is required.', 'sabri-membership-core' ) );
+			}
+			$duplicate_user_id = absint( $request['duplicate_user_id'] ?? 0 );
+			if ( $duplicate_user_id <= 0 || absint( $request['primary_user_id'] ?? 0 ) !== $primary_user_id ) {
+				return new WP_Error( 'smc_merge_integrity', __( 'Account merge subjects are inconsistent.', 'sabri-membership-core' ) );
+			}
+			$duplicate_request = get_user_meta( $duplicate_user_id, self::MERGE_META, true );
+			if ( ! is_array( $duplicate_request ) || ! hash_equals( (string) ( $duplicate_request['id'] ?? '' ), (string) $request_id ) || 'evidence_review' !== sanitize_key( $duplicate_request['state'] ?? '' ) || absint( $duplicate_request['primary_user_id'] ?? 0 ) !== $primary_user_id || absint( $duplicate_request['duplicate_user_id'] ?? 0 ) !== $duplicate_user_id ) {
+				return new WP_Error( 'smc_merge_counterpart', __( 'The duplicate account does not carry the same current merge request.', 'sabri-membership-core' ) );
+			}
+			$request['state'] = 'finalizing';
+			$request['approved_by'] = $reviewer_id;
+			$request['approved_at'] = time();
+			if ( ! self::write_user_meta_verified( $primary_user_id, self::MERGE_META, $request ) || ! self::write_user_meta_verified( $duplicate_user_id, self::MERGE_META, $request ) ) {
+				return new WP_Error( 'smc_merge_finalizing_store', __( 'Account merge could not enter the fail-closed finalizing state.', 'sabri-membership-core' ) );
+			}
+			$inactive = self::set_continuity_state( $duplicate_user_id, 'permanently_inactive', $reviewer_id, 'duplicate_account_merge' );
+			if ( is_wp_error( $inactive ) || false === $inactive ) {
+				return new WP_Error( 'smc_merge_continuity', __( 'Duplicate account could not be made permanently inactive; merge remains fail-closed for repair.', 'sabri-membership-core' ) );
+			}
+			$request['state'] = 'approved_for_domain_transfer';
+			if ( ! self::write_user_meta_verified( $primary_user_id, self::MERGE_META, $request ) || ! self::write_user_meta_verified( $duplicate_user_id, self::MERGE_META, $request ) ) {
+				return new WP_Error( 'smc_merge_approval_store', __( 'Account merge approval could not be stored consistently; duplicate account remains inactive.', 'sabri-membership-core' ) );
+			}
+			if ( ! SMC_Security::audit( 'account_merge_approved', $primary_user_id, array( 'request_id' => $request_id, 'duplicate_subject' => self::subject_reference( $duplicate_user_id ) ) ) ) {
+				return new WP_Error( 'smc_merge_approval_audit', __( 'Account merge approval could not be audited; duplicate account remains inactive.', 'sabri-membership-core' ) );
+			}
+			$primary_revocation = self::bump_revocation_epoch( $primary_user_id, 'account_merge_approved' );
+			$duplicate_revocation = self::bump_revocation_epoch( $duplicate_user_id, 'account_merge_approved' );
+			if ( false === $primary_revocation || false === $duplicate_revocation ) {
+				return new WP_Error( 'smc_merge_revocation', __( 'Account merge approval could not be propagated to all consumers.', 'sabri-membership-core' ) );
+			}
+			do_action( 'smc_account_merge_approved', $request );
+			return $request;
+		} finally {
+			self::release_account_merge_lock( $lock );
 		}
-		if ( absint( $request['opened_by'] ?? 0 ) === $reviewer_id || ! self::actor_meets_step_up( $reviewer_id, 'account_merge', 'smc_finalize_verification' ) ) {
-			return new WP_Error( 'smc_merge_separation', __( 'Independent senior review with a fresh security challenge is required.', 'sabri-membership-core' ) );
-		}
-		$duplicate_user_id = absint( $request['duplicate_user_id'] ?? 0 );
-		if ( $duplicate_user_id <= 0 || absint( $request['primary_user_id'] ?? 0 ) !== $primary_user_id ) {
-			return new WP_Error( 'smc_merge_integrity', __( 'Account merge subjects are inconsistent.', 'sabri-membership-core' ) );
-		}
-		$request['state'] = 'finalizing';
-		$request['approved_by'] = $reviewer_id;
-		$request['approved_at'] = time();
-		if ( ! self::write_user_meta_verified( $primary_user_id, self::MERGE_META, $request ) || ! self::write_user_meta_verified( $duplicate_user_id, self::MERGE_META, $request ) ) {
-			return new WP_Error( 'smc_merge_finalizing_store', __( 'Account merge could not enter the fail-closed finalizing state.', 'sabri-membership-core' ) );
-		}
-		$inactive = self::set_continuity_state( $duplicate_user_id, 'permanently_inactive', $reviewer_id, 'duplicate_account_merge' );
-		if ( is_wp_error( $inactive ) || false === $inactive ) {
-			return new WP_Error( 'smc_merge_continuity', __( 'Duplicate account could not be made permanently inactive; merge remains fail-closed for repair.', 'sabri-membership-core' ) );
-		}
-		$request['state'] = 'approved_for_domain_transfer';
-		if ( ! self::write_user_meta_verified( $primary_user_id, self::MERGE_META, $request ) || ! self::write_user_meta_verified( $duplicate_user_id, self::MERGE_META, $request ) ) {
-			return new WP_Error( 'smc_merge_approval_store', __( 'Account merge approval could not be stored consistently; duplicate account remains inactive.', 'sabri-membership-core' ) );
-		}
-		if ( ! SMC_Security::audit( 'account_merge_approved', $primary_user_id, array( 'request_id' => $request_id, 'duplicate_subject' => self::subject_reference( $duplicate_user_id ) ) ) ) {
-			return new WP_Error( 'smc_merge_approval_audit', __( 'Account merge approval could not be audited; duplicate account remains inactive.', 'sabri-membership-core' ) );
-		}
-		$primary_revocation = self::bump_revocation_epoch( $primary_user_id, 'account_merge_approved' );
-		$duplicate_revocation = self::bump_revocation_epoch( $duplicate_user_id, 'account_merge_approved' );
-		if ( false === $primary_revocation || false === $duplicate_revocation ) {
-			return new WP_Error( 'smc_merge_revocation', __( 'Account merge approval could not be propagated to all consumers.', 'sabri-membership-core' ) );
-		}
-		do_action( 'smc_account_merge_approved', $request );
-		return $request;
 	}
 
 	/** F00-EXT-010 — Compromised-account containment state. */
@@ -589,7 +611,7 @@ final class SMC_Advanced_Trust_2026 {
 		if ( ! SMC_Security::revoke_all_sessions( $user_id, 'security_containment_' . $state ) ) { return self::transition_failure( $user_id, 'smc_containment_sessions' ); }
 		if ( ! self::write_user_meta_verified( $user_id, '_smc_revalidation_required_at', time() + 1 ) ) { return self::transition_failure( $user_id, 'smc_containment_revalidation' ); }
 		if ( ! SMC_Security::audit( 'security_containment_changed', $user_id, array( 'state' => $state, 'reason_code' => sanitize_key( $reason ) ) ) ) { return self::transition_failure( $user_id, 'smc_containment_audit' ); }
-		if ( false === self::bump_revocation_epoch( $user_id, 'security_containment_changed' ) ) { return new WP_Error( 'smc_containment_revocation', __( 'Security containment change could not be propagated safely.', 'sabri-membership-core' ) ); }
+		if ( false === self::bump_revocation_epoch( $user_id, 'security_containment_changed' ) ) { return self::transition_failure( $user_id, 'smc_containment_revocation' ); }
 		if ( ! self::clear_transition_hold( $user_id ) ) { return new WP_Error( 'smc_containment_hold_clear', __( 'Security containment remains fail-closed because its transition hold could not be cleared.', 'sabri-membership-core' ) ); }
 		return $record;
 	}
@@ -798,8 +820,11 @@ final class SMC_Advanced_Trust_2026 {
 		if ( ! self::write_user_meta_verified( $principal_user_id, self::DELEGATION_META, $grants ) ) {
 			return new WP_Error( 'smc_delegation_store', __( 'Delegation could not be stored safely.', 'sabri-membership-core' ) );
 		}
-		if ( ! SMC_Security::audit( 'delegated_authority_granted', $principal_user_id, array( 'grant_id' => $grant['id'], 'scopes' => $scopes, 'expires_at' => $expires_at ) ) || false === self::bump_revocation_epoch( $principal_user_id, 'delegated_authority_granted' ) ) {
-			self::restore_meta_snapshot( $principal_user_id, self::DELEGATION_META, $old );
+		$audit_ok = SMC_Security::audit( 'delegated_authority_granted', $principal_user_id, array( 'grant_id' => $grant['id'], 'scopes' => $scopes, 'expires_at' => $expires_at ) );
+		$revocation_ok = $audit_ok && false !== self::bump_revocation_epoch( $principal_user_id, 'delegated_authority_granted' );
+		if ( ! $audit_ok || ! $revocation_ok ) {
+			$restored = self::restore_meta_snapshot( $principal_user_id, self::DELEGATION_META, $old );
+			if ( $audit_ok ) { SMC_Security::audit( 'delegated_authority_grant_rolled_back', $principal_user_id, array( 'grant_id' => $grant['id'], 'restored' => (bool) $restored ) ); }
 			return new WP_Error( 'smc_delegation_commit', __( 'Delegation could not be committed with audit and revocation evidence.', 'sabri-membership-core' ) );
 		}
 		return $grant;
@@ -822,6 +847,7 @@ final class SMC_Advanced_Trust_2026 {
 		if ( ! self::actor_is_current( $actor_id, 'smc_manage_membership' ) || ! SMC_Security::session_is_verified( $actor_id ) ) {
 			return false;
 		}
+		$old = self::meta_snapshot( $principal_user_id, self::DELEGATION_META );
 		$grants = (array) get_user_meta( $principal_user_id, self::DELEGATION_META, true );
 		$changed = false;
 		foreach ( $grants as &$grant ) {
@@ -833,8 +859,14 @@ final class SMC_Advanced_Trust_2026 {
 		}
 		unset( $grant );
 		if ( ! $changed || ! self::write_user_meta_verified( $principal_user_id, self::DELEGATION_META, $grants ) ) { return false; }
-		if ( ! SMC_Security::audit( 'delegated_authority_revoked', $principal_user_id, array( 'grant_id' => sanitize_text_field( $grant_id ) ) ) ) { return false; }
-		return false !== self::bump_revocation_epoch( $principal_user_id, 'delegated_authority_revoked' );
+		$audit_ok = SMC_Security::audit( 'delegated_authority_revoked', $principal_user_id, array( 'grant_id' => sanitize_text_field( $grant_id ) ) );
+		$revocation_ok = $audit_ok && false !== self::bump_revocation_epoch( $principal_user_id, 'delegated_authority_revoked' );
+		if ( ! $audit_ok || ! $revocation_ok ) {
+			$restored = self::restore_meta_snapshot( $principal_user_id, self::DELEGATION_META, $old );
+			if ( $audit_ok ) { SMC_Security::audit( 'delegated_authority_revocation_rolled_back', $principal_user_id, array( 'grant_id' => sanitize_text_field( $grant_id ), 'restored' => (bool) $restored ) ); }
+			return false;
+		}
+		return true;
 	}
 
 	public static function has_delegated_scope( $principal_user_id, $scope ) {
@@ -860,13 +892,19 @@ final class SMC_Advanced_Trust_2026 {
 		$request = array(
 			'id' => wp_generate_uuid4(), 'subject_user_id' => $subject_user_id, 'purpose' => $purpose,
 			'opened_by' => $actor_id, 'opened_at' => time(), 'expires_at' => time() + self::BREAK_GLASS_TTL,
-			'approvals' => array( $actor_id ), 'approval_times' => array( (string) $actor_id => time() ), 'consumed_at' => 0,
+			'approvals' => array( $actor_id ), 'approval_times' => array( (string) $actor_id => time() ), 'approval_audit_committed' => array( (string) $actor_id => false ), 'open_audit_committed' => false, 'consumed_at' => 0,
 		);
 		$all = (array) get_option( self::BREAK_GLASS_OPTION, array() );
 		$all[ $request['id'] ] = $request;
 		$stored = self::write_option_verified( self::BREAK_GLASS_OPTION, $all );
-		if ( $stored && ! SMC_Security::audit( 'break_glass_opened', $subject_user_id, array( 'request_id' => $request['id'], 'purpose' => $request['purpose'] ) ) ) {
-			unset( $all[ $request['id'] ] ); self::write_option_verified( self::BREAK_GLASS_OPTION, $all ); $stored = false;
+		$audit = $stored && SMC_Security::audit( 'break_glass_opened', $subject_user_id, array( 'request_id' => $request['id'], 'purpose' => $request['purpose'] ) );
+		if ( $audit ) {
+			$request['open_audit_committed'] = true;
+			$request['approval_audit_committed'][ (string) $actor_id ] = true;
+			$all[ $request['id'] ] = $request;
+			$stored = self::write_option_verified( self::BREAK_GLASS_OPTION, $all );
+		} else {
+			$stored = false;
 		}
 		self::release_break_glass_lock( $lock );
 		return $stored ? $request : new WP_Error( 'smc_break_glass_store', __( 'Break-glass request could not be persisted and audited safely.', 'sabri-membership-core' ) );
@@ -879,20 +917,27 @@ final class SMC_Advanced_Trust_2026 {
 		if ( false === $lock ) { return false; }
 		$all = (array) get_option( self::BREAK_GLASS_OPTION, array() );
 		$request = $all[ $request_id ] ?? null;
-		if ( ! is_array( $request ) || absint( $request['expires_at'] ?? 0 ) <= time() || ! empty( $request['consumed_at'] ) || in_array( $approver_id, (array) ( $request['approvals'] ?? array() ), true ) ) {
+		if ( ! is_array( $request ) || empty( $request['open_audit_committed'] ) || absint( $request['expires_at'] ?? 0 ) <= time() || ! empty( $request['consumed_at'] ) || in_array( $approver_id, (array) ( $request['approvals'] ?? array() ), true ) ) {
 			self::release_break_glass_lock( $lock ); return false;
 		}
 		$before = $request;
 		$request['approvals'][] = $approver_id;
 		$request['approval_times'] = is_array( $request['approval_times'] ?? null ) ? $request['approval_times'] : array();
+		$request['approval_audit_committed'] = is_array( $request['approval_audit_committed'] ?? null ) ? $request['approval_audit_committed'] : array();
 		$request['approval_times'][ (string) $approver_id ] = time();
+		$request['approval_audit_committed'][ (string) $approver_id ] = false;
 		$all[ $request_id ] = $request;
 		$stored = self::write_option_verified( self::BREAK_GLASS_OPTION, $all );
-		if ( $stored && ! SMC_Security::audit( 'break_glass_approved', absint( $request['subject_user_id'] ), array( 'request_id' => $request_id ) ) ) {
-			$all[ $request_id ] = $before; self::write_option_verified( self::BREAK_GLASS_OPTION, $all ); $stored = false;
+		$audit = $stored && SMC_Security::audit( 'break_glass_approved', absint( $request['subject_user_id'] ), array( 'request_id' => $request_id ) );
+		if ( $audit ) {
+			$request['approval_audit_committed'][ (string) $approver_id ] = true;
+			$all[ $request_id ] = $request;
+			$stored = self::write_option_verified( self::BREAK_GLASS_OPTION, $all );
+		} else {
+			$stored = false;
 		}
 		self::release_break_glass_lock( $lock );
-		return $stored && count( array_unique( $request['approvals'] ) ) >= 2;
+		return $stored && count( array_unique( $request['approvals'] ) ) >= 2 && self::break_glass_approvals_current( $request );
 	}
 
 	public static function consume_break_glass( $request_id, $actor_id ) {
@@ -902,7 +947,7 @@ final class SMC_Advanced_Trust_2026 {
 		if ( false === $lock ) { return false; }
 		$all = (array) get_option( self::BREAK_GLASS_OPTION, array() );
 		$request = $all[ $request_id ] ?? null;
-		if ( ! is_array( $request ) || absint( $request['expires_at'] ?? 0 ) <= time() || ! empty( $request['consumed_at'] ) || count( array_unique( (array) ( $request['approvals'] ?? array() ) ) ) < 2 || ! in_array( $actor_id, (array) $request['approvals'], true ) || ! self::break_glass_approvals_current( $request ) ) {
+		if ( ! is_array( $request ) || empty( $request['open_audit_committed'] ) || absint( $request['expires_at'] ?? 0 ) <= time() || ! empty( $request['consumed_at'] ) || count( array_unique( (array) ( $request['approvals'] ?? array() ) ) ) < 2 || ! in_array( $actor_id, (array) $request['approvals'], true ) || ! self::break_glass_approvals_current( $request ) ) {
 			self::release_break_glass_lock( $lock ); return false;
 		}
 		$before = $request; $request['consumed_at'] = time(); $request['consumed_by'] = $actor_id; $all[ $request_id ] = $request;
@@ -938,8 +983,16 @@ final class SMC_Advanced_Trust_2026 {
 			$status = sanitize_key( $base['status'] ?? 'not_enrolled' );
 			if ( ! empty( $base['approved'] ) || ! in_array( $status, array( 'not_enrolled', 'draft' ), true ) ) { return false; }
 		}
+		$old = self::meta_snapshot( $user_id, self::SERVICE_IDENTITY_META );
 		$state = array( 'kind' => 'service', 'purpose' => $purpose, 'approved' => (bool) $approved, 'actor_id' => $actor_id, 'updated_at' => time() );
-		if ( ! self::write_user_meta_verified( $user_id, self::SERVICE_IDENTITY_META, $state ) || ! SMC_Security::audit( 'service_identity_changed', $user_id, array( 'purpose' => $state['purpose'], 'approved' => $state['approved'] ) ) || false === self::bump_revocation_epoch( $user_id, 'service_identity_changed' ) ) { return false; }
+		if ( ! self::write_user_meta_verified( $user_id, self::SERVICE_IDENTITY_META, $state ) ) { return false; }
+		$audit_ok = SMC_Security::audit( 'service_identity_changed', $user_id, array( 'purpose' => $state['purpose'], 'approved' => $state['approved'] ) );
+		$revocation_ok = $audit_ok && false !== self::bump_revocation_epoch( $user_id, 'service_identity_changed' );
+		if ( ! $audit_ok || ! $revocation_ok ) {
+			$restored = self::restore_meta_snapshot( $user_id, self::SERVICE_IDENTITY_META, $old );
+			if ( $audit_ok ) { SMC_Security::audit( 'service_identity_change_rolled_back', $user_id, array( 'restored' => (bool) $restored ) ); }
+			return false;
+		}
 		return $state;
 	}
 
@@ -960,7 +1013,7 @@ final class SMC_Advanced_Trust_2026 {
 		if ( ! SMC_Security::revoke_all_sessions( $user_id, 'continuity_state_' . $state ) ) { return self::transition_failure( $user_id, 'smc_continuity_sessions' ); }
 		if ( ! self::write_user_meta_verified( $user_id, '_smc_revalidation_required_at', time() + 1 ) ) { return self::transition_failure( $user_id, 'smc_continuity_revalidation' ); }
 		if ( ! SMC_Security::audit( 'continuity_state_changed', $user_id, array( 'state' => $state, 'reason_code' => sanitize_key( $reason ) ) ) ) { return self::transition_failure( $user_id, 'smc_continuity_audit' ); }
-		if ( false === self::bump_revocation_epoch( $user_id, 'continuity_state_changed' ) ) { return new WP_Error( 'smc_continuity_revocation', __( 'Continuity change could not be propagated safely.', 'sabri-membership-core' ) ); }
+		if ( false === self::bump_revocation_epoch( $user_id, 'continuity_state_changed' ) ) { return self::transition_failure( $user_id, 'smc_continuity_revocation' ); }
 		if ( ! self::clear_transition_hold( $user_id ) ) { return new WP_Error( 'smc_continuity_hold_clear', __( 'Continuity state remains fail-closed because its transition hold could not be cleared.', 'sabri-membership-core' ) ); }
 		return $record;
 	}
@@ -1088,14 +1141,36 @@ final class SMC_Advanced_Trust_2026 {
 	private static function break_glass_approvals_current( $request ) {
 		$approvals = array_values( array_unique( array_map( 'absint', (array) ( $request['approvals'] ?? array() ) ) ) );
 		$times = is_array( $request['approval_times'] ?? null ) ? $request['approval_times'] : array();
+		$audit_committed = is_array( $request['approval_audit_committed'] ?? null ) ? $request['approval_audit_committed'] : array();
 		$opened_at = absint( $request['opened_at'] ?? 0 );
 		$expires_at = absint( $request['expires_at'] ?? 0 );
-		if ( count( $approvals ) < 2 || $opened_at <= 0 || $expires_at <= time() ) { return false; }
+		if ( empty( $request['open_audit_committed'] ) || count( $approvals ) < 2 || $opened_at <= 0 || $expires_at <= time() ) { return false; }
 		foreach ( $approvals as $approver_id ) {
 			$approved_at = absint( $times[ (string) $approver_id ] ?? 0 );
-			if ( $approved_at < $opened_at || $approved_at > $expires_at || $approved_at > time() || ! self::break_glass_approver_current( $approver_id ) ) { return false; }
+			if ( empty( $audit_committed[ (string) $approver_id ] ) || $approved_at < $opened_at || $approved_at > $expires_at || $approved_at > time() || ! self::break_glass_approver_current( $approver_id ) ) { return false; }
 		}
 		return true;
+	}
+
+
+	private static function acquire_account_merge_lock() {
+		global $wpdb;
+		if ( ! isset( $wpdb ) || ! is_object( $wpdb ) || ! method_exists( $wpdb, 'get_var' ) || ! method_exists( $wpdb, 'prepare' ) ) { return false; }
+		$name = 'smc_account_merge_v1';
+		$locked = $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s,%d)', $name, 2 ) );
+		return '1' === (string) $locked ? $name : false;
+	}
+
+	private static function release_account_merge_lock( $name ) {
+		global $wpdb;
+		if ( 'smc_account_merge_v1' === (string) $name && isset( $wpdb ) && is_object( $wpdb ) && method_exists( $wpdb, 'get_var' ) && method_exists( $wpdb, 'prepare' ) ) {
+			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $name ) );
+		}
+	}
+
+	private static function merge_request_is_active( $request ) {
+		if ( ! is_array( $request ) ) { return false; }
+		return in_array( sanitize_key( $request['state'] ?? '' ), array( 'evidence_review', 'finalizing', 'approved_for_domain_transfer' ), true );
 	}
 
 	private static function transition_failure( $user_id, $code ) {

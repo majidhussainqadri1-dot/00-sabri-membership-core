@@ -19,9 +19,9 @@ function assert(condition, name) {
   else failures.push(name);
 }
 
-assert(main.includes('Version: 1.2.20'), 'Plugin header is 1.2.20');
-assert(main.includes("define( 'SMC_VERSION', '1.2.20' )"), 'Runtime version is 1.2.20');
-assert(main.includes("define( 'SMC_DB_VERSION', '1.4.0' )"), 'Database version is 1.4.0');
+assert(main.includes('Version: 1.2.32'), 'Plugin header is 1.2.32');
+assert(main.includes("define( 'SMC_VERSION', '1.2.32' )"), 'Runtime version is 1.2.32');
+assert(main.includes("define( 'SMC_DB_VERSION', '1.4.3' )"), 'Database version is 1.4.3');
 assert(main.includes("define( 'SMC_CONTRACT_VERSION', '1.2.1' )"), 'Contract version is 1.2.1');
 assert(stateFunction.length > 0, 'Explicit membership-state API exists');
 assert(/\$institutional\s*=\s*\$is_founder\s*\|\|\s*\$is_admin\s*\|\|\s*\$is_ai/.test(stateFunction), 'Founder, Administrator and institutional AI authority are resolved explicitly');

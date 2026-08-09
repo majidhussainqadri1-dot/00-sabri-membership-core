@@ -3,7 +3,7 @@ Contributors: sabrihomeopathy
 Tags: membership, identity, guardian consent, two-factor authentication, privacy
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 1.2.19
+Stable tag: 1.2.32
 License: GPL-2.0-or-later
 
 Canonical membership eligibility, identity assurance, guardian consent, security assertions, and verification governance for the Sabri Social Homeopathy Platform.
@@ -51,16 +51,16 @@ Contract `smc.cf01.membership-assurance` version `1.0.0` returns a short-lived, 
 
 == Required Configuration ==
 
-Define a securely generated and separately backed-up SMC_MASTER_KEY with at least 256 bits of entropy in wp-config.php.
-Define SMC_MASTER_KEY_ID as a stable non-secret key identifier (for example smc-master-2026-01). New sensitive encryption fails closed if this identifier is absent or invalid; retain prior key identifiers only as required by an approved rotation/migration plan.
+For managed shared-host operation, File 00 can provision a per-site SMC3 master-key generation in protected private key storage when SMC_MASTER_KEY / SMC_MASTER_KEY_ID are not defined. Back up that managed keyring separately from the database before production acceptance.
+For externally managed deployment, define SMC_MASTER_KEY with at least 256 bits of entropy and SMC_MASTER_KEY_ID as a stable non-secret key identifier (for example smc-master-2026-01). Retain prior key identifiers only as required by an approved rotation/migration plan.
 
 Private storage defaults to a directory outside the WordPress public root. For explicit control, define SMC_PRIVATE_STORAGE_DIR as an absolute, non-symlink path outside ABSPATH and WP_CONTENT_DIR. The web-server user must be able to enforce directory mode 0700 and file mode 0600.
 
 Configure these provider filters before accepting applications:
 
-* smc_document_scan — must return true only after malware and active-content scanning.
-* smc_send_contact_otp — must send email or mobile ownership codes and return true.
-* smc_send_guardian_invitation — must send the guardian code and signed invitation link and return true.
+* smc_document_scan — approved scanner adapters must return true only after malware/active-content scanning. The built-in shared-host fallback accepts only supported images that will be decoded/re-encoded; PDFs remain fail-closed without an earlier approved scanner decision.
+* smc_external_contact_otp_delivery — File 19/provider adapter must return an accepted structured result containing receipt_id or provider_reference; boolean-only delivery is not sufficient for OTP ownership proof.
+* smc_external_guardian_invitation_delivery (or the compatibility smc_send_guardian_invitation bridge) — must return an accepted structured result containing receipt_id or provider_reference after the guardian code/link has been accepted by the delivery provider; boolean-only delivery is not trusted as guardian ownership proof.
 
 File 19 receives membership notices through its canonical sabri_notify integration. File 00 never sends decision email directly.
 
@@ -69,6 +69,62 @@ File 19 receives membership notices through its canonical sabri_notify integrati
 Local source and GitHub checks do not authorize production. Test fresh activation, 1.0.1 upgrade, MySQL advisory locks, concurrent reviewers, authorization matrices, filesystem denial and rollback, scanner providers, email/mobile/guardian delivery, File 02 Google sign-in and passkey assurance adapter, CF-01 provider/consumer contracts, all named cross-file integrations, advanced trust containment/revocation/selective-disclosure workflows, privacy erasure, restore, browser accessibility, and mobile layouts on Hostinger staging.
 
 == Changelog ==
+
+= 1.2.32 =
+* Correctly identifies surviving File 00 1.0.1 audit rows, whose original schema had no previous_hash or row_hash fields, instead of falsely reporting them as damaged modern HMAC rows.
+* Preserves every legacy row unchanged, seals an exact keyed snapshot as an explicitly lower-assurance migration anchor, then starts the modern HMAC epoch and reconstructs only the missing serializer tail. It never retroactively claims that pre-HMAC history was cryptographically verified.
+* Refuses recovery for an unrecognized legacy schema, an unhashed row after the HMAC epoch begins, any invalid modern hash/link, an anchor mismatch, a changed snapshot, a changed key, a race, or a previously initialized partial schema. Administrator diagnostics now distinguish the real row/anchor reason from a merely missing tail.
+* DB schema contract remains 1.4.3; the compatibility bridge adds only missing nullable/empty HMAC columns to an exact legacy table and does not alter or delete audit-row content.
+
+= 1.2.31 =
+* Repairs the live first-bootstrap state proven by diagnostics where smc_audit_log contains surviving records but smc_audit_tail is missing. File 00 now validates every surviving append-only audit row cryptographically without consulting the absent tail, then reconstructs only the mutable serializer pointer from the verified final row hash.
+* Keeps fail-closed behavior if any previous_hash/row_hash check fails, the audit key is unavailable, the schema was previously marked initialized, the audit log changes during recovery, or the reconstructed tail cannot be bound exactly to the verified final row.
+* DB schema contract remains 1.4.3; this is a guarded recovery-behavior correction rather than a schema-shape change.
+
+= 1.2.30 =
+* Repairs the live partial-bootstrap state proven by diagnostics: smc_audit_log exists while smc_audit_tail is missing. If the surviving audit log is empty and the schema has never been marked initialized, File 00 can safely resume the interrupted first-time bootstrap by creating and initializing the serializer table.
+* Replaces the fragile two-step dbDelta bootstrap for the audit pair with explicit CREATE TABLE IF NOT EXISTS statements, verifies InnoDB after creation, and records a bootstrap marker/epoch so future interrupted first-run recovery is evidence-based.
+* Keeps fail-closed behavior for any previously initialized partial schema or any non-empty surviving audit state; those conditions still require manual integrity review. DB schema contract remains 1.4.3.
+
+= 1.2.29 =
+* Repairs the live Hostinger schema-bootstrap defect exposed by the 2FA diagnostic: both smc_audit_log and smc_audit_tail were absent while the persisted DB version already matched the runtime, so normal maybe_upgrade() skipped table creation.
+* Adds a guarded audit-infrastructure bootstrap independent of version equality, initializes a new explicit audit-chain epoch only when both audit tables have never been marked initialized, and refuses silent auto-repair if a previously initialized or partially present audit schema later disappears.
+* Advances the runtime DB schema marker to 1.4.3 so existing 1.4.2 installations also pass through the normal schema reconciler. TOTP remains fail-closed until the audit subsystem is ready.
+
+= 1.2.28 =
+* Adds safe live diagnostics for TOTP enrollment audit failures, exposing audit-row-chain and serializer-tail readiness without exposing hashes, secrets, or key material.
+
+= 1.2.27 =
+* Separates genuine TOTP mismatches from fail-closed enrollment storage/audit/session errors.
+* Extends pending authenticator setup to 20 minutes and displays required TOTP parameters.
+* Keeps security fail-closed while making live Hostinger diagnostics actionable.
+
+= 1.2.25 =
+* Authenticated admin-post CSRF compatibility hotfix: a valid WordPress session nonce is now the authoritative gate for logged-in File 00 actions. Optional Origin/Referer mismatch remains audit-visible but no longer blocks 2FA or other authenticated actions on reverse-proxy/shared-host deployments. Public guardian verification keeps a strict origin check after nonce validation.
+
+= 1.2.24 =
+* Hostinger same-origin hotfix: protected POST actions now accept canonical www/non-www aliases and WordPress Home/Site URL hosts, prefer Origin over Referer, and retain nonce-based fail-closed CSRF protection. Fixes legitimate 2FA setup and other admin-post actions being blocked with “The protected request origin could not be verified.”
+
+= 1.2.23 =
+* Second independent 80-round corrective candidate: closes transaction, provider-receipt, private-evidence authorization, privacy-export budgeting, retention-hold governance, session-revocation reconciliation, accessibility/RTL, status/security/guardian UX, and interrupted evidence-recovery defects found after the first 80-round package.
+* Runtime 1.2.23; DB schema 1.4.3; public contract 1.2.1. Existing scanner-approved evidence can now be resumed at a server document checkpoint after an interrupted submission; selecting a new file deliberately replaces the accepted copy.
+* Removes blanket WordPress manage_options bypasses from private evidence/profile review, surfaces legacy indefinite retention holds as explicit acceptance blockers, and bounds privacy exporter output while preserving deterministic pagination.
+* Production acceptance remains separate: Hostinger staging, configured File 19 email/SMS/guardian delivery, real browser/mobile/accessibility, isolated restore/rollback, and independent security acceptance are still required.
+
+= 1.2.22 =
+* Second fresh 80-round hardening: optimistic row-version submit binding, post-commit role/session effects, immutable guardian-current enforcement, provider receipt preservation, keyring permissions, private referrer policy, founder option commit/cache safety, and minor guardian UX validation.
+
+
+= 1.2.21 =
+* Eighty-round corrective review candidate: closes additional lifecycle, guardian-currentness, merge-concurrency, delegated-authority, break-glass, service-identity, institutional-AI session, RTL/responsive, crypto-runtime, schema-migration and backup-manifest defects found during sequential review.
+* DB schema advances to 1.4.1 so OTP delivery-receipt columns are actually migrated on existing 1.4.0 sites; public membership contract remains 1.2.1.
+* Removes the missing RTL replacement-stylesheet path, strengthens 320px/touch-target geometry, and keeps native browser constraint validation in progressive/no-JavaScript application submission.
+* Makes OpenSSL AES-256-GCM capability part of fail-closed key readiness, and keeps PDFs fail-closed unless an approved scanner adapter has already accepted them; image fallback remains bounded and is followed by safe re-encoding.
+* Backup manifests now include the MFA factor replay-state and serialized audit-tail tables. Production acceptance remains separate and requires Hostinger staging, configured providers, browser/mobile/accessibility, restore/rollback and independent security acceptance.
+
+= 1.2.20 =
+* Hostinger/shared-host corrective candidate: replaces fragile XHR evidence submission with native multipart submission, adds bounded host-runtime dispatch for user/reviewer actions, managed per-site encryption-key fallback, conservative local evidence scanning fallback, and content-hash asset cache busting.
+* DB schema remains 1.4.0 and public membership contract remains 1.2.1. Production acceptance still requires the explicit Hostinger/browser/provider/restore/security gates below.
 
 = 1.2.19 =
 * Corrective candidate for the 8 August 2026 GitHub code-only audit: fixes dual professional approval generation/independent handoff, appeal restoration provenance, reviewer assignment/document scoping, guardian immutable succession, rejected-reapplication bypass and jurisdiction-effective age enforcement.
