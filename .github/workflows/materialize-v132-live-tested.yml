@@ -69,6 +69,7 @@ jobs:
             'qa/membership-state-contract.mjs':[('1.2.20','1.2.32'),('1.4.0','1.4.3')],
             'qa/institutional-lifecycle-contract.mjs':[('1.2.19','1.2.32'),('1.4.0','1.4.3')],
             'qa/authorization-boundary-contract.mjs':[('1.2.19','1.2.32'),('1.4.0','1.4.3'),("main.includes('SMC_Authorization::init()')","main.includes(\"array( 'SMC_Authorization', 'init' )\")")],
+            'qa/completion-hardening-contract.mjs':[('1.2.19','1.2.32'),('1.4.0','1.4.3')],
             'qa/audit32-wordpress-mysql.php':[('1.2.20','1.2.32'),('1.4.0','1.4.3')],
             '.github/workflows/audit32-wordpress-mysql.yml':[('1.2.20','1.2.32'),('1.4.0','1.4.3')],
             '.github/workflows/file00-hostinger-all-actions-livefix.yml':[('1.2.20','1.2.32')],
