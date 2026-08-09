@@ -2,11 +2,12 @@
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Real contact-ownership delivery bridge for File 00.
+ * Contact-ownership provider bridge for File 00.
  *
- * Email OTP uses WordPress' configured mail transport as a safe built-in
- * fallback. Mobile OTP remains fail-closed unless a real SMS provider is
- * configured through File 19's provider hook or the File 00 SMS hook.
+ * File 00 owns OTP generation, hashing, expiry, attempts and verification
+ * state. File 19 remains the sole owner of external delivery. This class only
+ * translates the File 00 OTP contract into provider hooks and exposes clear
+ * readiness guidance in the membership UI.
  */
 final class SMC_Contact_Delivery {
 	private static $initialized = false;
@@ -32,51 +33,32 @@ final class SMC_Contact_Delivery {
 		if ( ! is_array( $payload ) ) {
 			return false;
 		}
+
 		$channel = sanitize_key( (string) ( $payload['channel'] ?? '' ) );
 		$target  = trim( (string) ( $payload['target'] ?? '' ) );
 		$code    = preg_replace( '/\D/', '', (string) ( $payload['code'] ?? '' ) );
 		$user_id = absint( $payload['user_id'] ?? 0 );
-		if ( 0 === $user_id || 6 !== strlen( $code ) ) {
+		if ( 0 === $user_id || 6 !== strlen( $code ) || ! in_array( $channel, array( 'email', 'mobile' ), true ) ) {
 			return false;
 		}
 
-		if ( 'email' === $channel ) {
-			return self::send_email( $target, $code );
-		}
-		if ( 'mobile' === $channel ) {
-			return self::send_sms( $target, $code, $user_id, $payload );
-		}
-		return false;
-	}
-
-	private static function send_email( $target, $code ) {
-		if ( ! is_email( $target ) || ! function_exists( 'wp_mail' ) ) {
-			return false;
-		}
-		$site_name = wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES );
-		$subject   = sprintf( __( '%s verification code', 'sabri-membership-core' ), $site_name );
-		$message   = sprintf(
-			/* translators: 1: site name, 2: six-digit OTP. */
-			__( "Use this one-time code to verify your email ownership on %1$s:\n\n%2$s\n\nThis code expires in 10 minutes. If you did not request it, you can ignore this message.", 'sabri-membership-core' ),
-			$site_name,
-			$code
-		);
-		$headers = array( 'Content-Type: text/plain; charset=UTF-8' );
-		return true === wp_mail( $target, $subject, $message, $headers );
-	}
-
-	private static function send_sms( $target, $code, $user_id, $payload ) {
-		if ( ! preg_match( '/^\+[1-9][0-9]{7,14}$/', $target ) ) {
-			return false;
-		}
-		$body = sprintf(
-			/* translators: %s: six-digit OTP. */
-			__( 'Sabri Homeopathy verification code: %s. Expires in 10 minutes. Do not share this code.', 'sabri-membership-core' ),
-			$code
+		$provider_payload = array(
+			'user_id'    => $user_id,
+			'channel'    => $channel,
+			'target'     => $target,
+			'code'       => $code,
+			'expires_in' => max( 60, absint( $payload['expires_in'] ?? 600 ) ),
+			'purpose'    => 'membership_contact_ownership',
+			'category'   => 'security',
 		);
 
-		// Dedicated onboarding/identity SMS provider hook.
-		$result = apply_filters( 'smc_send_sms_otp', null, $target, $body, $payload );
+		/*
+		 * Canonical external-delivery boundary. File 19 (or an explicitly
+		 * Founder-approved provider adapter) should attach here and return true
+		 * only after the provider has accepted the message. File 00 deliberately
+		 * does not call wp_mail(), Twilio, SMTP, SMS or push APIs directly.
+		 */
+		$result = apply_filters( 'smc_external_contact_otp_delivery', null, $provider_payload );
 		if ( true === $result || ( is_array( $result ) && ! empty( $result['accepted'] ) ) ) {
 			return true;
 		}
@@ -84,41 +66,44 @@ final class SMC_Contact_Delivery {
 			return false;
 		}
 
-		// Reuse File 19's raw configured SMS provider. Do not route through its
-		// normal verified-phone notification gate: this OTP establishes phone
-		// ownership in the first place.
-		if ( (bool) apply_filters( 'sun_sms_adapter_configured', false ) ) {
-			$delivery = array(
-				'recipient_id' => $user_id,
-				'purpose'      => 'membership_contact_ownership',
-			);
-			$notification = array(
-				'category' => 'security',
-				'external' => array( 'sms' => array( 'body' => $body ) ),
-			);
-			$result = apply_filters( 'sun_send_sms', null, $target, $body, $delivery, $notification );
-			if ( true === $result || ( is_array( $result ) && ! empty( $result['accepted'] ) ) ) {
-				return true;
-			}
+		/* Backward-compatible dedicated channel hooks for provider adapters. */
+		if ( 'email' === $channel && is_email( $target ) ) {
+			$result = apply_filters( 'smc_send_email_otp', null, $target, $code, $provider_payload );
+			return true === $result || ( is_array( $result ) && ! empty( $result['accepted'] ) );
 		}
+		if ( 'mobile' === $channel && preg_match( '/^\+[1-9][0-9]{7,14}$/', $target ) ) {
+			$body = sprintf(
+				/* translators: %s: six-digit OTP. */
+				__( 'Sabri Homeopathy verification code: %s. Expires in 10 minutes. Do not share this code.', 'sabri-membership-core' ),
+				$code
+			);
+			$result = apply_filters( 'smc_send_sms_otp', null, $target, $body, $provider_payload );
+			return true === $result || ( is_array( $result ) && ! empty( $result['accepted'] ) );
+		}
+
 		return false;
 	}
 
+	public static function email_provider_ready() {
+		return (bool) apply_filters( 'smc_email_otp_provider_configured', false ) || (bool) apply_filters( 'smc_external_contact_otp_provider_configured', false, 'email' );
+	}
+
 	public static function mobile_provider_ready() {
-		return (bool) apply_filters( 'smc_sms_provider_configured', false ) || (bool) apply_filters( 'sun_sms_adapter_configured', false );
+		return (bool) apply_filters( 'smc_sms_provider_configured', false ) || (bool) apply_filters( 'smc_external_contact_otp_provider_configured', false, 'mobile' );
 	}
 
 	/**
-	 * Make Membership Status navigable and expose the real SMS dependency.
+	 * Make Membership Status navigable and expose real provider dependencies.
 	 */
 	public static function render_status_assistance() {
 		if ( ! is_user_logged_in() || ! function_exists( 'smc_is_membership_page' ) || ! smc_is_membership_page() ) {
 			return;
 		}
-		$application  = esc_url_raw( smc_page_url( 'application', '/membership-application/' ) );
-		$security     = esc_url_raw( smc_page_url( 'security', '/membership-security/' ) );
-		$home         = esc_url_raw( home_url( '/' ) );
-		$mobile_ready = self::mobile_provider_ready() ? 'true' : 'false';
+		$application   = esc_url_raw( smc_page_url( 'application', '/membership-application/' ) );
+		$security      = esc_url_raw( smc_page_url( 'security', '/membership-security/' ) );
+		$home          = esc_url_raw( home_url( '/' ) );
+		$email_ready   = self::email_provider_ready() ? 'true' : 'false';
+		$mobile_ready  = self::mobile_provider_ready() ? 'true' : 'false';
 		?>
 		<script>
 		(function(){
@@ -134,21 +119,29 @@ final class SMC_Contact_Delivery {
 				nav.innerHTML='<a class="smc-button" href="<?php echo esc_js( $application ); ?>">← Membership Application</a> <a class="smc-button" href="<?php echo esc_js( $security ); ?>">Continue to Security Center →</a> <a class="smc-button" href="<?php echo esc_js( $home ); ?>">Home</a>';
 				title.insertAdjacentElement('afterend',nav);
 			}
-			if(<?php echo $mobile_ready; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>===false){
-				var sections=panel.querySelectorAll('.smc-subpanel');
-				sections.forEach(function(section){
-					var heading=section.querySelector('h2');
-					if(heading && /mobile/i.test(heading.textContent||'') && !section.querySelector('.smc-sms-provider-warning')){
-						var note=document.createElement('p');
-						note.className='smc-notice smc-notice--warning smc-sms-provider-warning';
-						note.textContent='Mobile SMS provider is not configured yet. A real SMS provider must be connected before mobile ownership can be verified; File 00 will not falsely mark a phone as OTP-verified.';
-						heading.insertAdjacentElement('afterend',note);
-					}
-				});
-			}
+			var emailReady=<?php echo $email_ready; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>;
+			var mobileReady=<?php echo $mobile_ready; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>;
+			var sections=panel.querySelectorAll('.smc-subpanel');
+			sections.forEach(function(section){
+				var heading=section.querySelector('h2');
+				if(!heading){return;}
+				var text=heading.textContent||'';
+				if(/email/i.test(text) && !emailReady && !section.querySelector('.smc-email-provider-warning')){
+					var emailNote=document.createElement('p');
+					emailNote.className='smc-notice smc-notice--warning smc-email-provider-warning';
+					emailNote.textContent='Email OTP delivery provider is not configured yet. File 19 must provide the external delivery adapter before email ownership can be verified.';
+					heading.insertAdjacentElement('afterend',emailNote);
+				}
+				if(/mobile/i.test(text) && !mobileReady && !section.querySelector('.smc-sms-provider-warning')){
+					var mobileNote=document.createElement('p');
+					mobileNote.className='smc-notice smc-notice--warning smc-sms-provider-warning';
+					mobileNote.textContent='Mobile SMS provider is not configured yet. File 19 must provide a real SMS adapter before mobile ownership can be verified.';
+					heading.insertAdjacentElement('afterend',mobileNote);
+				}
+			});
 		})();
 		</script>
-		<style>.smc-status-journey{display:flex;gap:.65rem;flex-wrap:wrap;margin:1rem 0 1.25rem}.smc-sms-provider-warning{margin:.75rem 0}</style>
+		<style>.smc-status-journey{display:flex;gap:.65rem;flex-wrap:wrap;margin:1rem 0 1.25rem}.smc-email-provider-warning,.smc-sms-provider-warning{margin:.75rem 0}</style>
 		<?php
 	}
 }
