@@ -113,43 +113,31 @@
 		summary.textContent = `Name: ${form.elements.legal_name?.value || '—'}; roles: ${roles.join(', ') || '—'}; residence: ${form.elements.city?.value || '—'}, ${form.elements.residence_country?.value || '—'}; issuing country: ${form.elements.issuing_country?.value || '—'}. Sensitive document numbers and files are intentionally not repeated here.`;
 	};
 
-	const submitViaXHR = () => {
-		if (submitting || !form.checkValidity()) { form.reportValidity(); return; }
+	const prepareNativeSubmission = (event) => {
+		updateReview();
+		if (submitting || !form.checkValidity()) {
+			event.preventDefault();
+			form.reportValidity();
+			return;
+		}
 		submitting = true;
+		window.clearTimeout(saveTimer);
 		form.setAttribute('aria-busy', 'true');
-		form.querySelectorAll('button').forEach((button) => { button.disabled = true; });
+		if (previous) previous.disabled = true;
+		if (next) next.disabled = true;
+		if (retryButton) retryButton.disabled = true;
+		if (uploadProgress) uploadProgress.removeAttribute('value');
 		if (draftStatus) draftStatus.textContent = ` ${window.smcPolicy.messages?.uploading || 'Uploading authenticated evidence…'}`;
-		const request = new XMLHttpRequest();
-		request.open('POST', form.action, true);
-		request.withCredentials = true;
-		request.upload.addEventListener('progress', (event) => {
-			if (event.lengthComputable && uploadProgress) uploadProgress.value = Math.round((event.loaded / event.total) * 100);
-		});
-		request.addEventListener('load', () => {
-			if (request.status >= 200 && request.status < 400) {
-				window.location.assign(request.responseURL || form.action);
-				return;
-			}
-			failedSubmission();
-		});
-		request.addEventListener('error', failedSubmission);
-		request.addEventListener('abort', failedSubmission);
-		request.send(new FormData(form));
-	};
-	const failedSubmission = () => {
-		submitting = false;
-		form.removeAttribute('aria-busy');
-		form.querySelectorAll('button').forEach((button) => { button.disabled = false; });
-		if (retryButton) retryButton.hidden = false;
-		if (draftStatus) draftStatus.textContent = ` ${window.smcPolicy.messages?.networkError || 'Network interrupted. Retry safely.'}`;
+		// Allow the browser's native multipart/form-data submission. Shared-host
+		// WAF/proxy stacks are more reliable here than XHR for private evidence.
 	};
 
 	previous?.addEventListener('click', () => showStep(current - 1));
 	next?.addEventListener('click', () => { if (validateStep()) { if (current === steps.length - 1) updateReview(); showStep(current + 1); } });
-	retryButton?.addEventListener('click', submitViaXHR);
+	retryButton?.addEventListener('click', () => form.requestSubmit());
 	form.addEventListener('input', () => { updateEligibility(); scheduleDraftSave(); });
 	form.addEventListener('change', () => { updateEligibility(); scheduleDraftSave(); });
-	form.addEventListener('submit', (event) => { event.preventDefault(); updateReview(); submitViaXHR(); });
+	form.addEventListener('submit', prepareNativeSubmission);
 	window.addEventListener('online', () => { if (draftStatus) draftStatus.textContent = ' Connection restored; you may retry.'; });
 	window.addEventListener('offline', () => { if (draftStatus) draftStatus.textContent = ' Offline. No sensitive data is stored in browser storage.'; });
 

@@ -8,6 +8,7 @@ final class SMC_Security {
 	public static function init() {
 		add_action( 'admin_post_smc_private_document', array( __CLASS__, 'serve_document' ) );
 		add_action( 'smc_process_file_jobs', array( __CLASS__, 'process_file_jobs' ) );
+		add_filter( 'smc_document_scan', array( __CLASS__, 'local_document_scan_fallback' ), 999, 5 );
 	}
 
 	private static function master_material( $raw ) {
@@ -24,34 +25,84 @@ final class SMC_Security {
 		return strlen( $raw ) >= 32 ? $raw : false;
 	}
 
-	public static function key_ready() {
-		return defined( 'SMC_MASTER_KEY' ) && false !== self::master_material( SMC_MASTER_KEY ) && '' !== self::key_id();
+	private static $managed_keyring_cache = null;
+
+	private static function managed_keyring_path() {
+		return wp_normalize_path( WP_CONTENT_DIR . '/sabri-private-keys/file00-keyring.php' );
 	}
+
+	private static function managed_keyring() {
+		if ( null !== self::$managed_keyring_cache ) { return self::$managed_keyring_cache; }
+		$path = self::managed_keyring_path();
+		if ( ! is_file( $path ) || is_link( $path ) ) { self::$managed_keyring_cache = array(); return self::$managed_keyring_cache; }
+		$record = include $path;
+		if ( ! is_array( $record ) ) { self::$managed_keyring_cache = array(); return self::$managed_keyring_cache; }
+		$material = self::master_material( $record['material'] ?? '' );
+		$key_id = trim( (string) ( $record['key_id'] ?? '' ) );
+		if ( false === $material || ! preg_match( '/^[A-Za-z0-9][A-Za-z0-9._:-]{2,63}$/', $key_id ) ) { self::$managed_keyring_cache = array(); return self::$managed_keyring_cache; }
+		self::$managed_keyring_cache = array( 'material' => $material, 'key_id' => $key_id, 'mode' => 'managed_file' );
+		return self::$managed_keyring_cache;
+	}
+
+	private static function configured_key_record() {
+		$managed = self::managed_keyring();
+		if ( ! empty( $managed ) ) { return $managed; }
+		if ( defined( 'SMC_MASTER_KEY' ) && false !== ( $material = self::master_material( SMC_MASTER_KEY ) ) && defined( 'SMC_MASTER_KEY_ID' ) && is_string( SMC_MASTER_KEY_ID ) ) {
+			$key_id = trim( SMC_MASTER_KEY_ID );
+			if ( preg_match( '/^[A-Za-z0-9][A-Za-z0-9._:-]{2,63}$/', $key_id ) ) { return array( 'material' => $material, 'key_id' => $key_id, 'mode' => 'constant' ); }
+		}
+		return array();
+	}
+
+	/** Provision a durable per-site keyring outside the database when constants are absent. */
+	public static function ensure_key_ready() {
+		if ( ! empty( self::configured_key_record() ) ) { return true; }
+		$dir = wp_normalize_path( WP_CONTENT_DIR . '/sabri-private-keys' );
+		if ( is_link( $dir ) ) { return new WP_Error( 'smc_keyring_symlink', __( 'The private key directory cannot be a symbolic link.', 'sabri-membership-core' ) ); }
+		if ( ! is_dir( $dir ) && ! wp_mkdir_p( $dir ) ) { return new WP_Error( 'smc_keyring_directory', __( 'The private key directory could not be created.', 'sabri-membership-core' ) ); }
+		if ( ! is_writable( $dir ) ) { return new WP_Error( 'smc_keyring_not_writable', __( 'The private key directory is not writable by WordPress.', 'sabri-membership-core' ) ); }
+		$lock_path = $dir . '/file00-keyring.lock';
+		$lock = @fopen( $lock_path, 'c' );
+		if ( false === $lock || ! @flock( $lock, LOCK_EX ) ) { if ( is_resource( $lock ) ) { fclose( $lock ); } return new WP_Error( 'smc_keyring_lock', __( 'The private keyring could not acquire an exclusive provisioning lock.', 'sabri-membership-core' ) ); }
+		self::$managed_keyring_cache = null;
+		if ( ! empty( self::configured_key_record() ) ) { @flock( $lock, LOCK_UN ); fclose( $lock ); return true; }
+		$material = random_bytes( 32 );
+		$key_id = 'managed-' . gmdate( 'Ymd' ) . '-' . substr( hash( 'sha256', $material ), 0, 12 );
+		$encoded = 'base64:' . base64_encode( $material );
+		$payload = "<?php\nif ( ! defined( 'ABSPATH' ) ) { exit; }\nreturn " . var_export( array( 'key_id' => $key_id, 'material' => $encoded ), true ) . ";\n";
+		$path = self::managed_keyring_path();
+		$temp = $path . '.tmp-' . wp_generate_password( 12, false, false );
+		if ( false === file_put_contents( $temp, $payload, LOCK_EX ) ) { @flock( $lock, LOCK_UN ); fclose( $lock ); return new WP_Error( 'smc_keyring_write', __( 'The private key file could not be written.', 'sabri-membership-core' ) ); }
+		@chmod( $temp, 0600 );
+		if ( ! @rename( $temp, $path ) ) { @unlink( $temp ); @flock( $lock, LOCK_UN ); fclose( $lock ); return new WP_Error( 'smc_keyring_commit', __( 'The private key file could not be committed atomically.', 'sabri-membership-core' ) ); }
+		@chmod( $path, 0600 );
+		$deny = "<IfModule mod_authz_core.c>\nRequire all denied\n</IfModule>\n<IfModule !mod_authz_core.c>\nDeny from all\n</IfModule>\n";
+		if ( ! file_exists( $dir . '/.htaccess' ) ) { @file_put_contents( $dir . '/.htaccess', $deny, LOCK_EX ); }
+		if ( ! file_exists( $dir . '/index.php' ) ) { @file_put_contents( $dir . '/index.php', "<?php\nhttp_response_code( 404 );\nexit;\n", LOCK_EX ); }
+		self::$managed_keyring_cache = null;
+		$record = self::managed_keyring();
+		if ( empty( $record ) ) { @flock( $lock, LOCK_UN ); fclose( $lock ); return new WP_Error( 'smc_keyring_verify', __( 'The newly created private key file could not be verified.', 'sabri-membership-core' ) ); }
+		update_option( 'smc_keyring_mode', 'managed_file', false );
+		@flock( $lock, LOCK_UN ); fclose( $lock );
+		return true;
+	}
+
+	public static function key_ready() { return ! empty( self::configured_key_record() ); }
 
 	/** Legacy purpose/index/audit key retained until the explicit index/audit migration completes. */
 	private static function key() {
-		if ( ! defined( 'SMC_MASTER_KEY' ) || false === ( $material = self::master_material( SMC_MASTER_KEY ) ) ) {
-			return new WP_Error( 'smc_key_missing', __( 'SMC_MASTER_KEY must contain at least 256 bits of configured key material.', 'sabri-membership-core' ) );
-		}
-		$legacy_salt = defined( 'SMC_LEGACY_AUTH_SALT' ) && is_string( SMC_LEGACY_AUTH_SALT ) && '' !== SMC_LEGACY_AUTH_SALT
-			? SMC_LEGACY_AUTH_SALT
-			: wp_salt( 'auth' );
-		return hash_hkdf( 'sha256', $material, 32, 'sabri-membership-core:v2', $legacy_salt );
+		$record = self::configured_key_record();
+		if ( empty( $record ) ) { return new WP_Error( 'smc_key_missing', __( 'File 00 encryption key material is not configured yet.', 'sabri-membership-core' ) ); }
+		$salt = 'constant' === ( $record['mode'] ?? '' ) ? ( defined( 'SMC_LEGACY_AUTH_SALT' ) && is_string( SMC_LEGACY_AUTH_SALT ) && '' !== SMC_LEGACY_AUTH_SALT ? SMC_LEGACY_AUTH_SALT : wp_salt( 'auth' ) ) : '';
+		return hash_hkdf( 'sha256', $record['material'], 32, 'sabri-membership-core:v2', $salt );
 	}
 
-	public static function key_id() {
-		if ( ! defined( 'SMC_MASTER_KEY_ID' ) || ! is_string( SMC_MASTER_KEY_ID ) ) {
-			return '';
-		}
-		$key_id = trim( SMC_MASTER_KEY_ID );
-		return preg_match( '/^[A-Za-z0-9][A-Za-z0-9._:-]{2,63}$/', $key_id ) ? $key_id : '';
-	}
+	public static function key_id() { $record = self::configured_key_record(); return empty( $record ) ? '' : (string) $record['key_id']; }
 
 	private static function envelope_keyring() {
 		$ring = array();
-		if ( defined( 'SMC_MASTER_KEY' ) && false !== ( $material = self::master_material( SMC_MASTER_KEY ) ) && '' !== self::key_id() ) {
-			$ring[ self::key_id() ] = array( 'material' => $material, 'legacy_auth_salt' => defined( 'SMC_LEGACY_AUTH_SALT' ) ? (string) SMC_LEGACY_AUTH_SALT : wp_salt( 'auth' ) );
-		}
+		$current = self::configured_key_record();
+		if ( ! empty( $current ) ) { $ring[ $current['key_id'] ] = array( 'material' => $current['material'], 'legacy_auth_salt' => 'constant' === ( $current['mode'] ?? '' ) ? ( defined( 'SMC_LEGACY_AUTH_SALT' ) ? (string) SMC_LEGACY_AUTH_SALT : wp_salt( 'auth' ) ) : '' ); }
 		$extra = function_exists( 'apply_filters' ) ? apply_filters( 'smc_encryption_keyring_v1', array() ) : array();
 		foreach ( (array) $extra as $kid => $entry ) {
 			if ( ! preg_match( '/^[A-Za-z0-9][A-Za-z0-9._:-]{2,63}$/', (string) $kid ) || ! is_array( $entry ) ) { continue; }
@@ -403,6 +454,32 @@ final class SMC_Security {
 			return new WP_Error( 'smc_image_plaintext_cleanup', __( 'Temporary sanitized plaintext could not be verified as deleted.', 'sabri-membership-core' ) );
 		}
 		return $error ?: $bytes;
+	}
+
+	/** Conservative local evidence scanner used only when no external scanner decided. */
+	public static function local_document_scan_fallback( $decision, $path, $mime, $user_id, $document_key ) {
+		unset( $user_id, $document_key );
+		if ( null !== $decision ) { return $decision; }
+		$path = wp_normalize_path( (string) $path );
+		$mime = sanitize_mime_type( (string) $mime );
+		if ( '' === $path || ! is_file( $path ) || is_link( $path ) || ! is_readable( $path ) ) { return false; }
+		$size = filesize( $path );
+		if ( false === $size || $size < 1024 || $size > self::MAX_FILE ) { return false; }
+		$bytes = file_get_contents( $path );
+		if ( false === $bytes ) { return false; }
+		$lower = strtolower( $bytes );
+		foreach ( array( '<?php', '<?=', '<script', 'javascript:', 'data:text/html', 'x5o!p%@ap[4\\pzx54(p^)7cc)7}$eicar-standard-antivirus-test-file!$h+h*' ) as $marker ) { if ( false !== strpos( $lower, strtolower( $marker ) ) ) { return false; } }
+		if ( 0 === strpos( $mime, 'image/' ) ) {
+			$info = @getimagesize( $path );
+			if ( ! is_array( $info ) || empty( $info['mime'] ) || $mime !== sanitize_mime_type( $info['mime'] ) ) { return false; }
+			return in_array( $mime, array( 'image/jpeg', 'image/png', 'image/webp' ), true );
+		}
+		if ( 'application/pdf' === $mime ) {
+			if ( 0 !== strpos( ltrim( $bytes ), '%PDF-' ) ) { return false; }
+			foreach ( array( '/javascript', '/js', '/launch', '/embeddedfile', '/openaction', '/aa', '/richmedia', '/xfa' ) as $pdf_marker ) { if ( false !== strpos( $lower, $pdf_marker ) ) { return false; } }
+			return true;
+		}
+		return false;
 	}
 
 	public static function store_uploaded_document( $field, $label, $user_id, $document_key ) {

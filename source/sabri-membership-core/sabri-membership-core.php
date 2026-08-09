@@ -135,6 +135,8 @@ add_action(
 		}
 
 		try {
+			$key_ready = SMC_Security::ensure_key_ready();
+			if ( is_wp_error( $key_ready ) ) { throw new RuntimeException( $key_ready->get_error_message() ); }
 			SMC_Installer::maybe_upgrade();
 		} catch ( Throwable $error ) {
 			smc_record_bootstrap_failure( 'deferred_upgrade', $error );
@@ -221,9 +223,13 @@ add_action(
 		if ( ! smc_is_membership_page() ) {
 			return;
 		}
-		wp_enqueue_style( 'smc-membership', SMC_URL . 'assets/membership.css', array(), SMC_VERSION );
+		$css_path = SMC_PATH . 'assets/membership.css';
+		$js_path  = SMC_PATH . 'assets/membership.js';
+		$css_hash = is_readable( $css_path ) ? substr( hash_file( 'sha256', $css_path ), 0, 12 ) : 'base';
+		$js_hash  = is_readable( $js_path ) ? substr( hash_file( 'sha256', $js_path ), 0, 12 ) : 'base';
+		wp_enqueue_style( 'smc-membership', SMC_URL . 'assets/membership.css', array(), SMC_VERSION . '-' . $css_hash );
 		wp_style_add_data( 'smc-membership', 'rtl', 'replace' );
-		wp_enqueue_script( 'smc-membership', SMC_URL . 'assets/membership.js', array(), SMC_VERSION, true );
+		wp_enqueue_script( 'smc-membership', SMC_URL . 'assets/membership.js', array(), SMC_VERSION . '-' . $js_hash, true );
 		$policy = smc_policy();
 		wp_localize_script(
 			'smc-membership',
