@@ -1,0 +1,108 @@
+name: Materialize File 00 v1.2.32 Live-Tested Source
+
+on:
+  push:
+    branches: ['fix/code-only-audit-32-2026-08-08']
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout corrective branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+
+      - name: Verify exact v1.2.20 livefix baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object source/sabri-membership-core/sabri-membership-core.php)" = "f53449be698280c09e593cdb10de158aa217da3b"
+          test "$(git hash-object source/sabri-membership-core/includes/class-smc-security.php)" = "9068710f23d40d6e034c9b818164e99f90471c81"
+          test "$(git hash-object source/sabri-membership-core/assets/membership.js)" = "8695c3fbdf5819ae7ea58da084f82b8ab45c1af7"
+          test "$(git hash-object source/sabri-membership-core/MANIFEST.sha256)" = "515b1fb9c3e6c47ca8c2303cb7d01bacfacace16"
+
+      - name: Apply exact live-tested v1.2.32 source patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          base64 --decode tools/livefix/v120-to-v132.patch.gz.b64 | gzip -dc > /tmp/file00-v132.patch
+          cd source/sabri-membership-core
+          patch --batch --forward -p2 < /tmp/file00-v132.patch
+          grep -q "Version: 1.2.32" sabri-membership-core.php
+          grep -q "define( 'SMC_DB_VERSION', '1.4.3' )" sabri-membership-core.php
+          sha256sum -c MANIFEST.sha256
+
+      - name: Align active repository identity and CI with v1.2.32
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          # Package metadata is current-state metadata, not historical documentation.
+          for name in ('package.json', 'package-lock.json'):
+              p = Path(name)
+              data = json.loads(p.read_text(encoding='utf-8'))
+              data['version'] = '1.2.32'
+              if name == 'package-lock.json':
+                  data.setdefault('packages', {}).setdefault('', {})['version'] = '1.2.32'
+              if name == 'package.json':
+                  data['scripts']['verify'] = 'npm run build && npm test && python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.32.zip'
+              p.write_text(json.dumps(data, indent=2) + '\n', encoding='utf-8')
+
+          replacements = {
+              'qa/membership-state-contract.mjs': [('1.2.20','1.2.32'), ('1.4.0','1.4.3')],
+              'qa/audit32-wordpress-mysql.php': [('1.2.20','1.2.32'), ('1.4.0','1.4.3')],
+              '.github/workflows/audit32-wordpress-mysql.yml': [('1.2.20','1.2.32'), ('1.4.0','1.4.3')],
+              '.github/workflows/file00-hostinger-all-actions-livefix.yml': [('1.2.20','1.2.32')],
+              'README.md': [('1.2.19','1.2.32'), ('1.4.0','1.4.3')],
+              'STATUS.md': [('1.2.19','1.2.32'), ('1.4.0','1.4.3')],
+          }
+          for name, reps in replacements.items():
+              p = Path(name)
+              if not p.exists():
+                  continue
+              text = p.read_text(encoding='utf-8')
+              for old, new in reps:
+                  text = text.replace(old, new)
+              p.write_text(text, encoding='utf-8')
+
+          release = Path('RELEASE-1.2.32.md')
+          release.write_text('''# File 00 — Sabri Membership Core 1.2.32\n\n## Status\nLive-tested corrective candidate materialized from the exact Hostinger-tested source lineage through v1.2.32.\n\n## Runtime identity\n- Runtime: `1.2.32`\n- Database schema: `1.4.3`\n- Public contract: `1.2.1`\n\n## Live defects incorporated\nActivation bootstrap hardening; Hostinger-safe actions and document submission; email/SMS provider boundaries; origin/nonce handling; TOTP enrollment diagnostics; audit schema bootstrap/reconciliation; verified recovery of a missing audit tail; and trusted historical audit-key transition verification.\n\n## Acceptance boundary\nThis commit materializes the latest tested source and CI evidence. It does not by itself assert production acceptance; live provider, browser, restore/rollback and final founder acceptance remain separate gates.\n''', encoding='utf-8')
+          PY
+
+      - name: Static, package and full QA gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          find source/sabri-membership-core -name '*.php' -print0 | xargs -0 -n1 php -l
+          node --check source/sabri-membership-core/assets/membership.js
+          git diff --check
+          npm ci
+          npm test
+          python3 tools/build.py
+          python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.32.zip
+
+      - name: Remove one-shot materialization payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm tools/livefix/v120-to-v132.patch.gz.b64
+          git rm .github/workflows/materialize-v132-live-tested.yml
+
+      - name: Commit materialized v1.2.32 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'file00-live-materializer'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m '[live-materialize] File 00 v1.2.32 tested source and CI identity'
+          git push origin HEAD:fix/code-only-audit-32-2026-08-08
