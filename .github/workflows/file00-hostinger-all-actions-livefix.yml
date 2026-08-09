@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/file00-hostinger-all-actions-livefix.yml'
       - 'tools/livefix/hostinger_all_actions_fix.py'
+      - 'qa/all-button-action-contract.mjs'
   workflow_dispatch:
 
 permissions:
