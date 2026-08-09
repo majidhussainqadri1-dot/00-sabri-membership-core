@@ -5,9 +5,11 @@ function __($s,$d=null){ return $s; }
 function sanitize_key($s){ return preg_replace('/[^a-z0-9_\-]/','',strtolower((string)$s)); }
 function wp_json_encode($v,$flags=0){ return json_encode($v,$flags); }
 function wp_salt($scheme='auth'){ return 'third-fresh-test-salt-2026'; }
+function wp_normalize_path($path){ return str_replace('\\','/',(string)$path); }
 function add_action(){ }
 function hash_equals_safe($a,$b){ return is_string($a)&&is_string($b)&&hash_equals($a,$b); }
 define('ABSPATH', __DIR__.'/');
+define('WP_CONTENT_DIR', sys_get_temp_dir().'/smc-third-fresh-no-keyring');
 define('SMC_MASTER_KEY', '0123456789abcdef0123456789abcdef0123456789abcdef');
 define('SMC_MASTER_KEY_ID', 'file00-main-key-2026');
 require __DIR__.'/../source/sabri-membership-core/includes/class-smc-security.php';

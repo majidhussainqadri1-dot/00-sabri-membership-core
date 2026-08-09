@@ -13,12 +13,12 @@ function assert(condition, name) {
   else failures.push(name);
 }
 
-assert(main.includes('Version: 1.2.19'), 'Plugin header is 1.2.19');
-assert(main.includes("define( 'SMC_VERSION', '1.2.19' )"), 'Runtime version is 1.2.19');
-assert(main.includes("define( 'SMC_DB_VERSION', '1.4.0' )"), 'Database version is 1.4.0');
-assert(main.includes("define( 'SMC_CONTRACT_VERSION', '1.2.1' )"), 'Contract version remains 1.2.0 for consumer compatibility');
+assert(main.includes('Version: 1.2.32'), 'Plugin header is 1.2.32');
+assert(main.includes("define( 'SMC_VERSION', '1.2.32' )"), 'Runtime version is 1.2.32');
+assert(main.includes("define( 'SMC_DB_VERSION', '1.4.3' )"), 'Database version is 1.4.3');
+assert(main.includes("define( 'SMC_CONTRACT_VERSION', '1.2.1' )"), 'Contract version remains 1.2.1 for consumer compatibility');
 assert(main.includes("require_once SMC_PATH . 'includes/class-smc-authorization.php'"), 'Authorization boundary is loaded');
-assert(main.includes('SMC_Authorization::init()'), 'Authorization boundary is initialized');
+assert(main.includes("array( 'SMC_Authorization', 'init' )"), 'Authorization boundary is initialized');
 assert(main.includes("$policy = smc_policy();"), 'Client policy derives from canonical server policy');
 
 for (const symbol of [
