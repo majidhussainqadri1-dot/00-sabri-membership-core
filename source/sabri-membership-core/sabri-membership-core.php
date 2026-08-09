@@ -3,7 +3,7 @@
  * Plugin Name: Sabri Membership Core
  * Plugin URI: https://github.com/majidhussainqadri1-dot/00-sabri-membership-core
  * Description: Canonical membership eligibility, identity assurance, guardian consent, security assertions, and verification governance for the Sabri Social Homeopathy Platform.
- * Version: 1.2.19
+ * Version: 1.2.20
  * Requires at least: 6.4
  * Requires PHP: 7.4
  * Author: Dr. Allamah Majid Hussain Sabri Muhaddith Mursheed
@@ -13,7 +13,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'SMC_VERSION', '1.2.19' );
+define( 'SMC_VERSION', '1.2.20' );
 define( 'SMC_DB_VERSION', '1.4.0' );
 define( 'SMC_CONTRACT_VERSION', '1.2.1' );
 define( 'SMC_CF01_CONTRACT_VERSION', '1.0.0' );
@@ -39,66 +39,86 @@ require_once SMC_PATH . 'includes/class-smc-latest-central-2026.php';
 require_once SMC_PATH . 'includes/class-smc-advanced-trust-2026.php';
 
 /**
- * Activation entry point for existing installations whose encryption keyring
- * is not configured yet. Schema/role/page upgrades may be installed safely,
- * but legacy identity migration must wait for the keyring so activation can
- * remain fail-closed instead of crashing the WordPress plugin screen.
+ * Minimal activation entry point.
+ *
+ * WordPress displays only a generic fatal-error message when an activation
+ * hook throws. File 00 therefore performs no schema migration, advisory lock,
+ * encryption migration, role mutation, page creation, or rewrite flush in the
+ * activation request itself. Those operations are deferred to admin_init and
+ * are wrapped in a fail-closed diagnostic boundary. This keeps the plugin
+ * activatable on heterogeneous hosts while preserving migration safety.
  */
 function smc_activation_entrypoint() {
-	$existing_db_version = (string) get_option( 'smc_db_version', '' );
-	$existing_release    = (string) get_option( 'smc_release_version', '' );
-	$defer_legacy        = '' !== $existing_db_version && ! SMC_Security::key_ready();
-
-	if ( $defer_legacy ) {
-		delete_option( 'smc_db_version' );
-		delete_option( 'smc_release_version' );
-	}
-
-	try {
-		SMC_Installer::activate();
-	} finally {
-		if ( $defer_legacy ) {
-			update_option( 'smc_db_version', $existing_db_version, false );
-			if ( '' !== $existing_release ) {
-				update_option( 'smc_release_version', $existing_release, false );
-			} else {
-				delete_option( 'smc_release_version' );
-			}
-			update_option(
-				'smc_migration_deferred_v1',
-				array(
-					'reason'             => 'key_configuration_required',
-					'source_db_version'  => $existing_db_version,
-					'target_db_version'  => SMC_DB_VERSION,
-					'target_release'     => SMC_VERSION,
-					'updated_at'         => current_time( 'mysql', true ),
-				),
-				false
-			);
-		}
-	}
+	$now = current_time( 'mysql', true );
+	update_option(
+		'smc_activation_pending_v2',
+		array(
+			'target_release'    => SMC_VERSION,
+			'target_db_version' => SMC_DB_VERSION,
+			'requested_at'      => $now,
+		),
+		false
+	);
+	update_option(
+		'smc_activation_bootstrap_state_v2',
+		array(
+			'status'     => 'queued',
+			'phase'      => 'activation',
+			'message'    => 'Activation accepted; protected bootstrap is deferred to the next administrator request.',
+			'updated_at' => $now,
+		),
+		false
+	);
+	set_transient( 'smc_activation_notice', '1', 180 );
 }
 
 register_activation_hook( SMC_FILE, 'smc_activation_entrypoint' );
 register_deactivation_hook( SMC_FILE, array( 'SMC_Installer', 'deactivate' ) );
 
+/**
+ * Record a bootstrap/runtime failure without allowing it to take down wp-admin.
+ */
+function smc_record_bootstrap_failure( $phase, Throwable $error ) {
+	update_option(
+		'smc_activation_bootstrap_state_v2',
+		array(
+			'status'      => 'failed_safe',
+			'phase'       => sanitize_key( (string) $phase ),
+			'error_class' => get_class( $error ),
+			'message'     => sanitize_text_field( $error->getMessage() ),
+			'updated_at'  => current_time( 'mysql', true ),
+		),
+		false
+	);
+}
+
 add_action(
 	'plugins_loaded',
 	static function () {
 		load_plugin_textdomain( 'sabri-membership-core', false, dirname( plugin_basename( SMC_FILE ) ) . '/languages' );
-		SMC_Security::init();
-		SMC_Events::init();
-		SMC_Completion::init();
-		SMC_Contracts::init();
-		SMC_CF01_Contract::init();
-		SMC_Authorization::init();
-		SMC_Workflow::init();
-		SMC_Admin::init();
-		SMC_Privacy::init();
-		SMC_Lifecycle::init();
-		SMC_Three_Plan::init();
-		SMC_Latest_Central_2026::init();
-		SMC_Advanced_Trust_2026::init();
+		$initializers = array(
+			array( 'SMC_Security', 'init' ),
+			array( 'SMC_Events', 'init' ),
+			array( 'SMC_Completion', 'init' ),
+			array( 'SMC_Contracts', 'init' ),
+			array( 'SMC_CF01_Contract', 'init' ),
+			array( 'SMC_Authorization', 'init' ),
+			array( 'SMC_Workflow', 'init' ),
+			array( 'SMC_Admin', 'init' ),
+			array( 'SMC_Privacy', 'init' ),
+			array( 'SMC_Lifecycle', 'init' ),
+			array( 'SMC_Three_Plan', 'init' ),
+			array( 'SMC_Latest_Central_2026', 'init' ),
+			array( 'SMC_Advanced_Trust_2026', 'init' ),
+		);
+		foreach ( $initializers as $initializer ) {
+			try {
+				call_user_func( $initializer );
+			} catch ( Throwable $error ) {
+				smc_record_bootstrap_failure( strtolower( $initializer[0] . '_' . $initializer[1] ), $error );
+				break;
+			}
+		}
 	},
 	20
 );
@@ -109,52 +129,85 @@ add_action(
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return;
 		}
-		$deferred = get_option( 'smc_migration_deferred_v1', array() );
-		if ( SMC_Security::key_ready() ) {
+
+		try {
 			SMC_Installer::maybe_upgrade();
-			if ( SMC_DB_VERSION === get_option( 'smc_db_version', '' ) ) {
-				delete_option( 'smc_migration_deferred_v1' );
+		} catch ( Throwable $error ) {
+			smc_record_bootstrap_failure( 'deferred_upgrade', $error );
+			return;
+		}
+
+		$current_db = (string) get_option( 'smc_db_version', '' );
+		$deferred   = get_option( 'smc_migration_deferred_v1', array() );
+		$failure    = get_option( 'smc_last_migration_failure', array() );
+
+		if ( SMC_DB_VERSION !== $current_db ) {
+			$message = 'Protected bootstrap is deferred until its prerequisites are available.';
+			if ( is_array( $deferred ) && 'key_configuration_required' === (string) ( $deferred['reason'] ?? '' ) ) {
+				$message = 'Encryption key configuration is required before the protected legacy migration can resume.';
+			} elseif ( is_array( $failure ) && ! empty( $failure['message'] ) ) {
+				$message = sanitize_text_field( (string) $failure['message'] );
 			}
-		} elseif ( is_array( $deferred ) && ! empty( $deferred ) ) {
-			// Keep the plugin active but fail-closed. The data migration resumes
-			// automatically after SMC_MASTER_KEY and SMC_MASTER_KEY_ID are ready.
-		} elseif ( SMC_DB_VERSION !== get_option( 'smc_db_version', '' ) && '' !== get_option( 'smc_db_version', '' ) ) {
 			update_option(
-				'smc_migration_deferred_v1',
+				'smc_activation_bootstrap_state_v2',
 				array(
-					'reason'            => 'key_configuration_required',
-					'source_db_version' => (string) get_option( 'smc_db_version', '' ),
-					'target_db_version' => SMC_DB_VERSION,
-					'target_release'    => SMC_VERSION,
-					'updated_at'        => current_time( 'mysql', true ),
+					'status'     => 'deferred_safe',
+					'phase'      => 'deferred_upgrade',
+					'message'    => $message,
+					'updated_at' => current_time( 'mysql', true ),
 				),
 				false
 			);
+			return;
 		}
+
+		delete_option( 'smc_activation_pending_v2' );
+		delete_option( 'smc_migration_deferred_v1' );
+		update_option(
+			'smc_activation_bootstrap_state_v2',
+			array(
+				'status'     => 'ready',
+				'phase'      => 'deferred_upgrade',
+				'message'    => 'Protected bootstrap completed.',
+				'updated_at' => current_time( 'mysql', true ),
+			),
+			false
+		);
+
 		if ( SMC_Security::key_ready() && SMC_VERSION !== get_option( 'smc_institutional_repair_version', '' ) ) {
-			$repaired = SMC_Lifecycle::repair_institutional_accounts();
-			if ( SMC_Lifecycle::institutional_repair_complete() ) {
-				update_option( 'smc_institutional_repair_version', SMC_VERSION, false );
-				update_option( 'smc_release_version', SMC_VERSION, false );
-				if ( $repaired > 0 ) {
-					set_transient( 'smc_institutional_repair_notice', (string) $repaired, 300 );
+			try {
+				$repaired = SMC_Lifecycle::repair_institutional_accounts();
+				if ( SMC_Lifecycle::institutional_repair_complete() ) {
+					update_option( 'smc_institutional_repair_version', SMC_VERSION, false );
+					update_option( 'smc_release_version', SMC_VERSION, false );
+					if ( $repaired > 0 ) {
+						set_transient( 'smc_institutional_repair_notice', (string) $repaired, 300 );
+					}
+				} else {
+					update_option( 'smc_last_migration_failure', array( 'message' => __( 'Institutional lifecycle repair remains incomplete and will retry.', 'sabri-membership-core' ), 'updated_at' => current_time( 'mysql', true ) ), false );
 				}
-			} else {
-				update_option( 'smc_last_migration_failure', array( 'message' => __( 'Institutional lifecycle repair remains incomplete and will retry.', 'sabri-membership-core' ), 'updated_at' => current_time( 'mysql', true ) ), false );
+			} catch ( Throwable $error ) {
+				smc_record_bootstrap_failure( 'institutional_repair', $error );
 			}
 		}
 	}
 );
+
 add_action(
 	'admin_notices',
 	static function () {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return;
 		}
-		$deferred = get_option( 'smc_migration_deferred_v1', array() );
-		if ( is_array( $deferred ) && ! empty( $deferred ) && ! SMC_Security::key_ready() ) {
-			echo '<div class="notice notice-warning"><p>' . esc_html__( 'Sabri Membership Core is active in fail-closed mode. Legacy membership migration is paused until both SMC_MASTER_KEY and SMC_MASTER_KEY_ID are securely configured; migration will then resume automatically.', 'sabri-membership-core' ) . '</p></div>';
+		$state = get_option( 'smc_activation_bootstrap_state_v2', array() );
+		if ( ! is_array( $state ) || empty( $state['status'] ) || 'ready' === $state['status'] ) {
+			return;
 		}
+		$status  = sanitize_key( (string) $state['status'] );
+		$phase   = sanitize_text_field( (string) ( $state['phase'] ?? 'bootstrap' ) );
+		$message = sanitize_text_field( (string) ( $state['message'] ?? 'Protected bootstrap is pending.' ) );
+		$class   = 'failed_safe' === $status ? 'notice notice-error' : 'notice notice-warning';
+		echo '<div class="' . esc_attr( $class ) . '"><p><strong>' . esc_html__( 'Sabri Membership Core bootstrap status:', 'sabri-membership-core' ) . '</strong> ' . esc_html( $status . ' / ' . $phase . ' — ' . $message ) . '</p></div>';
 	}
 );
 
