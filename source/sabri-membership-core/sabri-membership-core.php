@@ -24,6 +24,7 @@ define( 'SMC_URL', plugin_dir_url( __FILE__ ) );
 
 require_once SMC_PATH . 'includes/functions.php';
 require_once SMC_PATH . 'includes/class-smc-installer.php';
+require_once SMC_PATH . 'includes/class-smc-host-compat.php';
 require_once SMC_PATH . 'includes/class-smc-security.php';
 require_once SMC_PATH . 'includes/class-smc-events.php';
 require_once SMC_PATH . 'includes/class-smc-completion.php';
@@ -105,6 +106,7 @@ add_action(
 			array( 'SMC_CF01_Contract', 'init' ),
 			array( 'SMC_Authorization', 'init' ),
 			array( 'SMC_Workflow', 'init' ),
+			array( 'SMC_Host_Compat', 'init' ),
 			array( 'SMC_Contact_Delivery', 'init' ),
 			array( 'SMC_Admin', 'init' ),
 			array( 'SMC_Privacy', 'init' ),
