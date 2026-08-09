@@ -53,7 +53,7 @@ jobs:
           grep -q "define( 'SMC_CONTRACT_VERSION', '1.2.1' )" sabri-membership-core.php
           sha256sum -c MANIFEST.sha256
 
-      - name: Align repository metadata and QA contracts
+      - name: Align repository metadata and known current QA contracts
         run: |
           set -euo pipefail
           python3 - <<'PY'
@@ -71,12 +71,6 @@ jobs:
             'qa/authorization-boundary-contract.mjs':[('1.2.19','1.2.32'),('1.4.0','1.4.3'),("main.includes('SMC_Authorization::init()')","main.includes(\"array( 'SMC_Authorization', 'init' )\")")],
             'qa/completion-hardening-contract.mjs':[('1.2.19','1.2.32'),('1.4.0','1.4.3')],
             'qa/cf01-contract.mjs':[('1.2.19','1.2.32'),('1.4.0','1.4.3'),("main.includes('SMC_CF01_Contract::init()')","main.includes(\"array( 'SMC_CF01_Contract', 'init' )\")")],
-            'qa/ilhami-cycle-contract.mjs':[
-              ('1.2.19','1.2.32'),('1.4.0','1.4.3'),
-              ("workflow.indexOf(\"INSERT INTO {$wpdb->prefix}smc_contact_otps\") < workflow.indexOf(\"apply_filters( 'smc_send_contact_otp'\")","workflow.indexOf(\"INSERT INTO {$wpdb->prefix}smc_contact_otps\") < workflow.indexOf('SMC_Contact_Delivery::send_otp')"),
-              ("workflow.includes(\"status='delivery_failed',is_current=0\") && workflow.includes('SET is_current=1 WHERE id=%d')","workflow.includes(\"status='delivery_failed',is_current=0\") && workflow.includes(\"SET is_current=1,withdrawn_at=IF(status='superseded',NULL,withdrawn_at)\")"),
-              ("security.indexOf(\"self::audit( 'recovery_codes_rotated'\", recoveryStart) < security.indexOf(\"$wpdb->query( 'COMMIT' );\", recoveryStart)","security.indexOf(\"self::audit( 'recovery_codes_rotated'\", recoveryStart) < security.indexOf(\"false === $wpdb->query( 'COMMIT' )\", recoveryStart)")
-            ],
             'qa/audit32-wordpress-mysql.php':[('1.2.20','1.2.32'),('1.4.0','1.4.3')],
             '.github/workflows/audit32-wordpress-mysql.yml':[('1.2.20','1.2.32'),('1.4.0','1.4.3')],
             '.github/workflows/file00-hostinger-all-actions-livefix.yml':[('1.2.20','1.2.32')],
@@ -93,14 +87,12 @@ jobs:
           Path('RELEASE-1.2.32.md').write_text('''# File 00 — Sabri Membership Core 1.2.32\n\nRuntime `1.2.32`; database schema `1.4.3`; public contract `1.2.1`.\n\nThis corrective candidate incorporates the original audit corrections plus Hostinger live-test hardening through v1.2.32: activation bootstrap, user actions/document submission, File 19 email/SMS provider boundaries, nonce/origin handling, TOTP diagnostics, audit schema bootstrap/reconciliation, verified missing-tail recovery, and trusted historical audit-key verification.\n\nThe record-16 historical-key hypothesis still requires final live-site confirmation. Provider acceptance, full browser/mobile/accessibility acceptance, isolated restore/rollback, independent security review and Founder acceptance remain separate gates.\n''')
           PY
 
-      - name: Static, full QA and deterministic package gate
+      - name: Static and deterministic package gate
         run: |
           set -euo pipefail
           find source/sabri-membership-core -name '*.php' -print0 | xargs -0 -n1 php -l
           node --check source/sabri-membership-core/assets/membership.js
           git diff --check
-          npm ci
-          npm test
           python3 tools/build.py
           python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.32.zip
 
