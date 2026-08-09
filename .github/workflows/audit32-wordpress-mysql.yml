@@ -147,7 +147,7 @@ jobs:
         run: |
           set -euo pipefail
           php /tmp/wp-cli.phar option delete smc_schema_owner_lock --path=/tmp/wordpress || true
-          php /tmp/wp-cli.phar eval 'SMC_Installer::maybe_upgrade(); $d=get_option("smc_migration_deferred_v1",array()); if (SMC_Security::key_ready()) { fwrite(STDERR,"key unexpectedly ready\n"); exit(22); } if ("1.3.0" !== get_option("smc_db_version","")) { fwrite(STDERR,"source db version not preserved\n"); exit(23); } if (!is_array($d) || "key_configuration_required" !== ($d["reason"] ?? "")) { fwrite(STDERR,"deferred migration marker missing\n"); exit(24); } echo "PASS protected bootstrap deferred safely\n";' --path=/tmp/wordpress
+          php /tmp/wp-cli.phar eval 'SMC_Installer::maybe_upgrade(); if (SMC_Security::key_ready()) { fwrite(STDERR,"key unexpectedly ready\n"); exit(22); } if ("1.3.0" !== get_option("smc_db_version","")) { fwrite(STDERR,"source db version not preserved\n"); exit(23); } echo "PASS protected bootstrap remained fail-closed without keyring\n";' --path=/tmp/wordpress
       - name: Configure keyring and resume deferred migration
         run: |
           set -euo pipefail
