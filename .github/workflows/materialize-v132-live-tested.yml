@@ -67,6 +67,7 @@ jobs:
               p.write_text(json.dumps(d,indent=2)+'\n')
           replacements={
             'qa/membership-state-contract.mjs':[('1.2.20','1.2.32'),('1.4.0','1.4.3')],
+            'qa/institutional-lifecycle-contract.mjs':[('1.2.19','1.2.32'),('1.4.0','1.4.3')],
             'qa/audit32-wordpress-mysql.php':[('1.2.20','1.2.32'),('1.4.0','1.4.3')],
             '.github/workflows/audit32-wordpress-mysql.yml':[('1.2.20','1.2.32'),('1.4.0','1.4.3')],
             '.github/workflows/file00-hostinger-all-actions-livefix.yml':[('1.2.20','1.2.32')],
