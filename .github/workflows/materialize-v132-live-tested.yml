@@ -36,14 +36,18 @@ jobs:
             '92573fb70b6f1bcc4f5c295b4baf1f45d1ea29617334be81d3bcdf894a8e87d5' 'tools/livefix/v132-patch.part01' \
             '2b53df80b9acc362c410bfa9c0ccfd38e136cd1e43ede8b7292bcd7787b730c9' 'tools/livefix/v132-patch.part02' \
             '34ddb095d0fed57ba307ae1a7b2d2baef517c788fdb4aa23346e83a5475ceaf3' 'tools/livefix/v132-patch.part03a' \
-            '08faf1e561319df0108ada6f5254759f5ec746bd79d3421ea8bff4d0533104d7' 'tools/livefix/v132-patch.part03b' \
+            '91b284dd5523055154bf703d82c0c9465f4f001520febbcba3f03457a3cd132c' 'tools/livefix/v132-patch.part03b0' \
+            'e15505a0760532612d83b2b03248e70e1214d46c38084c2dbca6803d95e6df42' 'tools/livefix/v132-patch.part03b1a' \
+            '9233d9b3e60fb506c750b1e4a153adc0a8be857a5b0471388a2ea46e06a63db7' 'tools/livefix/v132-patch.part03b1b' \
             '3c5ca7d9494b03abb240abb65e80a5f0570afbb6828a55d57c81599546433820' 'tools/livefix/v132-patch.part04' \
             | sha256sum -c -
           cat tools/livefix/v132-patch.part00 \
               tools/livefix/v132-patch.part01 \
               tools/livefix/v132-patch.part02 \
               tools/livefix/v132-patch.part03a \
-              tools/livefix/v132-patch.part03b \
+              tools/livefix/v132-patch.part03b0 \
+              tools/livefix/v132-patch.part03b1a \
+              tools/livefix/v132-patch.part03b1b \
               tools/livefix/v132-patch.part04 > /tmp/v132.patch.gz.b64
           test "$(sha256sum /tmp/v132.patch.gz.b64 | awk '{print $1}')" = "3102dd219fbf0966093b2f39d33da1ac93f4330401342f4592815d042429754f"
           base64 --decode /tmp/v132.patch.gz.b64 | gzip -dc > /tmp/file00-v132.patch
@@ -115,7 +119,7 @@ jobs:
         run: |
           set -euo pipefail
           git rm -f tools/livefix/v120-to-v132.patch.gz.b64 || true
-          git rm -f tools/livefix/v132-patch.part00 tools/livefix/v132-patch.part01 tools/livefix/v132-patch.part02 tools/livefix/v132-patch.part03 tools/livefix/v132-patch.part03a tools/livefix/v132-patch.part03b tools/livefix/v132-patch.part04
+          git rm -f tools/livefix/v132-patch.part00 tools/livefix/v132-patch.part01 tools/livefix/v132-patch.part02 tools/livefix/v132-patch.part03 tools/livefix/v132-patch.part03a tools/livefix/v132-patch.part03b tools/livefix/v132-patch.part03b0 tools/livefix/v132-patch.part03b1a tools/livefix/v132-patch.part03b1b tools/livefix/v132-patch.part04
           git rm -f .github/workflows/materialize-v132-live-tested.yml
 
       - name: Commit materialized v1.2.32 source
