@@ -14,7 +14,7 @@
 defined( 'ABSPATH' ) || exit;
 
 define( 'SMC_VERSION', '1.2.39' );
-define( 'SMC_DB_VERSION', '1.4.4' );
+define( 'SMC_DB_VERSION', '1.4.5' );
 define( 'SMC_CONTRACT_VERSION', '1.2.2' );
 define( 'SMC_CF01_CONTRACT_VERSION', '1.1.0' );
 define( 'SMC_ADVANCED_TRUST_CONTRACT_VERSION', '1.0.0' );

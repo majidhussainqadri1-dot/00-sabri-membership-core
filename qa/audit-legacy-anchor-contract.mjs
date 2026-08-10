@@ -14,7 +14,7 @@ const workflowText = fs.readdirSync(workflowDir).filter((name) => name.endsWith(
 
 const checks = [
   ['runtime 1.2.39', main.includes('Version: 1.2.39') && main.includes("SMC_VERSION', '1.2.39")],
-  ['schema 1.4.4', main.includes("SMC_DB_VERSION', '1.4.4")],
+  ['schema 1.4.5', main.includes("SMC_DB_VERSION', '1.4.5")],
   ['stable tag 1.2.39', readme.includes('Stable tag: 1.2.39') && readme.includes('= 1.2.39 =')],
   ['exact legacy schema signature', security.includes("array( 'subject_user_id', 'object_type', 'object_id' )") && security.includes("CHARACTER_MAXIMUM_LENGTH") && security.includes("auto_increment") && security.includes("allowed_bridge_columns")],
   ['legacy rows remain lower assurance', security.includes("'assurance'                  => 'legacy_snapshot_only'")],

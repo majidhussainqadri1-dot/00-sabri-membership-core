@@ -17,7 +17,7 @@ function check(c, n) { if (c) passed++; else failures.push(n); }
 
 check(main.includes('Version: 1.2.39'), 'plugin header 1.2.39');
 check(main.includes("define( 'SMC_VERSION', '1.2.39' )"), 'runtime version 1.2.39');
-check(main.includes("define( 'SMC_DB_VERSION', '1.4.4' )"), 'schema is 1.4.4');
+check(main.includes("define( 'SMC_DB_VERSION', '1.4.5' )"), 'schema is 1.4.5');
 check(main.includes("define( 'SMC_CONTRACT_VERSION', '1.2.2' )"), 'contract is 1.2.2 after Founder-approved MFA retirement');
 check(readme.includes('Stable tag: 1.2.39'), 'readme stable tag');
 

@@ -723,7 +723,9 @@ final class SMC_Installer {
 			updated_at datetime NOT NULL,
 			PRIMARY KEY  (id),
 			UNIQUE KEY token_hash (token_hash),
-			KEY user_active (user_id,revoked_at)
+			KEY user_active (user_id,revoked_at),
+			KEY expires_at (expires_at),
+			KEY revoked_at (revoked_at)
 		) {$c};";
 
 		$sql[] = "CREATE TABLE {$p}smc_mfa_factor_state (

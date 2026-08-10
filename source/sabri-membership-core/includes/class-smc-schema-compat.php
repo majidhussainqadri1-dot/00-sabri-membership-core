@@ -508,6 +508,21 @@ final class SMC_Schema_Compat {
 			throw new RuntimeException( 'Current approval decision index columns are invalid.' );
 		}
 
+		$session_table = $wpdb->prefix . 'smc_auth_sessions';
+		foreach ( array( 'expires_at', 'revoked_at' ) as $index_name ) {
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					"SELECT SEQ_IN_INDEX,COLUMN_NAME,SUB_PART,NON_UNIQUE,INDEX_TYPE FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=%s AND INDEX_NAME=%s ORDER BY SEQ_IN_INDEX",
+					$session_table,
+					$index_name
+				),
+				ARRAY_A
+			);
+			if ( 1 !== count( (array) $rows ) || $index_name !== (string) ( $rows[0]['COLUMN_NAME'] ?? '' ) || 1 !== (int) ( $rows[0]['NON_UNIQUE'] ?? -1 ) || 'BTREE' !== strtoupper( (string) ( $rows[0]['INDEX_TYPE'] ?? '' ) ) || null !== ( $rows[0]['SUB_PART'] ?? null ) ) {
+				throw new RuntimeException( 'Current session cleanup index could not be verified: ' . $index_name . '.' );
+			}
+		}
+
 		return true;
 	}
 }
