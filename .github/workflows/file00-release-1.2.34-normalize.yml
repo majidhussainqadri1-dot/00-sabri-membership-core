@@ -19,7 +19,7 @@ jobs:
           fetch-depth: 0
 
       - name: Set up PHP 8.3
-        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240
+        uses: shivammathur/setup-php@f3e473d116dccc5834248c87452386958240
         with:
           php-version: '8.3'
           coverage: none
@@ -33,6 +33,7 @@ jobs:
           from pathlib import Path
 
           version = '1.2.34'
+
           readme_path = Path('source/sabri-membership-core/README.txt')
           readme = readme_path.read_text(encoding='utf-8')
           readme = readme.replace('Stable tag: 1.2.33', f'Stable tag: {version}', 1)
@@ -69,7 +70,41 @@ jobs:
               for old, new in replacements:
                   text = text.replace(old, new)
               path.write_text(text, encoding='utf-8', newline='\n')
+
+          audit_path = Path('qa/audit-legacy-anchor-contract.mjs')
+          audit = audit_path.read_text(encoding='utf-8')
+          audit = audit.replace("['runtime 1.2.33', main.includes('Version: 1.2.33') && main.includes(\"SMC_VERSION', '1.2.33\")],", "['runtime 1.2.34', main.includes('Version: 1.2.34') && main.includes(\"SMC_VERSION', '1.2.34\")],")
+          audit = audit.replace("['stable tag 1.2.33', readme.includes('Stable tag: 1.2.33') && readme.includes('= 1.2.33 =')],", "['stable tag 1.2.34', readme.includes('Stable tag: 1.2.34') && readme.includes('= 1.2.34 =')],")
+          audit = audit.replace("['active CI is immutable and v1.2.33-aligned', !workflowText.includes('contents: write') && !workflowText.includes('1.2.32') && workflowText.includes('00-sabri-membership-core-1.2.33.zip')],", "['active CI is immutable and v1.2.34-aligned', !workflowText.includes('contents: write') && !workflowText.includes('1.2.32') && workflowText.includes('00-sabri-membership-core-1.2.34.zip')],")
+          audit_path.write_text(audit, encoding='utf-8', newline='\n')
+
+          ci_path = Path('.github/workflows/file00-three-plan-qa.yml')
+          ci = ci_path.read_text(encoding='utf-8')
+          ci_replacements = [
+              ('name: File 00 1.2.33 Historical Audit-Key Transition QA', 'name: File 00 1.2.34 Current + Historical Audit-Key Transition QA'),
+              ("grep -Fq 'Version: 1.2.33' source/sabri-membership-core/sabri-membership-core.php", "grep -Fq 'Version: 1.2.34' source/sabri-membership-core/sabri-membership-core.php"),
+              ("grep -Fq '\"version\": \"1.2.33\"' package.json", "grep -Fq '\"version\": \"1.2.34\"' package.json"),
+              ("test \"$(node -p \"require('./package-lock.json').version\")\" = '1.2.33'", "test \"$(node -p \"require('./package-lock.json').version\")\" = '1.2.34'"),
+              ("test \"$(node -p \"require('./package-lock.json').packages[''].version\")\" = '1.2.33'", "test \"$(node -p \"require('./package-lock.json').packages[''].version\")\" = '1.2.34'"),
+              ('test -f dist/00-sabri-membership-core-1.2.33.zip', 'test -f dist/00-sabri-membership-core-1.2.34.zip'),
+              ('name: 00-sabri-membership-core-1.2.33-${{ github.sha }}', 'name: 00-sabri-membership-core-1.2.34-${{ github.sha }}'),
+              ('dist/00-sabri-membership-core-1.2.33.zip', 'dist/00-sabri-membership-core-1.2.34.zip'),
+              ('RELEASE-1.2.33.md', 'RELEASE-1.2.34.md'),
+          ]
+          for old, new in ci_replacements:
+              if old not in ci:
+                  raise SystemExit(f'Expected current-release CI token missing: {old}')
+              ci = ci.replace(old, new)
+          ci_path.write_text(ci, encoding='utf-8', newline='\n')
+
+          master_path = Path('docs/FILE-00-MASTER-PLAN-2026.md')
+          master = master_path.read_text(encoding='utf-8')
+          master = master.replace('Runtime implementation release: `1.2.33`', 'Runtime implementation release: `1.2.34`', 1)
+          master_path.write_text(master, encoding='utf-8', newline='\n')
           PY
+
+      - name: Remove one-time self-mutating release helper before permanent QA
+        run: rm .github/workflows/file00-release-1.2.34-normalize.yml
 
       - name: Install QA dependencies
         run: npm ci --ignore-scripts
@@ -118,15 +153,11 @@ jobs:
           - Live Verification Status: UNRESOLVED until post-deploy evidence is collected.
           EOF
 
-      - name: Commit normalized release evidence
+      - name: Commit normalized release evidence and retire helper
         run: |
           set -euo pipefail
-          if git diff --quiet; then
-            echo 'Release metadata already normalized.'
-            exit 0
-          fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add source/sabri-membership-core/README.txt source/sabri-membership-core/MANIFEST.sha256 qa/forty-round-1.2.10-contract.mjs qa/three-plan-runtime-completion-contract.mjs qa/latest-central-contract.mjs qa/advanced-trust-contract.mjs qa/third-fresh-review-contract.mjs qa/fourth-fresh-review-contract.mjs qa/fifth-fresh-review-contract.mjs qa/advanced-trust-runtime.php CHECKSUMS.sha256 RELEASE-1.2.34.md STATUS.md
-          git commit -m 'Normalize File 00 1.2.34 release metadata and evidence'
+          git add -A
+          git commit -m 'Normalize and verify File 00 1.2.34 release parity'
           git push origin HEAD:codex/file00-release-1.2.34-parity
