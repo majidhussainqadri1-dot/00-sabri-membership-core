@@ -6,6 +6,8 @@ const bootstrap = fs.readFileSync(`${root}/sabri-membership-core.php`, 'utf8');
 const retirement = fs.readFileSync(`${root}/includes/class-smc-mfa-retirement.php`, 'utf8');
 const contracts = fs.readFileSync(`${root}/includes/class-smc-contracts.php`, 'utf8');
 const schemaCompat = fs.readFileSync(`${root}/includes/class-smc-schema-compat.php`, 'utf8');
+const hostCompat = fs.readFileSync(`${root}/includes/class-smc-host-compat.php`, 'utf8');
+const workflow = fs.readFileSync(`${root}/includes/class-smc-workflow.php`, 'utf8');
 
 const has = (source, needle, label = needle) => assert.ok(source.includes(needle), `missing MFA-retirement contract: ${label}`);
 const lacks = (source, needle, label = needle) => assert.ok(!source.includes(needle), `retired MFA contract still present: ${label}`);
@@ -47,6 +49,12 @@ has(schemaCompat, "self::role_grant_checkpoint( 'running', $cursor )", 'orphan-s
 
 for (const action of ['start_2fa', 'finish_2fa', 'challenge_2fa', 'rotate_recovery', 'ack_recovery_receipt']) {
   has(retirement, `remove_action( 'admin_post_smc_' . $action`, `runtime removal for ${action}`);
+}
+for (const action of ['start_2fa', 'finish_2fa', 'challenge_2fa', 'rotate_recovery', 'ack_recovery_receipt']) {
+  lacks(hostCompat, `'${action}'`, `host fallback registry excludes retired ${action}`);
+}
+for (const handler of ['handle_start_2fa', 'handle_finish_2fa', 'handle_challenge_2fa', 'handle_rotate_recovery', 'handle_ack_recovery_receipt']) {
+  lacks(workflow, `function ${handler}`, `dead retired handler removed: ${handler}`);
 }
 has(retirement, "remove_shortcode( 'smc_membership_recovery' );", 'recovery shortcode retired');
 has(retirement, "File 00 no longer uses two-factor authentication", 'user-facing MFA retirement notice');
