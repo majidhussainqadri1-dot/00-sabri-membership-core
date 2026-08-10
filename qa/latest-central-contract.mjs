@@ -10,7 +10,7 @@ const retirement = load('source/sabri-membership-core/includes/class-smc-mfa-ret
 const css = load('source/sabri-membership-core/assets/membership.css');
 const doc = load('docs/FILE-00-LATEST-CENTRAL-TRACEABILITY-1.2.12.md');
 const checks = [
-  ['runtime 1.2.38', plugin.includes("define( 'SMC_VERSION', '1.2.38' );")],
+  ['runtime 1.2.39', plugin.includes("define( 'SMC_VERSION', '1.2.39' );")],
   ['latest central layer loaded', plugin.includes('class-smc-latest-central-2026.php') && plugin.includes("array( 'SMC_Latest_Central_2026', 'init' )")],
   ['current central constitution reflects MFA retirement', latest.includes("const CONSTITUTION_VERSION = '2026-08-10-v1.1'") && latest.includes("'mfa_owner'                  => 'none'") && latest.includes("'file00_mfa_required'        => false")],
   ['F00-CEN-01 single free tier', functions.includes("'single_free_tier'        => true") && functions.includes("'paid_unlocks_enabled'    => false") && functions.includes("'legacy_pricing_enabled'  => false")],
@@ -39,4 +39,4 @@ const checks = [
 let failed = 0;
 for (const [name, ok] of checks) { console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}`); if (!ok) failed++; }
 if (failed) process.exit(1);
-console.log(`${checks.length}/${checks.length} latest-central static assertions passed for current File 00 1.2.38; historical 1.2.12 evidence remains provenance only.`);
+console.log(`${checks.length}/${checks.length} latest-central static assertions passed for current File 00 1.2.39; historical 1.2.12 evidence remains provenance only.`);
