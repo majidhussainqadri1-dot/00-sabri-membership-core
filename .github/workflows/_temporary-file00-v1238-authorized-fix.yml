@@ -33,14 +33,15 @@ jobs:
       - name: Apply exact live-proven correction
         run: python3 tools/_temporary_apply_v1238.py
 
-      - name: Build and run inherited QA
+      - name: Build and run inherited QA against full candidate tree
         run: |
           python3 tools/build.py
           npm test
           python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.38.zip
 
-      - name: Commit verified candidate
+      - name: Commit non-workflow candidate changes
         run: |
+          git checkout HEAD -- .github/workflows
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
