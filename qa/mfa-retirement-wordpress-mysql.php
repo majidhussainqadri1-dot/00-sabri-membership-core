@@ -61,6 +61,11 @@ if ( ! $user instanceof WP_User ) {
 }
 wp_set_current_user( $user->ID );
 
+// A prior admin_init in this compound integration run may already have retired
+// an empty fixture. Reset only the test completion marker before deliberately
+// reseeding obsolete state so this test exercises a fresh retirement pass.
+delete_option( SMC_MFA_Retirement::STATE_OPTION );
+
 // Seed representative obsolete factor state only after canonical migration is ready.
 update_user_meta( $user->ID, '_smc_2fa_enabled', '1' );
 update_user_meta( $user->ID, '_smc_totp_secret_enc', 'legacy-test-envelope' );
