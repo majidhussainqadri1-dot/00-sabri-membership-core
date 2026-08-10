@@ -1,0 +1,46 @@
+name: File 00 80-Review Round 57 Immediate Fix
+
+on:
+  push:
+    branches: [audit/80-round-review-v1.2.40]
+    paths: [.github/workflows/zz-80-review-round57-fix.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-round-57:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: audit/80-round-review-v1.2.40
+          fetch-depth: 0
+      - name: Enforce event identifier schema boundaries before persistence
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('source/sabri-membership-core/includes/class-smc-events.php')
+          s=p.read_text()
+          s=s.replace("\t\t$event_type = preg_replace( '/[^A-Za-z0-9_.-]/', '', (string) $event_type );\n\t\tif ( '' === $event_type ) {\n", "\t\t$event_type = preg_replace( '/[^A-Za-z0-9_.-]/', '', (string) $event_type );\n\t\tif ( '' === $event_type || strlen( $event_type ) > 80 ) {\n")
+          old="""\t\t$consumer = sanitize_key( $consumer );\n\t\t$event_id = sanitize_text_field( (string) $event['event_id'] );\n\t\tif ( '' === $consumer || '' === $event_id ) { return false; }\n"""
+          new="""\t\t$consumer = sanitize_key( $consumer );\n\t\t$event_id = strtolower( sanitize_text_field( (string) $event['event_id'] ) );\n\t\tif ( '' === $consumer || strlen( $consumer ) > 80 || ! preg_match( '/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/', $event_id ) ) { return false; }\n"""
+          if old not in s: raise SystemExit('event consumer identity block not found')
+          p.write_text(s.replace(old,new))
+          PY
+      - name: Verify round 57 correction
+        run: |
+          set -euo pipefail
+          php -l source/sabri-membership-core/includes/class-smc-events.php
+          grep -q "strlen( \$event_type ) > 80" source/sabri-membership-core/includes/class-smc-events.php
+          grep -q "strlen( \$consumer ) > 80" source/sabri-membership-core/includes/class-smc-events.php
+          grep -q "\\[1-5\\]" source/sabri-membership-core/includes/class-smc-events.php
+          git diff --check
+      - name: Commit immediate round 57 correction
+        run: |
+          git config user.name 'File 00 QA Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add source/sabri-membership-core/includes/class-smc-events.php
+          git commit -m 'Round 57: validate durable event identifiers before persistence'
+          git push origin HEAD:audit/80-round-review-v1.2.40
