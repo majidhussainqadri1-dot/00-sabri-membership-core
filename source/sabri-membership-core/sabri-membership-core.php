@@ -32,6 +32,7 @@ require_once SMC_PATH . 'includes/class-smc-contracts.php';
 require_once SMC_PATH . 'includes/class-smc-cf01-contract.php';
 require_once SMC_PATH . 'includes/class-smc-authorization.php';
 require_once SMC_PATH . 'includes/class-smc-workflow.php';
+require_once SMC_PATH . 'includes/class-smc-account-recovery.php';
 require_once SMC_PATH . 'includes/class-smc-contact-delivery.php';
 require_once SMC_PATH . 'includes/class-smc-admin.php';
 require_once SMC_PATH . 'includes/class-smc-privacy.php';
@@ -106,6 +107,7 @@ add_action(
 			array( 'SMC_CF01_Contract', 'init' ),
 			array( 'SMC_Authorization', 'init' ),
 			array( 'SMC_Workflow', 'init' ),
+			array( 'SMC_Account_Recovery', 'init' ),
 			array( 'SMC_Host_Compat', 'init' ),
 			array( 'SMC_Contact_Delivery', 'init' ),
 			array( 'SMC_Admin', 'init' ),
@@ -243,10 +245,10 @@ add_action(
 				'ajaxUrl'          => admin_url( 'admin-ajax.php' ),
 				'draftNonce'       => wp_create_nonce( 'smc_application_draft' ),
 				'messages'         => array(
-					'draftSaved'    => __( 'Draft saved securely.', 'sabri-membership-core' ),
-					'draftFailed'   => __( 'Draft could not be saved. Your current form remains on this device until you leave the page.', 'sabri-membership-core' ),
-					'uploading'     => __( 'Uploading authenticated evidence…', 'sabri-membership-core' ),
-					'networkError'  => __( 'Network interrupted. Review the form and retry; the server remains authoritative.', 'sabri-membership-core' ),
+					'draftSaved'   => __( 'Draft saved securely.', 'sabri-membership-core' ),
+					'draftFailed'  => __( 'Draft could not be saved. Your current form remains on this device until you leave the page.', 'sabri-membership-core' ),
+					'uploading'    => __( 'Uploading authenticated evidence…', 'sabri-membership-core' ),
+					'networkError' => __( 'Network interrupted. Review the form and retry; the server remains authoritative.', 'sabri-membership-core' ),
 				),
 			)
 		);
