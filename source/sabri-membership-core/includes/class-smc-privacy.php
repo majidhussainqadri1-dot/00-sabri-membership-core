@@ -193,12 +193,16 @@ final class SMC_Privacy {
 		$sessions = $wpdb->get_results( $wpdb->prepare( "SELECT expires_at,two_factor_at,ip_hash,device_hash,revoked_at,created_at,updated_at FROM {$wpdb->prefix}smc_auth_sessions WHERE user_id=%d ORDER BY id", $user_id ), ARRAY_A );
 		$session_count = count( $sessions );
 		$recovery_count = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}smc_recovery_codes WHERE user_id=%d AND consumed_at IS NULL", $user_id ) );
+		$legacy_factor_residue = metadata_exists( 'user', $user_id, '_smc_2fa_enabled' )
+			|| metadata_exists( 'user', $user_id, '_smc_totp_secret_enc' )
+			|| $recovery_count > 0;
 		$values = array(
 			__( 'Email ownership verified', 'sabri-membership-core' ) => SMC_Contracts::contact_verified( $user_id, 'email' ),
 			__( 'Mobile ownership verified', 'sabri-membership-core' ) => SMC_Contracts::contact_verified( $user_id, 'mobile' ),
-			__( 'Two-factor enabled', 'sabri-membership-core' ) => SMC_Security::two_factor_ready( $user_id ),
+			__( 'Authentication owner', 'sabri-membership-core' ) => __( 'Sabri Authentication (File 02)', 'sabri-membership-core' ),
+			__( 'Legacy retired File 00 MFA residue present', 'sabri-membership-core' ) => $legacy_factor_residue,
 			__( 'Active membership sessions', 'sabri-membership-core' ) => $session_count,
-			__( 'Unused recovery codes', 'sabri-membership-core' ) => $recovery_count,
+			__( 'Legacy unused File 00 recovery-code records', 'sabri-membership-core' ) => $recovery_count,
 		);
 		$data = array( self::item( 'smc-security', __( 'Membership Security Summary', 'sabri-membership-core' ), 'smc-security-' . $user_id, $values ) );
 		foreach ( $sessions as $index => $session ) {
@@ -401,7 +405,7 @@ final class SMC_Privacy {
 		}
 		wp_add_privacy_policy_content(
 			__( 'Sabri Membership Core', 'sabri-membership-core' ),
-			'<p>' . esc_html__( 'This module processes membership eligibility, date of birth, gender-specific minimum-age rules, contact-verification state, encrypted government identity evidence, guardian consent, two-factor security state, verification decisions, and tamper-evident audit records. Identity evidence is scanner-gated, authenticated, encrypted, stored outside the public web root, and restricted to authorized reviewers. Data is retained only for the published membership, legal, security, dispute, and restoration periods. Documented legal or safety holds are reported during erasure. Active membership and identity records are erased through the WordPress privacy process, while a minimal fail-closed erasure lock and unchanged tamper-evident security audit evidence are retained under the published security/legal retention schedule so deleted records cannot silently restore access or corrupt the audit chain.', 'sabri-membership-core' ) . '</p>'
+			'<p>' . esc_html__( 'This module processes membership eligibility, date of birth, gender-specific minimum-age rules, contact-verification state, encrypted government identity evidence, guardian consent, legacy retired File 00 MFA residue retained only for governed cleanup/history, verification decisions, and tamper-evident audit records. Identity evidence is scanner-gated, authenticated, encrypted, stored outside the public web root, and restricted to authorized reviewers. Normal sign-in and account-recovery authentication are owned by Sabri Authentication (File 02). Data is retained only for the published membership, legal, security, dispute, and restoration periods. Documented legal or safety holds are reported during erasure. Active membership and identity records are erased through the WordPress privacy process, while a minimal fail-closed erasure lock and unchanged tamper-evident security audit evidence are retained under the published security/legal retention schedule so deleted records cannot silently restore access or corrupt the audit chain.', 'sabri-membership-core' ) . '</p>'
 		);
 	}
 }
