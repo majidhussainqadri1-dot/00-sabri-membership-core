@@ -5,7 +5,7 @@ const contracts = fs.readFileSync('source/sabri-membership-core/includes/class-s
 const retirement = fs.readFileSync('source/sabri-membership-core/includes/class-smc-mfa-retirement.php','utf8');
 const trace = JSON.parse(fs.readFileSync('qa/advanced-trust-traceability.json','utf8'));
 const checks = [
-  ['runtime 1.2.35', main.includes('Version: 1.2.35') && main.includes("SMC_VERSION', '1.2.35")],
+  ['runtime 1.2.36', main.includes('Version: 1.2.36') && main.includes("SMC_VERSION', '1.2.36")],
   ['advanced contract constant', main.includes("SMC_ADVANCED_TRUST_CONTRACT_VERSION', '1.0.0")],
   ['advanced class loaded', main.includes("class-smc-advanced-trust-2026.php") && main.includes("array( 'SMC_Advanced_Trust_2026', 'init' )")],
   ['EXT-001 assurance levels', cls.includes('F00-EXT-001') && cls.includes('identity_assurance_level')],

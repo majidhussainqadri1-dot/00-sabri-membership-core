@@ -10,7 +10,7 @@
 
 ## Current implementation identity
 
-- Runtime implementation release: `1.2.35`
+- Runtime implementation release: `1.2.36`
 - Public membership contract: `1.2.2`
 - Database schema: `1.4.4`
 - MFA policy: `2026-08-10-founder-mfa-retirement-v1`
@@ -30,8 +30,15 @@ The retirement migration is intentionally fail-safe: obsolete File 00 factor mat
 
 CF-01 contract `1.1.0` deliberately returns membership prerequisite evidence only. Any stronger authentication assurance belongs to File 02 or another separately approved authentication owner; File 00 no longer verifies factor codes for CF-01.
 
+## Live-proven schema compatibility correction — 1.2.36
+
+Live Hostinger evidence on 10 August 2026 proved that the surviving `smc_verification_requests` table had the historical non-unique BTREE index `queue(status,assigned_reviewer)` while the current schema requires `queue(status,queue_type,assigned_reviewer)`. WordPress `dbDelta()` attempted to add the changed named index without first replacing the old named index, and MariaDB correctly rejected the migration with `Duplicate key name 'queue'`. The live database therefore remained at `1.2.0` and the later `smc_event_outbox`, `smc_event_inbox`, and `smc_application_repairs` tables were never reached.
+
+Release `1.2.36` adds a narrow fail-closed compatibility preflight. It recognizes only the exact historical queue-index signature proven live, removes that obsolete non-unique secondary index, allows the normal `dbDelta()` schema pass to create the current three-column index, and then read-back verifies both the verification queue and file-job queue signatures. Fresh installs/current schemas are no-ops; unknown index shapes are refused rather than mutated. The DB schema target remains `1.4.4` because this is migration-idempotency logic, not a new schema contract.
+
 ## Current evidence
 
+- `source/sabri-membership-core/includes/class-smc-schema-compat.php`
 - `qa/mfa-retirement-contract.mjs`
 - `qa/mfa-retirement-wordpress-mysql.php`
 - `.github/workflows/mfa-retirement-wordpress-mysql.yml`

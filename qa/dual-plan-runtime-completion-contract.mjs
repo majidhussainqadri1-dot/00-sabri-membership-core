@@ -22,7 +22,7 @@ const js = read('source/sabri-membership-core/assets/membership.js');
 const css = read('source/sabri-membership-core/assets/membership.css');
 const registry = JSON.parse(read('qa/requirements-traceability.json'));
 
-assert(plugin.includes('Version: 1.2.35') && plugin.includes("define( 'SMC_VERSION', '1.2.35' )"), 'Runtime version 1.2.35');
+assert(plugin.includes('Version: 1.2.36') && plugin.includes("define( 'SMC_VERSION', '1.2.36' )"), 'Runtime version 1.2.36');
 assert(plugin.includes("define( 'SMC_DB_VERSION', '1.4.4' )"), 'Schema version 1.4.4');
 assert(plugin.includes("define( 'SMC_CONTRACT_VERSION', '1.2.2' )"), 'Membership contract 1.2.2');
 assert(plugin.includes("require_once SMC_PATH . 'includes/class-smc-events.php'") && plugin.includes("require_once SMC_PATH . 'includes/class-smc-completion.php'"), 'Completion and events services load');

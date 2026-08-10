@@ -31,6 +31,7 @@ jobs:
           php -l source/sabri-membership-core/includes/class-smc-admin.php
           php -l source/sabri-membership-core/includes/class-smc-security.php
           php -l source/sabri-membership-core/includes/class-smc-mfa-retirement.php
+          php -l source/sabri-membership-core/includes/class-smc-schema-compat.php
       - name: All user and reviewer button contracts
         run: |
           set -euo pipefail
@@ -40,4 +41,4 @@ jobs:
         run: |
           set -euo pipefail
           python3 tools/build.py
-          python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.35.zip
+          python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.36.zip
