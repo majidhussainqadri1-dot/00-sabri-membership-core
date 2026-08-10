@@ -32,6 +32,7 @@ require_once SMC_PATH . 'includes/class-smc-contracts.php';
 require_once SMC_PATH . 'includes/class-smc-cf01-contract.php';
 require_once SMC_PATH . 'includes/class-smc-authorization.php';
 require_once SMC_PATH . 'includes/class-smc-workflow.php';
+require_once SMC_PATH . 'includes/class-smc-account-recovery-lock.php';
 require_once SMC_PATH . 'includes/class-smc-account-recovery.php';
 require_once SMC_PATH . 'includes/class-smc-contact-delivery.php';
 require_once SMC_PATH . 'includes/class-smc-admin.php';
@@ -107,6 +108,7 @@ add_action(
 			array( 'SMC_CF01_Contract', 'init' ),
 			array( 'SMC_Authorization', 'init' ),
 			array( 'SMC_Workflow', 'init' ),
+			array( 'SMC_Account_Recovery_Lock', 'init' ),
 			array( 'SMC_Account_Recovery', 'init' ),
 			array( 'SMC_Host_Compat', 'init' ),
 			array( 'SMC_Contact_Delivery', 'init' ),
