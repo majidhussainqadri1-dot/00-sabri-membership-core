@@ -1,0 +1,44 @@
+name: File 00 80-Review Round 23 Immediate Fix
+
+on:
+  push:
+    branches: [audit/80-round-review-v1.2.40]
+    paths: [.github/workflows/zz-80-review-round23-fix.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-round-23:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: audit/80-round-review-v1.2.40
+          fetch-depth: 0
+      - name: Make requested-role replacement fail closed and exact
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('source/sabri-membership-core/includes/class-smc-contracts.php')
+          s=p.read_text()
+          old="""\tpublic static function replace_requested_types( $user_id, $types, $application_version ) {\n\t\tglobal $wpdb;\n\t\t$types = smc_sanitize_membership_types( $types );\n\t\tif ( ! self::grants_table_exists() ) {\n\t\t\treturn false;\n\t\t}\n\t\t$current = self::role_grants( $user_id );\n\t\tforeach ( $current as $grant ) {\n\t\t\tif ( ! in_array( $grant['membership_type'], $types, true ) ) {\n\t\t\t\t$wpdb->delete( $wpdb->prefix . 'smc_role_grants', array( 'id' => (int) $grant['id'] ), array( '%d' ) );\n\t\t\t}\n\t\t}\n\t\tforeach ( $types as $type ) {\n\t\t\tif ( ! self::upsert_role_grant( $user_id, $type, 'pending', $application_version, 0 ) ) {\n\t\t\t\treturn false;\n\t\t\t}\n\t\t}\n\t\treturn self::sync_wordpress_roles( $user_id );\n\t}\n"""
+          new="""\tpublic static function replace_requested_types( $user_id, $types, $application_version ) {\n\t\tglobal $wpdb;\n\t\t$user_id = absint( $user_id );\n\t\t$types = smc_sanitize_membership_types( $types );\n\t\tif ( ! $user_id || ! $types || ! self::grants_table_exists() ) {\n\t\t\treturn false;\n\t\t}\n\t\t$current = self::role_grants( $user_id );\n\t\tforeach ( $current as $grant ) {\n\t\t\tif ( ! in_array( sanitize_key( $grant['membership_type'] ), $types, true ) ) {\n\t\t\t\t$deleted = $wpdb->delete( $wpdb->prefix . 'smc_role_grants', array( 'id' => (int) $grant['id'], 'user_id' => $user_id ), array( '%d', '%d' ) );\n\t\t\t\tif ( 1 !== $deleted ) {\n\t\t\t\t\treturn false;\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t\tforeach ( $types as $type ) {\n\t\t\tif ( ! self::upsert_role_grant( $user_id, $type, 'pending', $application_version, 0 ) ) {\n\t\t\t\treturn false;\n\t\t\t}\n\t\t}\n\t\t$stored = $wpdb->get_results( $wpdb->prepare( \"SELECT membership_type,status,source_application_version FROM {$wpdb->prefix}smc_role_grants WHERE user_id=%d ORDER BY membership_type\", $user_id ), ARRAY_A );\n\t\t$stored_types = array();\n\t\tforeach ( (array) $stored as $grant ) {\n\t\t\tif ( 'pending' !== sanitize_key( $grant['status'] ?? '' ) || absint( $grant['source_application_version'] ?? 0 ) !== max( 1, absint( $application_version ) ) ) {\n\t\t\t\treturn false;\n\t\t\t}\n\t\t\t$stored_types[] = sanitize_key( $grant['membership_type'] ?? '' );\n\t\t}\n\t\tsort( $stored_types );\n\t\t$expected = $types;\n\t\tsort( $expected );\n\t\tif ( $stored_types !== $expected ) {\n\t\t\treturn false;\n\t\t}\n\t\treturn self::sync_wordpress_roles( $user_id );\n\t}\n"""
+          if old not in s: raise SystemExit('replace_requested_types block not found')
+          p.write_text(s.replace(old,new))
+          PY
+      - name: Verify round 23 correction
+        run: |
+          set -euo pipefail
+          php -l source/sabri-membership-core/includes/class-smc-contracts.php
+          grep -q '1 !== $deleted' source/sabri-membership-core/includes/class-smc-contracts.php
+          grep -q '$stored_types !== $expected' source/sabri-membership-core/includes/class-smc-contracts.php
+          git diff --check
+      - name: Commit immediate round 23 correction
+        run: |
+          git config user.name 'File 00 QA Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add source/sabri-membership-core/includes/class-smc-contracts.php
+          git commit -m 'Round 23: make requested role replacement exact and fail closed'
+          git push origin HEAD:audit/80-round-review-v1.2.40
