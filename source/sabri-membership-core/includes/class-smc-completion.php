@@ -486,7 +486,8 @@ final class SMC_Completion {
 		}
 		return array(
 			'manifest_version' => '1.0.0', 'generated_at' => gmdate( 'c' ), 'plugin_version' => SMC_VERSION,
-			'database_version' => SMC_DB_VERSION, 'contract_version' => SMC_CONTRACT_VERSION,
+			'database_version' => (string) get_option( 'smc_db_version', '' ), 'target_database_version' => SMC_DB_VERSION,
+			'release_version' => (string) get_option( 'smc_release_version', '' ), 'contract_version' => SMC_CONTRACT_VERSION,
 			'table_counts' => $counts, 'private_file_count' => $files,
 			'audit_tail_hash' => (string) $wpdb->get_var( "SELECT row_hash FROM {$wpdb->prefix}smc_audit_tail WHERE id=1" ),
 			'audit_log_last_hash' => (string) $wpdb->get_var( "SELECT row_hash FROM {$wpdb->prefix}smc_audit_log ORDER BY id DESC LIMIT 1" ),
@@ -511,10 +512,20 @@ final class SMC_Completion {
 		foreach ( $required as $key ) { if ( ! $ok || empty( $proof[ $key ] ) ) { $ok = false; break; } }
 		$health = self::health_snapshot(); $ok = $ok && $health['key_ready'] && $health['private_storage'] && $health['audit_valid'] && SMC_DB_VERSION === $health['database_version'] && 0 === (int) $health['file_job_failed'] && 0 === (int) ( $health['indefinite_hold_blockers'] ?? 0 );
 		$result = $ok ? 'passed' : 'failed';
-		if ( ! SMC_Security::audit( 'post_restore_reconciliation_' . $result, 0, array( 'evidence_reference'=>$reference,'restore_run_id'=>is_array($proof)?sanitize_text_field($proof['restore_run_id']??''):'' ) ) ) { wp_die( esc_html__( 'Restore reconciliation evidence could not be appended to the audit chain.', 'sabri-membership-core' ), '', array( 'response'=>503 ) ); }
-		$record = array( 'evidence_reference'=>$reference,'restore_run_id'=>is_array($proof)?sanitize_text_field($proof['restore_run_id']??''):'','checked_at'=>current_time('mysql',true),'result'=>$result,'health'=>$health );
+		$restore_run_id = is_array( $proof ) ? sanitize_text_field( $proof['restore_run_id'] ?? '' ) : '';
+		$record = array( 'evidence_reference'=>$reference,'restore_run_id'=>$restore_run_id,'checked_at'=>current_time('mysql',true),'result'=>$result,'health'=>$health );
+		$had_previous = false !== get_option( 'smc_last_restore_test', false );
+		$previous = $had_previous ? get_option( 'smc_last_restore_test', array() ) : null;
 		update_option( 'smc_last_restore_test', $record, false );
-		if ( get_option( 'smc_last_restore_test', null ) !== $record ) { wp_die( esc_html__( 'Restore reconciliation finished, but its evidence record could not be persisted.', 'sabri-membership-core' ), '', array( 'response'=>503 ) ); }
+		if ( get_option( 'smc_last_restore_test', null ) !== $record ) {
+			SMC_Security::audit( 'post_restore_reconciliation_persistence_failed', 0, array( 'restore_run_id'=>$restore_run_id ) );
+			wp_die( esc_html__( 'Restore reconciliation finished, but its evidence record could not be persisted.', 'sabri-membership-core' ), '', array( 'response'=>503 ) );
+		}
+		$audit_ok = SMC_Security::audit( 'post_restore_reconciliation_' . $result, 0, array( 'evidence_reference_digest'=>hash( 'sha256', $reference ),'restore_run_id'=>$restore_run_id ) );
+		if ( ! $audit_ok ) {
+			if ( $had_previous ) { update_option( 'smc_last_restore_test', $previous, false ); } else { delete_option( 'smc_last_restore_test' ); }
+			wp_die( esc_html__( 'Restore reconciliation evidence could not be appended to the audit chain; the status record was rolled back.', 'sabri-membership-core' ), '', array( 'response'=>503 ) );
+		}
 		if ( ! $ok ) { wp_die( esc_html__( 'Restore proof did not satisfy the isolated-restore acceptance contract.', 'sabri-membership-core' ), '', array( 'response'=>409 ) ); }
 		wp_safe_redirect( admin_url( 'admin.php?page=smc-health-repair' ) ); exit;
 	}
