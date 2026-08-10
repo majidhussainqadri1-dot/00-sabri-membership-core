@@ -74,10 +74,13 @@ jobs:
       - name: Install QA dependencies
         run: npm ci --ignore-scripts
 
+      - name: Refresh deterministic manifest before source QA
+        run: python3 tools/build.py
+
       - name: Run complete QA suite
         run: npm test
 
-      - name: Build deterministic 1.2.34 package
+      - name: Verify deterministic 1.2.34 package
         run: |
           set -euo pipefail
           python3 tools/build.py
