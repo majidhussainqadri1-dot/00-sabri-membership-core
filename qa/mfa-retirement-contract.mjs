@@ -10,14 +10,15 @@ const schemaCompat = fs.readFileSync(`${root}/includes/class-smc-schema-compat.p
 const has = (source, needle, label = needle) => assert.ok(source.includes(needle), `missing MFA-retirement contract: ${label}`);
 const lacks = (source, needle, label = needle) => assert.ok(!source.includes(needle), `retired MFA contract still present: ${label}`);
 
-has(bootstrap, "Version: 1.2.38", 'plugin release 1.2.38');
-has(bootstrap, "define( 'SMC_VERSION', '1.2.38' );", 'runtime release 1.2.38');
+has(bootstrap, "Version: 1.2.39", 'plugin release 1.2.39');
+has(bootstrap, "define( 'SMC_VERSION', '1.2.39' );", 'runtime release 1.2.39');
 has(bootstrap, "define( 'SMC_CONTRACT_VERSION', '1.2.2' );", 'public contract 1.2.2');
 has(bootstrap, "require_once SMC_PATH . 'includes/class-smc-mfa-retirement.php';", 'MFA retirement runtime loaded');
 has(bootstrap, "array( 'SMC_MFA_Retirement', 'init' )", 'MFA retirement runtime initialized');
 has(bootstrap, "require_once SMC_PATH . 'includes/class-smc-schema-compat.php';", 'live schema compatibility runtime loaded');
 has(bootstrap, 'SMC_Schema_Compat::reconcile_verification_queue_index();', 'live-proven named-index preflight runs before migration');
 has(bootstrap, 'SMC_Schema_Compat::assert_current_queue_indexes();', 'current critical indexes are read-back verified');
+has(bootstrap, 'SMC_Schema_Compat::ORPHAN_BACKFILL_FAILURE', 'exact orphan backfill failure can be cleared only after DB promotion');
 lacks(bootstrap, "class-smc-account-recovery.php", 'governed lost-factor recovery bootstrap');
 lacks(bootstrap, "class-smc-account-recovery-lock.php", 'lost-factor recovery lock bootstrap');
 assert.equal(fs.existsSync(`${root}/includes/class-smc-account-recovery.php`), false, 'lost-factor recovery source must be removed');
@@ -33,6 +34,13 @@ has(schemaCompat, "array( 'request_id', 'approval_generation', 'decision' )", 'c
 has(schemaCompat, 'DROP INDEX `decision`', 'only the known stale decision index is dropped before dbDelta');
 has(schemaCompat, 'Unsupported approval decision index definition; automatic migration refused.', 'unknown approval decision shapes fail closed');
 has(schemaCompat, 'Current approval decision index could not be verified.', 'current decision index is read-back verified');
+has(schemaCompat, "const ORPHAN_BACKFILL_FAILURE = 'Role-grant backfill failed.'", 'orphan compatibility is gated to exact live failure');
+has(schemaCompat, "'legacy-users-to-1.2.0'", 'orphan compatibility requires completed live baseline');
+has(schemaCompat, "'orphaned_application_missing_user'", 'missing principal gets explicit repair quarantine');
+has(schemaCompat, "'orphaned_membership_application_quarantined'", 'orphan quarantine appends audit evidence');
+has(schemaCompat, "SET status='suspended'", 'interrupted derivative orphan grants are quarantined');
+has(schemaCompat, "if ( smc_privacy_erasure_lock( $user_id ) )", 'privacy erasure remains fail closed rather than orphan-skipped');
+has(schemaCompat, "self::role_grant_checkpoint( 'running', $cursor )", 'orphan-safe backfill checkpoints per handled application');
 
 for (const action of ['start_2fa', 'finish_2fa', 'challenge_2fa', 'rotate_recovery', 'ack_recovery_receipt']) {
   has(retirement, `remove_action( 'admin_post_smc_' . $action`, `runtime removal for ${action}`);
