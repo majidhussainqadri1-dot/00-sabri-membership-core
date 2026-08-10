@@ -12,9 +12,7 @@ final class SMC_Schema_Compat {
 	/** Live-proven role-grant failure text emitted by pre-1.2.39 backfill. */
 	const ORPHAN_BACKFILL_FAILURE = 'Role-grant backfill failed.';
 
-	/**
-	 * Register compatibility preflights ahead of normal migration entry points.
-	 */
+	/** Register compatibility preflights ahead of normal migration entry points. */
 	public static function init() {
 		add_action( 'smc_continue_migration', array( __CLASS__, 'reconcile_verification_queue_index' ), 1 );
 		add_action( 'smc_continue_migration', array( __CLASS__, 'reconcile_orphaned_role_grant_backfill' ), 2 );
@@ -67,15 +65,16 @@ final class SMC_Schema_Compat {
 
 		$repairs = $wpdb->prefix . 'smc_application_repairs';
 		$grants  = $wpdb->prefix . 'smc_role_grants';
+		$audit   = $wpdb->prefix . 'smc_audit_log';
 		$trace   = self::deterministic_orphan_trace_id( $app_id, $user_id );
 		$now     = current_time( 'mysql', true );
 		$details = wp_json_encode(
 			array(
-				'application_id'  => $app_id,
-				'orphan_user_id'  => $user_id,
-				'membership_type' => sanitize_key( (string) ( $app['membership_type'] ?? 'member' ) ),
+				'application_id'     => $app_id,
+				'orphan_user_id'     => $user_id,
+				'membership_type'    => sanitize_key( (string) ( $app['membership_type'] ?? 'member' ) ),
 				'application_status' => sanitize_key( (string) ( $app['status'] ?? 'draft' ) ),
-				'source'          => 'live-v1.2.38-role-grant-backfill',
+				'source'             => 'live-v1.2.38-role-grant-backfill',
 			),
 			JSON_UNESCAPED_SLASHES
 		);
@@ -83,10 +82,22 @@ final class SMC_Schema_Compat {
 			return false;
 		}
 
-		$existing = (int) $wpdb->get_var(
-			$wpdb->prepare( "SELECT id FROM {$repairs} WHERE trace_id=%s LIMIT 1", $trace )
+		$existing = $wpdb->get_row(
+			$wpdb->prepare( "SELECT id,user_id,repair_type,details FROM {$repairs} WHERE trace_id=%s LIMIT 1", $trace ),
+			ARRAY_A
 		);
-		if ( ! $existing ) {
+		if ( $existing ) {
+			$existing_details = json_decode( (string) ( $existing['details'] ?? '' ), true );
+			if (
+				$user_id !== absint( $existing['user_id'] ?? 0 ) ||
+				'orphaned_application_missing_user' !== (string) ( $existing['repair_type'] ?? '' ) ||
+				! is_array( $existing_details ) ||
+				$app_id !== absint( $existing_details['application_id'] ?? 0 ) ||
+				$user_id !== absint( $existing_details['orphan_user_id'] ?? 0 )
+			) {
+				return false;
+			}
+		} else {
 			$inserted = $wpdb->insert(
 				$repairs,
 				array(
@@ -106,9 +117,23 @@ final class SMC_Schema_Compat {
 			if ( false === $inserted ) {
 				return false;
 			}
-			if ( ! SMC_Security::audit( 'orphaned_membership_application_quarantined', 0, array( 'application_id' => $app_id, 'orphan_user_id' => $user_id, 'trace_id' => $trace ) ) ) {
-				return false;
-			}
+		}
+
+		/*
+		 * A repair row and its audit append are deliberately restartable. If the
+		 * repair insert committed but the append failed/interrupted, the next pass
+		 * must retry the missing audit evidence instead of silently treating the
+		 * existing repair row as complete.
+		 */
+		$audit_exists = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT id FROM {$audit} WHERE action=%s AND details LIKE %s ORDER BY id DESC LIMIT 1",
+				'orphaned_membership_application_quarantined',
+				'%' . $wpdb->esc_like( $trace ) . '%'
+			)
+		);
+		if ( ! $audit_exists && ! SMC_Security::audit( 'orphaned_membership_application_quarantined', 0, array( 'application_id' => $app_id, 'orphan_user_id' => $user_id, 'trace_id' => $trace ) ) ) {
+			return false;
 		}
 
 		$wpdb->last_error = '';
@@ -229,12 +254,7 @@ final class SMC_Schema_Compat {
 		return false;
 	}
 
-	/**
-	 * Retry the normal installer only after the orphan-safe preflight completed.
-	 * This closes hosts where required modern tables were first created by the
-	 * priority-10 bootstrap in the same request. Successful promotion also clears
-	 * only the exact stale failure/deferred markers proven by this incident.
-	 */
+	/** Retry the normal installer only after the orphan-safe preflight completed. */
 	public static function finalize_orphaned_role_grant_recovery() {
 		if ( ! current_user_can( 'manage_options' ) || SMC_DB_VERSION === (string) get_option( 'smc_db_version', '' ) ) {
 			return;
@@ -278,9 +298,7 @@ final class SMC_Schema_Compat {
 		);
 	}
 
-	/**
-	 * Reconcile the pre-queue_type verification queue index before dbDelta runs.
-	 */
+	/** Reconcile the pre-queue_type verification queue index before dbDelta runs. */
 	public static function reconcile_verification_queue_index() {
 		global $wpdb;
 
