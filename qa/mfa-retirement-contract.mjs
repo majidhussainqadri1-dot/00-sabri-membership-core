@@ -12,9 +12,9 @@ const workflow = fs.readFileSync(`${root}/includes/class-smc-workflow.php`, 'utf
 const has = (source, needle, label = needle) => assert.ok(source.includes(needle), `missing MFA-retirement contract: ${label}`);
 const lacks = (source, needle, label = needle) => assert.ok(!source.includes(needle), `retired MFA contract still present: ${label}`);
 
-has(bootstrap, "Version: 1.2.39", 'plugin release 1.2.39');
-has(bootstrap, "define( 'SMC_VERSION', '1.2.39' );", 'runtime release 1.2.39');
-has(bootstrap, "define( 'SMC_CONTRACT_VERSION', '1.2.2' );", 'public contract 1.2.2');
+has(bootstrap, "Version: 1.2.40", 'plugin release 1.2.40');
+has(bootstrap, "define( 'SMC_VERSION', '1.2.40' );", 'runtime release 1.2.40');
+has(bootstrap, "define( 'SMC_CONTRACT_VERSION', '1.2.3' );", 'public contract 1.2.3');
 has(bootstrap, "require_once SMC_PATH . 'includes/class-smc-mfa-retirement.php';", 'MFA retirement runtime loaded');
 has(bootstrap, "array( 'SMC_MFA_Retirement', 'init' )", 'MFA retirement runtime initialized');
 has(bootstrap, "require_once SMC_PATH . 'includes/class-smc-schema-compat.php';", 'live schema compatibility runtime loaded');

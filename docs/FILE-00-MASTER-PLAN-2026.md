@@ -10,8 +10,8 @@
 
 ## Current implementation identity
 
-- Runtime implementation release: `1.2.39`
-- Public membership contract: `1.2.2`
+- Runtime implementation release: `1.2.40`
+- Public membership contract: `1.2.3`
 - Database schema: `1.4.4`
 - MFA policy: `2026-08-10-founder-mfa-retirement-v1`
 - File 00 MFA owner: `none`

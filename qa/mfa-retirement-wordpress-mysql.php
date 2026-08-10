@@ -22,8 +22,8 @@ $check    = static function ( $condition, $label ) use ( &$failures, &$passed ) 
 };
 
 global $wpdb;
-$check( defined( 'SMC_VERSION' ) && '1.2.39' === SMC_VERSION, 'runtime 1.2.39 loaded' );
-$check( defined( 'SMC_CONTRACT_VERSION' ) && '1.2.2' === SMC_CONTRACT_VERSION, 'membership contract 1.2.2 loaded' );
+$check( defined( 'SMC_VERSION' ) && '1.2.40' === SMC_VERSION, 'runtime 1.2.40 loaded' );
+$check( defined( 'SMC_CONTRACT_VERSION' ) && '1.2.3' === SMC_CONTRACT_VERSION, 'membership contract 1.2.3 loaded' );
 $check( defined( 'SMC_DB_VERSION' ) && '1.4.5' === SMC_DB_VERSION, 'database target 1.4.5 loaded' );
 $check( class_exists( 'SMC_MFA_Retirement' ), 'MFA retirement runtime loaded' );
 $check( ! class_exists( 'SMC_Account_Recovery' ), 'lost-factor recovery runtime absent' );
