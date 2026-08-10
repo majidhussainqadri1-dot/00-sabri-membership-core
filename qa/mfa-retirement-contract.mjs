@@ -5,19 +5,29 @@ const root = 'source/sabri-membership-core';
 const bootstrap = fs.readFileSync(`${root}/sabri-membership-core.php`, 'utf8');
 const retirement = fs.readFileSync(`${root}/includes/class-smc-mfa-retirement.php`, 'utf8');
 const contracts = fs.readFileSync(`${root}/includes/class-smc-contracts.php`, 'utf8');
+const schemaCompat = fs.readFileSync(`${root}/includes/class-smc-schema-compat.php`, 'utf8');
 
 const has = (source, needle, label = needle) => assert.ok(source.includes(needle), `missing MFA-retirement contract: ${label}`);
 const lacks = (source, needle, label = needle) => assert.ok(!source.includes(needle), `retired MFA contract still present: ${label}`);
 
-has(bootstrap, "Version: 1.2.35", 'plugin release 1.2.35');
-has(bootstrap, "define( 'SMC_VERSION', '1.2.35' );", 'runtime release 1.2.35');
+has(bootstrap, "Version: 1.2.36", 'plugin release 1.2.36');
+has(bootstrap, "define( 'SMC_VERSION', '1.2.36' );", 'runtime release 1.2.36');
 has(bootstrap, "define( 'SMC_CONTRACT_VERSION', '1.2.2' );", 'public contract 1.2.2');
 has(bootstrap, "require_once SMC_PATH . 'includes/class-smc-mfa-retirement.php';", 'MFA retirement runtime loaded');
 has(bootstrap, "array( 'SMC_MFA_Retirement', 'init' )", 'MFA retirement runtime initialized');
+has(bootstrap, "require_once SMC_PATH . 'includes/class-smc-schema-compat.php';", 'live schema compatibility runtime loaded');
+has(bootstrap, 'SMC_Schema_Compat::reconcile_verification_queue_index();', 'legacy verification queue preflight runs before migration');
+has(bootstrap, 'SMC_Schema_Compat::assert_current_queue_indexes();', 'current queue indexes are read-back verified');
 lacks(bootstrap, "class-smc-account-recovery.php", 'governed lost-factor recovery bootstrap');
 lacks(bootstrap, "class-smc-account-recovery-lock.php", 'lost-factor recovery lock bootstrap');
 assert.equal(fs.existsSync(`${root}/includes/class-smc-account-recovery.php`), false, 'lost-factor recovery source must be removed');
 assert.equal(fs.existsSync(`${root}/includes/class-smc-account-recovery-lock.php`), false, 'lost-factor recovery lock source must be removed');
+
+has(schemaCompat, "array( 'status', 'assigned_reviewer' )", 'exact live legacy queue signature is allowlisted');
+has(schemaCompat, "array( 'status', 'queue_type', 'assigned_reviewer' )", 'current verification queue signature is explicit');
+has(schemaCompat, 'DROP INDEX `queue`', 'only the known stale named index is dropped before dbDelta');
+has(schemaCompat, 'Unsupported verification queue index definition; automatic migration refused.', 'unknown queue index shapes fail closed');
+has(schemaCompat, "array( 'status', 'next_attempt_at' )", 'file-job queue signature is verified without mutation');
 
 for (const action of ['start_2fa', 'finish_2fa', 'challenge_2fa', 'rotate_recovery', 'ack_recovery_receipt']) {
   has(retirement, `remove_action( 'admin_post_smc_' . $action`, `runtime removal for ${action}`);
