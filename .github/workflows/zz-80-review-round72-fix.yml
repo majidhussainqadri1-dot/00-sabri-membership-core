@@ -1,0 +1,50 @@
+name: File 00 80-Review Round 72 Immediate Fix
+
+on:
+  push:
+    branches: [audit/80-round-review-v1.2.40]
+    paths: [.github/workflows/zz-80-review-round72-fix.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-round-72:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: audit/80-round-review-v1.2.40
+          fetch-depth: 0
+      - name: Correct retired MFA privacy/export semantics
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('source/sabri-membership-core/includes/class-smc-privacy.php')
+          s=p.read_text()
+          old="""\t\t$session_count = count( $sessions );\n\t\t$recovery_count = (int) $wpdb->get_var( $wpdb->prepare( \"SELECT COUNT(*) FROM {$wpdb->prefix}smc_recovery_codes WHERE user_id=%d AND consumed_at IS NULL\", $user_id ) );\n\t\t$values = array(\n\t\t\t__( 'Email ownership verified', 'sabri-membership-core' ) => SMC_Contracts::contact_verified( $user_id, 'email' ),\n\t\t\t__( 'Mobile ownership verified', 'sabri-membership-core' ) => SMC_Contracts::contact_verified( $user_id, 'mobile' ),\n\t\t\t__( 'Two-factor enabled', 'sabri-membership-core' ) => SMC_Security::two_factor_ready( $user_id ),\n\t\t\t__( 'Active membership sessions', 'sabri-membership-core' ) => $session_count,\n\t\t\t__( 'Unused recovery codes', 'sabri-membership-core' ) => $recovery_count,\n\t\t);\n"""
+          new="""\t\t$session_count = count( $sessions );\n\t\t$recovery_count = (int) $wpdb->get_var( $wpdb->prepare( \"SELECT COUNT(*) FROM {$wpdb->prefix}smc_recovery_codes WHERE user_id=%d AND consumed_at IS NULL\", $user_id ) );\n\t\t$legacy_factor_residue = metadata_exists( 'user', $user_id, '_smc_2fa_enabled' )\n\t\t\t|| metadata_exists( 'user', $user_id, '_smc_totp_secret_enc' )\n\t\t\t|| $recovery_count > 0;\n\t\t$values = array(\n\t\t\t__( 'Email ownership verified', 'sabri-membership-core' ) => SMC_Contracts::contact_verified( $user_id, 'email' ),\n\t\t\t__( 'Mobile ownership verified', 'sabri-membership-core' ) => SMC_Contracts::contact_verified( $user_id, 'mobile' ),\n\t\t\t__( 'Authentication owner', 'sabri-membership-core' ) => __( 'Sabri Authentication (File 02)', 'sabri-membership-core' ),\n\t\t\t__( 'Legacy retired File 00 MFA residue present', 'sabri-membership-core' ) => $legacy_factor_residue,\n\t\t\t__( 'Active membership sessions', 'sabri-membership-core' ) => $session_count,\n\t\t\t__( 'Legacy unused File 00 recovery-code records', 'sabri-membership-core' ) => $recovery_count,\n\t\t);\n"""
+          if old not in s: raise SystemExit('privacy security summary block not found')
+          s=s.replace(old,new)
+          s=s.replace('contact-verification state, encrypted government identity evidence, guardian consent, two-factor security state, verification decisions, and tamper-evident audit records.', 'contact-verification state, encrypted government identity evidence, guardian consent, legacy retired File 00 MFA residue retained only for governed cleanup/history, verification decisions, and tamper-evident audit records.')
+          s=s.replace('Data is retained only for the published membership, legal, security, dispute, and restoration periods.', 'Normal sign-in and account-recovery authentication are owned by Sabri Authentication (File 02). Data is retained only for the published membership, legal, security, dispute, and restoration periods.')
+          p.write_text(s)
+          PY
+      - name: Verify round 72 correction
+        run: |
+          set -euo pipefail
+          php -l source/sabri-membership-core/includes/class-smc-privacy.php
+          ! grep -q "Two-factor enabled" source/sabri-membership-core/includes/class-smc-privacy.php
+          ! grep -q "Unused recovery codes" source/sabri-membership-core/includes/class-smc-privacy.php
+          grep -q "Legacy retired File 00 MFA residue present" source/sabri-membership-core/includes/class-smc-privacy.php
+          grep -q "Sabri Authentication (File 02)" source/sabri-membership-core/includes/class-smc-privacy.php
+          git diff --check
+      - name: Commit immediate round 72 correction
+        run: |
+          set -euo pipefail
+          git config user.name 'File 00 QA Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add source/sabri-membership-core/includes/class-smc-privacy.php
+          git commit -m 'Round 72: label retired MFA only as legacy privacy residue'
+          git push origin HEAD:audit/80-round-review-v1.2.40
