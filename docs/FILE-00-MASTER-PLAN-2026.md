@@ -6,20 +6,32 @@
 - File 00 Four-Round Reviewed Final Master Plan — SHA-256 `3b1f81aa8aed39c76be9e6e2da3eef4e6671a581c13c359f52d163c9bbc6bc9d`
 - Continuous Value / Global Top-20 Superset — 6 August 2026 — later central constitution for green/free/File 26 decisions.
 - File 00 governing implementation addendum — 7 August 2026 — F00-CEN-01/02/03 and latest acceptance/traceability law.
+- Founder change-control — 10 August 2026 — File 00 two-factor verification is retired. This later explicit decision supersedes prior File 00 MFA/TOTP/recovery requirements while preserving all non-MFA identity, eligibility, guardian, verification, audit, privacy, containment and continuity controls.
 
 ## Current implementation identity
 
-- Runtime implementation release: `1.2.34`
-- Public membership contract: `1.2.1`
+- Runtime implementation release: `1.2.35`
+- Public membership contract: `1.2.2`
 - Database schema: `1.4.4`
+- MFA policy: `2026-08-10-founder-mfa-retirement-v1`
+- File 00 MFA owner: `none`
 - Latest-central constitution: `2026-08-07-v1.0`
 - File 26 membership projection contract: `1.0.0`
 - Advanced trust contract: `1.0.0`
 - Exact-head CI: pending until the current commit succeeds
 - Main merge: pending until review/PR gates succeed
 
+## Founder-approved MFA retirement boundary
+
+File 00 no longer requires or exposes authenticator/TOTP setup, recovery codes, a user-entered MFA session challenge, authenticator replacement, or governed lost-factor recovery. File 02 remains the canonical normal sign-in/password/account-recovery owner. File 00 continues to enforce membership eligibility, identity assurance, verified guardian consent, professional verification assertions, contact ownership, institutional authority, containment/continuity, privacy/retention, session revocation and tamper-evident audit evidence.
+
+The retirement migration is intentionally fail-safe: obsolete File 00 factor material is removed only after DB schema `1.4.4` and audit infrastructure are ready; cleanup is transactional and historical audit rows are preserved. A retirement audit event is appended rather than rewriting prior MFA history.
+
 ## Current evidence
 
+- `qa/mfa-retirement-contract.mjs`
+- `qa/mfa-retirement-wordpress-mysql.php`
+- `.github/workflows/mfa-retirement-wordpress-mysql.yml`
 - `docs/FILE-00-THIRD-FRESH-TEN-ROUND-REVIEW-1.2.16.md`
 - `docs/RELEASE-1.2.16-THIRD-FRESH-TEN-REVIEW.md`
 - `qa/third-fresh-ten-review-traceability.json`
@@ -49,7 +61,7 @@
 - `qa/three-plan-runtime-completion-contract.mjs`
 - `qa/master-plan-traceability-contract.mjs`
 
-Historical 1.2.11 three-plan evidence remains immutable in `qa/requirements-traceability.json` and `docs/FILE-00-IMPLEMENTATION-TRACEABILITY-1.2.11.md`; it is regression/provenance evidence, not the current release identity.
+Historical 1.2.11 three-plan evidence remains immutable in `qa/requirements-traceability.json` and `docs/FILE-00-IMPLEMENTATION-TRACEABILITY-1.2.11.md`; it is regression/provenance evidence, not the current release identity. Historical 1.2.34 governed-recovery evidence likewise remains provenance only and is superseded operationally by the 10 August 2026 Founder change-control.
 
 ## Truthful boundary
 
