@@ -553,13 +553,12 @@ final class SMC_Workflow {
 		$next_action = __( 'No immediate action. The authoritative review state will update here.', 'sabri-membership-core' );
 		if ( ! $a['email_verified'] ) { $next_action = __( 'Verify email ownership using the configured delivery provider.', 'sabri-membership-core' ); }
 		elseif ( ! $a['phone_verified'] ) { $next_action = __( 'Verify mobile ownership using the configured SMS provider.', 'sabri-membership-core' ); }
-		elseif ( ! $a['two_factor_ready'] ) { $next_action = __( 'Enable two-factor authentication in Membership Security.', 'sabri-membership-core' ); }
 		elseif ( ! $a['guardian_verified'] ) { $next_action = __( 'Complete the current guardian-consent generation.', 'sabri-membership-core' ); }
 		elseif ( 'more_information' === $a['status'] ) { $next_action = __( 'Provide the requested correction and resubmit.', 'sabri-membership-core' ); }
 		elseif ( in_array( $a['status'], array( 'rejected','suspended' ), true ) ) { $next_action = __( 'Use the governed appeal path if you have corrective evidence.', 'sabri-membership-core' ); }
 		$application_label = smc_statuses()[ $a['status']] ?? $a['status'];
-		if ( ! empty( $a['institutional_account'] ) && 'verified' === $a['status'] && ( ! $a['email_verified'] || ! $a['phone_verified'] || ! $a['two_factor_ready'] ) ) {
-			$application_label = __( 'Institutionally recognized — security/contact setup incomplete', 'sabri-membership-core' );
+		if ( ! empty( $a['institutional_account'] ) && 'verified' === $a['status'] && ( ! $a['email_verified'] || ! $a['phone_verified'] ) ) {
+			$application_label = __( 'Institutionally recognized — contact setup incomplete', 'sabri-membership-core' );
 		}
 		$blockers = array();
 		if ( class_exists( 'SMC_Completion' ) && SMC_Completion::safe_mode() ) { $blockers[] = __( 'Safe Mode is active; risky writes are restricted.', 'sabri-membership-core' ); }
@@ -577,7 +576,7 @@ final class SMC_Workflow {
 				<div><dt><?php esc_html_e( 'Email ownership', 'sabri-membership-core' ); ?></dt><dd><?php echo $a['email_verified'] ? esc_html__( 'Verified', 'sabri-membership-core' ) : esc_html__( 'Pending', 'sabri-membership-core' ); ?></dd></div>
 				<div><dt><?php esc_html_e( 'Mobile ownership', 'sabri-membership-core' ); ?></dt><dd><?php echo $a['phone_verified'] ? esc_html__( 'Verified', 'sabri-membership-core' ) : esc_html__( 'Pending', 'sabri-membership-core' ); ?></dd></div>
 				<div><dt><?php esc_html_e( 'Guardian consent', 'sabri-membership-core' ); ?></dt><dd><?php echo $a['guardian_verified'] ? esc_html__( 'Verified or not required', 'sabri-membership-core' ) : esc_html__( 'Pending', 'sabri-membership-core' ); ?></dd></div>
-				<div><dt><?php esc_html_e( 'Two-factor security', 'sabri-membership-core' ); ?></dt><dd><?php echo $a['two_factor_ready'] ? esc_html__( 'Enabled', 'sabri-membership-core' ) : esc_html__( 'Required', 'sabri-membership-core' ); ?></dd></div>
+				<div><dt><?php esc_html_e( 'Authentication owner', 'sabri-membership-core' ); ?></dt><dd><?php esc_html_e( 'Sabri Authentication (File 02); File 00 MFA retired', 'sabri-membership-core' ); ?></dd></div>
 				<div><dt><?php esc_html_e( 'Submitted', 'sabri-membership-core' ); ?></dt><dd><?php echo esc_html( (string) ( $row['submitted_at'] ?: ( $request['submitted_at'] ?? '—' ) ) ); ?></dd></div>
 				<div><dt><?php esc_html_e( 'Last updated', 'sabri-membership-core' ); ?></dt><dd><?php echo esc_html( (string) ( $row['updated_at'] ?? '—' ) ); ?></dd></div>
 				<div><dt><?php esc_html_e( 'Review state', 'sabri-membership-core' ); ?></dt><dd><?php echo esc_html( (string) ( $request['status'] ?? __( 'Not queued', 'sabri-membership-core' ) ) ); ?></dd></div>

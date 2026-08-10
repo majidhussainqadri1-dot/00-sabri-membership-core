@@ -84,3 +84,7 @@ has(contracts, "if ( user_can( $user, 'manage_options' ) ) {\n\t\t\treturn true;
 lacks(contracts, "smc_privacy_erasure_lock( $user_id ) || user_can( $user, 'manage_options' )", 'Administrator protection is not conflated with role-sync failure');
 
 console.log('mfa-retirement-contract: PASS');
+
+lacks(workflow, 'Enable two-factor authentication in Membership Security.', 'status UI must not require retired File 00 MFA');
+lacks(workflow, "'Two-factor security'", 'status UI must not present retired MFA as required');
+has(workflow, 'File 00 MFA retired', 'status UI names File 02 authentication ownership');
