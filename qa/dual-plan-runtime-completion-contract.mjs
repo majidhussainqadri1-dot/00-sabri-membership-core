@@ -17,12 +17,14 @@ const admin = read('source/sabri-membership-core/includes/class-smc-admin.php');
 const privacy = read('source/sabri-membership-core/includes/class-smc-privacy.php');
 const lifecycle = read('source/sabri-membership-core/includes/class-smc-lifecycle.php');
 const functions = read('source/sabri-membership-core/includes/functions.php');
+const retirement = read('source/sabri-membership-core/includes/class-smc-mfa-retirement.php');
 const js = read('source/sabri-membership-core/assets/membership.js');
 const css = read('source/sabri-membership-core/assets/membership.css');
 const registry = JSON.parse(read('qa/requirements-traceability.json'));
 
-assert(plugin.includes('Version: 1.2.34') && plugin.includes("define( 'SMC_VERSION', '1.2.34' )"), 'Runtime version 1.2.34');
+assert(plugin.includes('Version: 1.2.35') && plugin.includes("define( 'SMC_VERSION', '1.2.35' )"), 'Runtime version 1.2.35');
 assert(plugin.includes("define( 'SMC_DB_VERSION', '1.4.4' )"), 'Schema version 1.4.4');
+assert(plugin.includes("define( 'SMC_CONTRACT_VERSION', '1.2.2' )"), 'Membership contract 1.2.2');
 assert(plugin.includes("require_once SMC_PATH . 'includes/class-smc-events.php'") && plugin.includes("require_once SMC_PATH . 'includes/class-smc-completion.php'"), 'Completion and events services load');
 assert(plugin.includes("array( 'SMC_Events', 'init' )") && plugin.includes("array( 'SMC_Completion', 'init' )"), 'Completion and events services initialize');
 
@@ -53,7 +55,7 @@ assert(installer.includes('queue_type varchar') && installer.includes('conflict_
 assert(admin.includes('smc_assign_review') && admin.includes('smc_declare_conflict'), 'Reviewer assignment and conflict actions');
 assert(admin.includes('smc_review_reason_codes()') && admin.includes("'reason_code'"), 'Governed reason codes');
 assert(admin.includes("'restore'") && admin.includes('smc_restore_membership') && admin.includes('independent'), 'Independent appeal restoration');
-assert(admin.includes('SMC_Security::session_is_verified') && admin.includes('high-risk'), 'Fresh MFA for high-risk reviewer actions');
+assert(retirement.includes('current authenticated reviewer session') && retirement.includes('mark_primary_session_current'), 'High-risk reviewer actions remain bound to an authenticated session without File 00 MFA');
 assert(admin.includes('sla_due_at') && admin.includes('overdue'), 'SLA and overdue visibility');
 
 assert(completion.includes("header( 'X-Robots-Tag: noindex") && completion.includes("'Cache-Control'] = 'private, no-store") && completion.includes("define( 'DONOTCACHEPAGE', true )"), 'Private routes noindex/noarchive/no-store');
