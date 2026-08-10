@@ -81,9 +81,23 @@ jobs:
             echo "PASS canonical File 00 migration ready\n";
           ' --path=/tmp/wordpress
 
-      - name: Reproduce and repair exact live legacy named-index transitions
+      - name: Reproduce exact live legacy indexes and Administrator role-backfill state
         run: |
           set -euo pipefail
+          php /tmp/wp-cli.phar eval '
+            global $wpdb;
+            $admin = get_user_by("login", "founder");
+            if ( ! $admin || ! user_can( $admin, "manage_options" ) ) { fwrite(STDERR,"Administrator fixture missing\n"); exit(56); }
+            if ( ! smc_application( $admin->ID ) ) { SMC_Contracts::register_account( $admin->ID ); }
+            $app = smc_application( $admin->ID );
+            if ( ! $app ) { fwrite(STDERR,"Administrator application fixture missing\n"); exit(57); }
+            if ( false === $wpdb->update( $wpdb->prefix."smc_applications", array("membership_type"=>"member","status"=>"draft","row_version"=>4,"updated_at"=>current_time("mysql",true)), array("user_id"=>(int)$admin->ID) ) ) { fwrite(STDERR,"Administrator application fixture update failed\n"); exit(58); }
+            $roles = array_values( (array) get_userdata( $admin->ID )->roles ); sort($roles);
+            update_option("smc_v1238_admin_roles_before", $roles, false);
+            $state = smc_membership_state( $admin->ID );
+            if ( empty($state["institutional_account"]) || empty($state["approved"]) || "verified" !== ($state["status"] ?? "") ) { fwrite(STDERR,"Administrator institutional precedence fixture failed\n"); exit(59); }
+            echo "PASS Administrator application fixture established without changing institutional precedence\n";
+          ' --path=/tmp/wordpress
           php /tmp/wp-cli.phar db query "
             ALTER TABLE wp_smc_verification_requests DROP INDEX queue, ADD KEY queue(status,assigned_reviewer);
             ALTER TABLE wp_smc_approval_votes DROP INDEX decision, ADD KEY decision(request_id,decision);
@@ -92,6 +106,8 @@ jobs:
             DROP TABLE IF EXISTS wp_smc_application_repairs;
             UPDATE wp_options SET option_value='1.2.0' WHERE option_name='smc_db_version';
             UPDATE wp_options SET option_value='1.2.5' WHERE option_name='smc_release_version';
+            DELETE FROM wp_smc_migrations WHERE migration_key='role-grants-to-1.3.0';
+            DELETE rg FROM wp_smc_role_grants rg INNER JOIN wp_users u ON u.ID=rg.user_id WHERE u.user_login='founder';
           " --path=/tmp/wordpress
           php /tmp/wp-cli.phar eval '
             global $wpdb;
@@ -102,10 +118,21 @@ jobs:
             SMC_Schema_Compat::reconcile_verification_queue_index();
             SMC_Installer::maybe_upgrade();
             if ( SMC_DB_VERSION !== get_option("smc_db_version","") ) {
-              fwrite(STDERR,"legacy named-index migration incomplete: ".wp_json_encode(get_option("smc_last_migration_failure",array()))."\n");
+              fwrite(STDERR,"legacy named-index/Admin-role migration incomplete: ".wp_json_encode(get_option("smc_last_migration_failure",array()))."\n");
               exit(51);
             }
             SMC_Schema_Compat::assert_current_queue_indexes();
+            $admin = get_user_by("login", "founder");
+            $checkpoint = $wpdb->get_row($wpdb->prepare("SELECT status,cursor_value FROM {$wpdb->prefix}smc_migrations WHERE migration_key=%s", "role-grants-to-1.3.0"), ARRAY_A);
+            if ( ! $checkpoint || "complete" !== ($checkpoint["status"] ?? "") ) { fwrite(STDERR,"Administrator role-grant checkpoint did not complete\n"); exit(60); }
+            $before = (array) get_option("smc_v1238_admin_roles_before", array()); sort($before);
+            $after = array_values((array)get_userdata($admin->ID)->roles); sort($after);
+            if ( $before !== $after || ! in_array("administrator", $after, true) ) { fwrite(STDERR,"Administrator native roles were mutated by File 00 backfill\n"); exit(61); }
+            $grant = $wpdb->get_row($wpdb->prepare("SELECT membership_type,status FROM {$wpdb->prefix}smc_role_grants WHERE user_id=%d AND membership_type=%s", $admin->ID, "member"), ARRAY_A);
+            if ( ! $grant || "pending" !== ($grant["status"] ?? "") ) { fwrite(STDERR,"Administrator canonical membership grant was not backfilled\n"); exit(62); }
+            $state = smc_membership_state($admin->ID);
+            if ( empty($state["institutional_account"]) || empty($state["approved"]) || "verified" !== ($state["status"] ?? "") ) { fwrite(STDERR,"Legacy application overrode Administrator institutional identity\n"); exit(63); }
+            delete_option("smc_v1238_admin_roles_before");
             $current_queue = $wpdb->get_col("SELECT COLUMN_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=\"wp_smc_verification_requests\" AND INDEX_NAME=\"queue\" ORDER BY SEQ_IN_INDEX");
             if ( array("status","queue_type","assigned_reviewer") !== array_values($current_queue) ) { fwrite(STDERR,"current queue index mismatch\n"); exit(52); }
             $current_decision = $wpdb->get_col("SELECT COLUMN_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=\"wp_smc_approval_votes\" AND INDEX_NAME=\"decision\" ORDER BY SEQ_IN_INDEX");
@@ -113,7 +140,7 @@ jobs:
             foreach ( array("wp_smc_event_outbox","wp_smc_event_inbox","wp_smc_application_repairs") as $table ) {
               if ( $table !== $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s",$table)) ) { fwrite(STDERR,"missing post-repair table: ".$table."\n"); exit(53); }
             }
-            echo "PASS exact live legacy queue + decision transitions repaired and migration promoted\n";
+            echo "PASS exact live legacy queue + decision transitions and Administrator role backfill repaired without native-role mutation\n";
           ' --path=/tmp/wordpress
 
       - name: Prove MFA retirement in real WordPress and MariaDB
@@ -125,12 +152,12 @@ jobs:
         run: |
           set -euo pipefail
           python3 tools/build.py
-          python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.37.zip
+          python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.38.zip
 
-      - name: Upload installable File 00 v1.2.37 ZIP
+      - name: Upload installable File 00 v1.2.38 ZIP
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: File-00-Sabri-Membership-Core-1.2.37-Live-Migration-Fixed
-          path: dist/00-sabri-membership-core-1.2.37.zip
+          name: File-00-Sabri-Membership-Core-1.2.38-Administrator-Backfill-Fixed
+          path: dist/00-sabri-membership-core-1.2.38.zip
           if-no-files-found: error
           retention-days: 30

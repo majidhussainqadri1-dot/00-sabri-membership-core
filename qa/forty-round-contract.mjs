@@ -20,11 +20,11 @@ const failures = [];
 let passed = 0;
 function assert(condition, label) { if (condition) passed += 1; else failures.push(label); }
 
-assert(plugin.includes('Version: 1.2.37'), 'Plugin header is 1.2.37');
-assert(plugin.includes("define( 'SMC_VERSION', '1.2.37' )"), 'Runtime version is 1.2.37');
+assert(plugin.includes('Version: 1.2.38'), 'Plugin header is 1.2.38');
+assert(plugin.includes("define( 'SMC_VERSION', '1.2.38' )"), 'Runtime version is 1.2.38');
 assert(plugin.includes("define( 'SMC_DB_VERSION', '1.4.4' )"), 'Schema is 1.4.4');
 assert(plugin.includes("define( 'SMC_CONTRACT_VERSION', '1.2.2' )"), 'Contract is 1.2.2 after Founder-approved MFA retirement');
-assert(readme.includes('Stable tag: 1.2.37'), 'Plugin readme stable tag is 1.2.37');
+assert(readme.includes('Stable tag: 1.2.38'), 'Plugin readme stable tag is 1.2.38');
 assert(plugin.includes("register_deactivation_hook( SMC_FILE, array( 'SMC_Installer', 'deactivate' ) )"), 'Deactivation hook is registered');
 assert(installer.includes('public static function deactivate()'), 'Installer exposes deactivation cleanup');
 for (const hook of ['smc_lifecycle_daily','smc_process_file_jobs','smc_continue_migration']) {
