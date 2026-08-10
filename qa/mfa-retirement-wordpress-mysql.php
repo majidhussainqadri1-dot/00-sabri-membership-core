@@ -27,7 +27,7 @@ $check( defined( 'SMC_CONTRACT_VERSION' ) && '1.2.2' === SMC_CONTRACT_VERSION, '
 $check( defined( 'SMC_DB_VERSION' ) && '1.4.4' === SMC_DB_VERSION, 'database target 1.4.4 loaded' );
 $check( class_exists( 'SMC_MFA_Retirement' ), 'MFA retirement runtime loaded' );
 $check( ! class_exists( 'SMC_Account_Recovery' ), 'lost-factor recovery runtime absent' );
-$check( false === has_shortcode( 'smc_membership_recovery' ), 'lost-factor recovery shortcode absent' );
+$check( ! shortcode_exists( 'smc_membership_recovery' ), 'lost-factor recovery shortcode absent' );
 
 $mfa_hooks = array(
 	'start_2fa'            => 'handle_start_2fa',
@@ -179,5 +179,4 @@ if ( $failures ) {
 	}
 	exit( 1 );
 }
-
 echo sprintf( "mfa-retirement WordPress/MariaDB: %d PASS / 0 FAIL\n", $passed );
