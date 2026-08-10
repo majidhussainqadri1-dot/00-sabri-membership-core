@@ -1,0 +1,129 @@
+name: File 00 Release 1.2.34 Normalize and Verify
+
+on:
+  push:
+    branches:
+      - codex/file00-release-1.2.34-parity
+
+permissions:
+  contents: write
+
+jobs:
+  normalize-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout release branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+
+      - name: Set up PHP 8.3
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240
+        with:
+          php-version: '8.3'
+          coverage: none
+          extensions: mysqli, openssl, mbstring, json
+          tools: none
+
+      - name: Normalize current release metadata and assertions
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          version = '1.2.34'
+          readme_path = Path('source/sabri-membership-core/README.txt')
+          readme = readme_path.read_text(encoding='utf-8')
+          readme = readme.replace('Stable tag: 1.2.33', f'Stable tag: {version}', 1)
+          if '= 1.2.34 =' not in readme:
+              marker = '= 1.2.33 ='
+              section = '''= 1.2.34 =\n* Adds governed lost-factor recovery when the enrolled authenticator and plaintext recovery codes are both unavailable.\n* Requires password reauthentication, contact-continuity binding, durable recovery cases, rate limits and serialized subject-level locking.\n* Founder/Administrator recovery defaults to a 24-hour cooling period and two distinct MFA-verified Administrator approvals; self-approval, duplicate approvers and duplicate evidence references are rejected.\n* Revokes all File 00 sessions before reset, invalidates the old TOTP secret, recovery codes and replay state, then stages a brand-new pending authenticator enrollment instead of bypassing MFA.\n* Stores only keyed hashes of out-of-band evidence references and records request/approval/reject/cancel/complete in the tamper-evident audit/event path without direct mail bypass.\n* Runtime 1.2.34; DB schema 1.4.4; public contract 1.2.1. Production remains unverified until exact deployment, migration completion and live re-test.\n\n'''
+              if marker not in readme:
+                  raise SystemExit('README changelog insertion point missing')
+              readme = readme.replace(marker, section + marker, 1)
+          readme_path.write_text(readme, encoding='utf-8', newline='\n')
+
+          targets = [
+              Path('qa/forty-round-1.2.10-contract.mjs'),
+              Path('qa/three-plan-runtime-completion-contract.mjs'),
+              Path('qa/latest-central-contract.mjs'),
+              Path('qa/advanced-trust-contract.mjs'),
+              Path('qa/third-fresh-review-contract.mjs'),
+              Path('qa/fourth-fresh-review-contract.mjs'),
+              Path('qa/fifth-fresh-review-contract.mjs'),
+              Path('qa/advanced-trust-runtime.php'),
+          ]
+          replacements = [
+              ('runtime 1.2.33', 'runtime 1.2.34'),
+              ('Version: 1.2.33', 'Version: 1.2.34'),
+              ("SMC_VERSION', '1.2.33", "SMC_VERSION', '1.2.34"),
+              ("define('SMC_VERSION', '1.2.33');", "define('SMC_VERSION', '1.2.34');"),
+              ("packageJson.version === '1.2.33'", "packageJson.version === '1.2.34'"),
+              ("pkg.version==='1.2.33'", "pkg.version==='1.2.34'"),
+              ('Stable tag: 1.2.33', 'Stable tag: 1.2.34'),
+              ('for runtime 1.2.33.', 'for runtime 1.2.34.'),
+          ]
+          for path in targets:
+              text = path.read_text(encoding='utf-8')
+              for old, new in replacements:
+                  text = text.replace(old, new)
+              path.write_text(text, encoding='utf-8', newline='\n')
+          PY
+
+      - name: Install QA dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Run complete QA suite
+        run: npm test
+
+      - name: Build deterministic 1.2.34 package
+        run: |
+          set -euo pipefail
+          python3 tools/build.py
+          python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.34.zip
+
+      - name: Write release evidence
+        run: |
+          set -euo pipefail
+          ZIP_SHA="$(sha256sum dist/00-sabri-membership-core-1.2.34.zip | awk '{print $1}')"
+          cp dist/CHECKSUMS.sha256 CHECKSUMS.sha256
+          cat > RELEASE-1.2.34.md <<EOF
+          # File 00 Release 1.2.34
+
+          Repository release for the governed lost-factor recovery workflow.
+
+          - Runtime: \`1.2.34\`
+          - Public contract: \`1.2.1\`
+          - DB schema: \`1.4.4\`
+          - Deterministic package: \`00-sabri-membership-core-1.2.34.zip\`
+          - SHA-256: \`${ZIP_SHA}\`
+          - Full npm/static/runtime QA: PASS in this release workflow.
+          - Deterministic package verification: PASS.
+          - Repository state only; staging/live deployment and live verification are not claimed.
+          EOF
+          cat > STATUS.md <<EOF
+          # File 00 Status — 1.2.34
+
+          - Runtime / public contract / DB schema: \`1.2.34\` / \`1.2.1\` / \`1.4.4\`.
+          - Governed lost-factor recovery: coded, serialized, audited and repository-tested.
+          - Founder/Administrator recovery: 24-hour default cooling plus two distinct MFA-verified Administrator approvals; self-approval prohibited.
+          - Old factor/session/recovery-code state: invalidated before a fresh pending authenticator enrollment is staged.
+          - Candidate ZIP SHA-256: \`${ZIP_SHA}\`.
+          - Local/source/static/runtime/package integrity: passing in the release workflow.
+          - Controlled staging, exact deployed-code parity, live DB migration verification, File 19 delivery and live recovery re-test: pending.
+          - Live Verification Status: UNRESOLVED until post-deploy evidence is collected.
+          EOF
+
+      - name: Commit normalized release evidence
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo 'Release metadata already normalized.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add source/sabri-membership-core/README.txt source/sabri-membership-core/MANIFEST.sha256 qa/forty-round-1.2.10-contract.mjs qa/three-plan-runtime-completion-contract.mjs qa/latest-central-contract.mjs qa/advanced-trust-contract.mjs qa/third-fresh-review-contract.mjs qa/fourth-fresh-review-contract.mjs qa/fifth-fresh-review-contract.mjs qa/advanced-trust-runtime.php CHECKSUMS.sha256 RELEASE-1.2.34.md STATUS.md
+          git commit -m 'Normalize File 00 1.2.34 release metadata and evidence'
+          git push origin HEAD:codex/file00-release-1.2.34-parity
