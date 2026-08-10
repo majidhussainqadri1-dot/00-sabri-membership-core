@@ -3,7 +3,7 @@ Contributors: sabrihomeopathy
 Tags: membership, identity, guardian consent, privacy, governance
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 1.2.38
+Stable tag: 1.2.39
 License: GPL-2.0-or-later
 
 Canonical membership eligibility, identity assurance, guardian consent, security assertions, and verification governance for the Sabri Social Homeopathy Platform.
@@ -70,6 +70,14 @@ File 19 receives membership notices through its canonical sabri_notify integrati
 Local source and GitHub checks do not authorize production. Test fresh activation, legacy upgrade, DB/audit migration, legacy factor retirement, MySQL advisory locks, concurrent reviewers, authorization matrices, filesystem denial and rollback, scanner providers, email/mobile/guardian delivery, File 02 authentication integration, CF-01 provider/consumer contracts, all named cross-file integrations, advanced trust containment/revocation/selective-disclosure workflows, privacy erasure, restore, browser accessibility, and mobile layouts on Hostinger staging.
 
 == Changelog ==
+
+= 1.2.39 =
+* Repairs the live-proven role-grant migration failure caused by historical File 00 applications whose WordPress principals no longer exist.
+* Preserves orphaned application rows as historical source evidence, creates deterministic pending `smc_application_repairs` quarantine records, suspends any derivative role grants for missing principals, and appends tamper-evident orphan quarantine audit evidence.
+* Existing WordPress users continue through the canonical role-grant + role-sync path; privacy-erasure locks remain a separate fail-closed condition and are never auto-skipped as missing-user orphans.
+* Persists the role-grant migration cursor after each safely handled application and retries the normal installer only after orphan-safe checkpoint completion; stale live failure/deferred markers clear only after DB promotion actually succeeds.
+* Adds a real WordPress 7.0.1 + MariaDB 11.4 regression reproducing deleted principals with preserved applications, including an interrupted derivative role grant, and proves source preservation, repair quarantine, grant suspension, audit evidence, checkpoint completion, current indexes, bootstrap readiness and DB promotion.
+* Runtime 1.2.39; DB schema 1.4.4; public contract 1.2.2. Live resolution still requires deployment and post-deployment verification.
 
 = 1.2.38 =
 * Repairs the live-proven role-grant migration failure triggered when a pre-existing File 00 application belongs to a WordPress Administrator/institutional account.
