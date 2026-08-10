@@ -13,8 +13,8 @@ function assert(condition, name) {
   else failures.push(name);
 }
 
-assert(main.includes('Version: 1.2.33'), 'Plugin header is 1.2.33');
-assert(main.includes("define( 'SMC_VERSION', '1.2.33' )"), 'Runtime version is 1.2.33');
+assert(main.includes('Version: 1.2.34'), 'Plugin header is 1.2.34');
+assert(main.includes("define( 'SMC_VERSION', '1.2.34' )"), 'Runtime version is 1.2.34');
 assert(main.includes("define( 'SMC_DB_VERSION', '1.4.4' )"), 'Database version is 1.4.4');
 assert(main.includes("define( 'SMC_CONTRACT_VERSION', '1.2.1' )"), 'Contract version remains 1.2.1 for consumer compatibility');
 assert(main.includes("require_once SMC_PATH . 'includes/class-smc-authorization.php'"), 'Authorization boundary is loaded');
