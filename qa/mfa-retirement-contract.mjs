@@ -10,8 +10,8 @@ const schemaCompat = fs.readFileSync(`${root}/includes/class-smc-schema-compat.p
 const has = (source, needle, label = needle) => assert.ok(source.includes(needle), `missing MFA-retirement contract: ${label}`);
 const lacks = (source, needle, label = needle) => assert.ok(!source.includes(needle), `retired MFA contract still present: ${label}`);
 
-has(bootstrap, "Version: 1.2.37", 'plugin release 1.2.37');
-has(bootstrap, "define( 'SMC_VERSION', '1.2.37' );", 'runtime release 1.2.37');
+has(bootstrap, "Version: 1.2.38", 'plugin release 1.2.38');
+has(bootstrap, "define( 'SMC_VERSION', '1.2.38' );", 'runtime release 1.2.38');
 has(bootstrap, "define( 'SMC_CONTRACT_VERSION', '1.2.2' );", 'public contract 1.2.2');
 has(bootstrap, "require_once SMC_PATH . 'includes/class-smc-mfa-retirement.php';", 'MFA retirement runtime loaded');
 has(bootstrap, "array( 'SMC_MFA_Retirement', 'init' )", 'MFA retirement runtime initialized');
@@ -59,5 +59,9 @@ has(contracts, "'mfa_owner'              => 'none'", 'canonical membership asser
 has(contracts, "'can_message'            => $eligible", 'member actions are based on current eligibility without MFA');
 has(contracts, "'can_book_appointment'   => $eligible", 'appointment assertion no longer requires MFA');
 has(contracts, "'mfa_required'         => false", 'publishing/transfer subcontracts expose MFA retirement');
+
+has(contracts, "if ( ! $user || smc_privacy_erasure_lock( $user_id ) )", 'missing user and privacy erasure remain role-sync failures');
+has(contracts, "if ( user_can( $user, 'manage_options' ) ) {\n\t\t\treturn true;", 'Administrator protected role-sync no-op is successful');
+lacks(contracts, "smc_privacy_erasure_lock( $user_id ) || user_can( $user, 'manage_options' )", 'Administrator protection is not conflated with role-sync failure');
 
 console.log('mfa-retirement-contract: PASS');

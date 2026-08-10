@@ -10,7 +10,7 @@
 
 ## Current implementation identity
 
-- Runtime implementation release: `1.2.37`
+- Runtime implementation release: `1.2.38`
 - Public membership contract: `1.2.2`
 - Database schema: `1.4.4`
 - MFA policy: `2026-08-10-founder-mfa-retirement-v1`
@@ -41,6 +41,14 @@ Release `1.2.36` adds a narrow fail-closed compatibility preflight. It recognize
 After `1.2.36` was deployed, live Hostinger evidence proved that the queue transition completed successfully and migration advanced to the next historical same-name index. The live `smc_approval_votes` table still had the non-unique BTREE index `decision(request_id,decision)`, while the current schema requires `decision(request_id,approval_generation,decision)`. MariaDB therefore rejected the normal `dbDelta()` pass with `Duplicate key name 'decision'` before downstream table creation and version promotion could finish.
 
 Release `1.2.37` extends the same narrow fail-closed compatibility boundary to this exact live-proven approval-decision signature. Only `decision(request_id,decision)` with the expected non-unique BTREE attributes can be removed automatically; absent/current indexes are no-ops and every unknown shape is refused. The normal `dbDelta()` pass then creates `decision(request_id,approval_generation,decision)`, after which the compatibility verifier checks the exact current decision index together with both queue indexes. The DB schema target remains `1.4.4`; this is an idempotent historical migration bridge, not a new schema shape.
+
+## Live-proven institutional Administrator role-backfill correction — 1.2.38
+
+After `1.2.37` was deployed, live Hostinger evidence proved that the named-index compatibility transitions were crossed but the database still remained at `1.2.0` because migration advanced to `Role-grant backfill failed.` The live Founder account (`user_id=1`) had a surviving File 00 application (`membership_type=member`, `status=draft`) while its native WordPress account retained Administrator authority. No `role-grants-to-1.3.0` checkpoint was created, proving failure occurred inside the first backfill item before checkpoint persistence.
+
+Exact v1.2.37 source showed that `SMC_Contracts::sync_wordpress_roles()` deliberately returned `false` for every `manage_options` user to protect Administrator roles from File 00 membership-role mutation. `SMC_Installer::backfill_role_grants()` interpreted that same `false` as a failed write and aborted. The protection itself was correct; the boolean contract was not.
+
+Release `1.2.38` preserves the institutional boundary and changes only its success semantics: a valid Administrator is a protected successful no-op for WordPress role synchronization, while a missing user or privacy-erasure lock still returns failure. The canonical File 00 role grant can therefore be backfilled without adding/removing native Administrator roles. The real WordPress 7.0.1 + MariaDB 11.4 gate now recreates the Administrator + legacy application condition, removes the role-grant checkpoint, reruns migration, and requires DB `1.4.4`, a complete role-grant checkpoint, the expected pending canonical grant, unchanged Administrator roles, preserved institutional identity precedence, current named indexes, and downstream tables.
 
 ## Current evidence
 

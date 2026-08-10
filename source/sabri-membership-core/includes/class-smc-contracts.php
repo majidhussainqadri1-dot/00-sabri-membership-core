@@ -430,8 +430,17 @@ final class SMC_Contracts {
 
 	public static function sync_wordpress_roles( $user_id ) {
 		$user = get_userdata( absint( $user_id ) );
-		if ( ! $user || smc_privacy_erasure_lock( $user_id ) || user_can( $user, 'manage_options' ) ) {
+		if ( ! $user || smc_privacy_erasure_lock( $user_id ) ) {
 			return false;
+		}
+		/*
+		 * WordPress Administrators are institutional accounts whose native role is
+		 * deliberately outside File 00 managed membership-role mutation. Treat
+		 * that protected no-op as successful synchronization; callers must not
+		 * misclassify the protection itself as a failed write.
+		 */
+		if ( user_can( $user, 'manage_options' ) ) {
+			return true;
 		}
 		$desired = array();
 		foreach ( self::role_grants( $user_id ) as $grant ) {

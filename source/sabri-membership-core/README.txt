@@ -3,7 +3,7 @@ Contributors: sabrihomeopathy
 Tags: membership, identity, guardian consent, privacy, governance
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 1.2.37
+Stable tag: 1.2.38
 License: GPL-2.0-or-later
 
 Canonical membership eligibility, identity assurance, guardian consent, security assertions, and verification governance for the Sabri Social Homeopathy Platform.
@@ -70,6 +70,13 @@ File 19 receives membership notices through its canonical sabri_notify integrati
 Local source and GitHub checks do not authorize production. Test fresh activation, legacy upgrade, DB/audit migration, legacy factor retirement, MySQL advisory locks, concurrent reviewers, authorization matrices, filesystem denial and rollback, scanner providers, email/mobile/guardian delivery, File 02 authentication integration, CF-01 provider/consumer contracts, all named cross-file integrations, advanced trust containment/revocation/selective-disclosure workflows, privacy erasure, restore, browser accessibility, and mobile layouts on Hostinger staging.
 
 == Changelog ==
+
+= 1.2.38 =
+* Repairs the live-proven role-grant migration failure triggered when a pre-existing File 00 application belongs to a WordPress Administrator/institutional account.
+* Preserves the Administrator native WordPress role unchanged: `sync_wordpress_roles()` now treats the deliberate Administrator no-mutation boundary as a successful no-op rather than a failed write.
+* Missing users and privacy-erasure locks remain genuine fail-closed synchronization failures; ordinary member role reconciliation is unchanged.
+* Extends the real WordPress 7.0.1 + MariaDB 11.4 regression fixture with an Administrator + draft membership application, forces the `role-grants-to-1.3.0` backfill to rerun, and proves DB promotion, checkpoint completion, canonical grant creation, institutional-identity precedence, and exact role-set preservation.
+* Runtime 1.2.38; DB schema 1.4.4; public contract 1.2.2. Live resolution still requires deployment and post-deployment verification.
 
 = 1.2.37 =
 * Repairs the second live-proven MariaDB same-name index migration failure, `Duplicate key name 'decision'`, on `smc_approval_votes` while retaining the successful v1.2.36 queue repair.
