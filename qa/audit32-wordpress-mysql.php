@@ -1,6 +1,6 @@
 <?php
 /**
- * Real WordPress + MySQL/InnoDB integration smoke for the File 00 audit-32 corrective candidate.
+ * Real WordPress + MySQL/InnoDB integration smoke for the File 00 corrective candidate.
  * Run with: wp eval-file <repo>/qa/audit32-wordpress-mysql.php
  */
 
@@ -22,7 +22,7 @@ $check    = static function ( $condition, $label ) use ( &$failures, &$passed ) 
 };
 
 global $wpdb;
-$check( defined( 'SMC_VERSION' ) && '1.2.34' === SMC_VERSION, 'runtime 1.2.34 loaded in real WordPress' );
+$check( defined( 'SMC_VERSION' ) && '1.2.35' === SMC_VERSION, 'runtime 1.2.35 loaded in real WordPress' );
 $check( defined( 'SMC_DB_VERSION' ) && '1.4.4' === SMC_DB_VERSION, 'database contract 1.4.4 loaded' );
 $check( class_exists( 'SMC_Security' ) && class_exists( 'SMC_Installer' ), 'File 00 runtime classes loaded' );
 
@@ -44,7 +44,7 @@ $guardian_indexes = $wpdb->get_col( "SHOW INDEX FROM {$guardian_table} WHERE Key
 $vote_indexes     = $wpdb->get_col( "SHOW INDEX FROM {$vote_table} WHERE Key_name='request_generation_reviewer'", 2 ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 $check( count( $guardian_indexes ) >= 2, 'guardian immutable-generation unique index exists' );
 $check( count( $vote_indexes ) >= 3, 'approval-generation reviewer unique index exists' );
-$check( $wpdb->get_var( "SHOW TABLES LIKE '{$factor_table}'" ) === $factor_table, 'global MFA factor replay table exists' ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+$check( $wpdb->get_var( "SHOW TABLES LIKE '{$factor_table}'" ) === $factor_table, 'legacy factor-state table retained for safe migration compatibility' ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 $check( $wpdb->get_var( "SHOW TABLES LIKE '{$audit_tail}'" ) === $audit_tail, 'serialized audit-tail table exists' ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 $check( 'audit_key_id' === (string) $wpdb->get_var( "SHOW COLUMNS FROM {$audit_log} LIKE 'audit_key_id'", 0 ), 'audit key-generation column exists' ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
