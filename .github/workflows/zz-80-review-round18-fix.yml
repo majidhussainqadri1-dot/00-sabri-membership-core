@@ -1,0 +1,59 @@
+name: File 00 80-Review Round 18 Immediate Fix
+
+on:
+  push:
+    branches: [audit/80-round-review-v1.2.40]
+    paths: [.github/workflows/zz-80-review-round18-fix.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-round-18:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: audit/80-round-review-v1.2.40
+          fetch-depth: 0
+      - name: Add privacy-minimal minor communication contract
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('source/sabri-membership-core/includes/class-smc-contracts.php')
+          s=p.read_text()
+          marker="\tpublic static function communication_assertions( $user_id ) {\n"
+          helper="""\tprivate static function communication_age_context( $user_id ) {\n\t\t$user_id = absint( $user_id );\n\t\t$app = smc_application( $user_id );\n\t\t$out = array(\n\t\t\t'known'             => false,\n\t\t\t'age_years'         => null,\n\t\t\t'minor'             => (bool) ( $app && ! empty( $app['guardian_required'] ) ),\n\t\t\t'guardian_required' => (bool) ( $app && ! empty( $app['guardian_required'] ) ),\n\t\t);\n\t\tif ( $app && ! empty( $app['date_of_birth_enc'] ) ) {\n\t\t\t$dob = SMC_Security::decrypt( $app['date_of_birth_enc'], 'date-of-birth', array( 'user_id' => $user_id ) );\n\t\t\t$age = is_wp_error( $dob ) ? false : smc_age_from_dob( $dob );\n\t\t\tif ( false !== $age ) {\n\t\t\t\t$out['known'] = true;\n\t\t\t\t$out['age_years'] = (int) $age;\n\t\t\t\t$out['minor'] = (int) $age < 18;\n\t\t\t\t$out['guardian_required'] = $out['minor'];\n\t\t\t}\n\t\t}\n\t\treturn $out;\n\t}\n\n"""
+          if helper not in s:
+              if marker not in s: raise SystemExit('communication assertion marker missing')
+              s=s.replace(marker,helper+marker)
+          old="""\tpublic static function communication_assertions( $user_id ) {\n\t\t$a = self::assertions( $user_id );\n\t\treturn array(\n\t\t\t'contract_version' => $a['contract_version'],\n\t\t\t'user_id'          => $a['user_id'],\n\t\t\t'status'           => $a['status'],\n\t\t\t'eligible'         => $a['can_message'],\n\t\t\t'phone_verified'   => $a['phone_verified'],\n\t\t\t'can_message'      => $a['can_message'],\n\t\t\t'can_call'         => $a['can_message'],\n\t\t\t'can_transfer_files'=> $a['can_transfer_files'],\n\t\t\t'max_file_bytes'   => $a['transfer']['max_file_bytes'],\n\t\t\t'suspended'        => $a['suspended'],\n\t\t);\n\t}\n"""
+          new="""\tpublic static function communication_assertions( $user_id ) {\n\t\t$a = self::assertions( $user_id );\n\t\t$age = self::communication_age_context( $user_id );\n\t\t$minor = ! empty( $age['minor'] );\n\t\t$guardian_ok = ! $minor || ! empty( $a['guardian_verified'] );\n\t\t$eligible = ! empty( $a['can_message'] ) && $guardian_ok;\n\t\treturn array(\n\t\t\t'contract_version' => $a['contract_version'],\n\t\t\t'user_id'          => $a['user_id'],\n\t\t\t'status'           => $a['status'],\n\t\t\t'eligible'         => $eligible,\n\t\t\t'phone_verified'   => $a['phone_verified'],\n\t\t\t'can_message'      => $eligible,\n\t\t\t'can_call'         => $eligible,\n\t\t\t'can_transfer_files'=> ! $minor && ! empty( $a['can_transfer_files'] ),\n\t\t\t'max_file_bytes'   => $a['transfer']['max_file_bytes'],\n\t\t\t'suspended'        => $a['suspended'],\n\t\t\t'age_context'      => $age,\n\t\t\t'minor_restrictions' => array(\n\t\t\t\t'applicable'                         => $minor,\n\t\t\t\t'public_contact_allowed'             => ! $minor,\n\t\t\t\t'unknown_sender_direct_message_allowed' => ! $minor,\n\t\t\t\t'unknown_adult_call_allowed'         => ! $minor,\n\t\t\t\t'open_discovery_allowed'             => ! $minor,\n\t\t\t\t'marketplace_direct_contact_allowed' => ! $minor,\n\t\t\t\t'clinical_contact_requires_context'  => $minor,\n\t\t\t\t'guardian_verified'                  => $guardian_ok,\n\t\t\t\t'consumer_authorization_recheck_required' => true,\n\t\t\t),\n\t\t);\n\t}\n"""
+          if old not in s: raise SystemExit('old communication assertion block missing')
+          s=s.replace(old,new)
+          p.write_text(s)
+
+          q=Path('qa/three-plan-contract.mjs')
+          if q.exists():
+              t=q.read_text()
+              if 'minor_restrictions' not in t:
+                  t += "\nfor (const needle of ['communication_age_context', 'minor_restrictions', 'unknown_sender_direct_message_allowed', 'open_discovery_allowed', 'consumer_authorization_recheck_required']) { if (!contracts.includes(needle)) throw new Error(`missing minor communication contract: ${needle}`); }\n"
+                  q.write_text(t)
+          PY
+      - name: Verify round 18 correction
+        run: |
+          set -euo pipefail
+          php -l source/sabri-membership-core/includes/class-smc-contracts.php
+          grep -q "minor_restrictions" source/sabri-membership-core/includes/class-smc-contracts.php
+          grep -q "unknown_sender_direct_message_allowed" source/sabri-membership-core/includes/class-smc-contracts.php
+          grep -q "consumer_authorization_recheck_required" source/sabri-membership-core/includes/class-smc-contracts.php
+          git diff --check
+      - name: Commit immediate round 18 correction
+        run: |
+          git config user.name 'File 00 QA Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add source/sabri-membership-core/includes/class-smc-contracts.php
+          test ! -f qa/three-plan-contract.mjs || git add qa/three-plan-contract.mjs
+          git commit -m 'Round 18: publish explicit minor communication restrictions'
+          git push origin HEAD:audit/80-round-review-v1.2.40
