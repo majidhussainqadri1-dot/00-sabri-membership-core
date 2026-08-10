@@ -2,10 +2,24 @@ import fs from 'node:fs';
 import assert from 'node:assert/strict';
 
 const recovery = fs.readFileSync('source/sabri-membership-core/includes/class-smc-account-recovery.php', 'utf8');
+const recoveryLock = fs.readFileSync('source/sabri-membership-core/includes/class-smc-account-recovery-lock.php', 'utf8');
 const bootstrap = fs.readFileSync('source/sabri-membership-core/sabri-membership-core.php', 'utf8');
 
 const has = (needle, label = needle) => assert.ok(recovery.includes(needle), `missing recovery contract: ${label}`);
+const lockHas = (needle, label = needle) => assert.ok(recoveryLock.includes(needle), `missing recovery lock contract: ${label}`);
 
+assert.ok(
+  bootstrap.includes("require_once SMC_PATH . 'includes/class-smc-account-recovery-lock.php';"),
+  'bootstrap must load governed recovery serialization lock'
+);
+assert.ok(
+  bootstrap.includes("array( 'SMC_Account_Recovery_Lock', 'init' )"),
+  'bootstrap must initialize governed recovery serialization lock'
+);
+assert.ok(
+  bootstrap.indexOf("array( 'SMC_Account_Recovery_Lock', 'init' )") < bootstrap.indexOf("array( 'SMC_Account_Recovery', 'init' )"),
+  'recovery serialization must initialize before recovery handlers'
+);
 assert.ok(
   bootstrap.includes("require_once SMC_PATH . 'includes/class-smc-account-recovery.php';"),
   'bootstrap must load governed recovery implementation'
@@ -14,6 +28,16 @@ assert.ok(
   bootstrap.includes("array( 'SMC_Account_Recovery', 'init' )"),
   'bootstrap must initialize governed recovery implementation'
 );
+
+lockHas("admin_post_smc_account_recovery_request", 'request serialized before mutation');
+lockHas("admin_post_smc_account_recovery_cancel", 'cancel serialized before mutation');
+lockHas("admin_post_smc_account_recovery_complete", 'completion serialized before mutation');
+lockHas("array( __CLASS__, 'acquire_for_current_subject' ), 1", 'serialization hook executes at priority one');
+lockHas('SELECT GET_LOCK(%s,%d)', 'connection-scoped advisory lock acquired');
+lockHas('SELECT RELEASE_LOCK(%s)', 'connection-scoped advisory lock released');
+lockHas("'subject|' . absint( $user_id )", 'lock is bound to exact recovery subject');
+lockHas('register_shutdown_function', 'lock release registered for redirect/exit paths');
+assert.ok(!recoveryLock.includes('admin_post_nopriv_smc_account_recovery'), 'recovery lock must never expose an unauthenticated mutation');
 
 has("const REPAIR_TYPE      = 'lost_factor_recovery';", 'durable recovery case type');
 has("add_shortcode( 'smc_membership_recovery'", 'recovery UI shortcode');
