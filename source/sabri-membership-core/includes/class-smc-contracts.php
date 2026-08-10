@@ -264,19 +264,57 @@ final class SMC_Contracts {
 		);
 	}
 
+	private static function communication_age_context( $user_id ) {
+		$user_id = absint( $user_id );
+		$app = smc_application( $user_id );
+		$out = array(
+			'known'             => false,
+			'age_years'         => null,
+			'minor'             => (bool) ( $app && ! empty( $app['guardian_required'] ) ),
+			'guardian_required' => (bool) ( $app && ! empty( $app['guardian_required'] ) ),
+		);
+		if ( $app && ! empty( $app['date_of_birth_enc'] ) ) {
+			$dob = SMC_Security::decrypt( $app['date_of_birth_enc'], 'date-of-birth', array( 'user_id' => $user_id ) );
+			$age = is_wp_error( $dob ) ? false : smc_age_from_dob( $dob );
+			if ( false !== $age ) {
+				$out['known'] = true;
+				$out['age_years'] = (int) $age;
+				$out['minor'] = (int) $age < 18;
+				$out['guardian_required'] = $out['minor'];
+			}
+		}
+		return $out;
+	}
+
 	public static function communication_assertions( $user_id ) {
 		$a = self::assertions( $user_id );
+		$age = self::communication_age_context( $user_id );
+		$minor = ! empty( $age['minor'] );
+		$guardian_ok = ! $minor || ! empty( $a['guardian_verified'] );
+		$eligible = ! empty( $a['can_message'] ) && $guardian_ok;
 		return array(
 			'contract_version' => $a['contract_version'],
 			'user_id'          => $a['user_id'],
 			'status'           => $a['status'],
-			'eligible'         => $a['can_message'],
+			'eligible'         => $eligible,
 			'phone_verified'   => $a['phone_verified'],
-			'can_message'      => $a['can_message'],
-			'can_call'         => $a['can_message'],
-			'can_transfer_files'=> $a['can_transfer_files'],
+			'can_message'      => $eligible,
+			'can_call'         => $eligible,
+			'can_transfer_files'=> ! $minor && ! empty( $a['can_transfer_files'] ),
 			'max_file_bytes'   => $a['transfer']['max_file_bytes'],
 			'suspended'        => $a['suspended'],
+			'age_context'      => $age,
+			'minor_restrictions' => array(
+				'applicable'                         => $minor,
+				'public_contact_allowed'             => ! $minor,
+				'unknown_sender_direct_message_allowed' => ! $minor,
+				'unknown_adult_call_allowed'         => ! $minor,
+				'open_discovery_allowed'             => ! $minor,
+				'marketplace_direct_contact_allowed' => ! $minor,
+				'clinical_contact_requires_context'  => $minor,
+				'guardian_verified'                  => $guardian_ok,
+				'consumer_authorization_recheck_required' => true,
+			),
 		);
 	}
 
