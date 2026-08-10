@@ -9,7 +9,7 @@
 
 ## Current implementation identity
 
-- Runtime implementation release: `1.2.33`
+- Runtime implementation release: `1.2.34`
 - Public membership contract: `1.2.1`
 - Database schema: `1.4.4`
 - Latest-central constitution: `2026-08-07-v1.0`

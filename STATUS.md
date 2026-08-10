@@ -1,12 +1,10 @@
-# File 00 Status — 1.2.33
+# File 00 Status — 1.2.34
 
-- Runtime / public contract / DB schema: `1.2.33` / `1.2.1` / `1.4.4`.
-- Legacy audit rows: preserved unchanged and explicitly labeled lower assurance.
-- Legacy bridge: exact schema inspection, trusted historical-key verification, keyed create-once v2 snapshot anchor, forward HMAC epoch, and tail-only reconstruction.
-- New audit rows authenticate `audit_key_id`; pre-1.2.33 rows retain their original HMAC format and are never rewritten.
-- Transaction-owned audit calls use a read-only readiness gate, so schema DDL cannot implicitly commit a sensitive outer transaction.
-- Automatic recovery remains denied for unknown schema, modern-chain corruption, unavailable key generation, anchor/key mismatch, concurrent change, or previously initialized partial schema.
-- Candidate ZIP SHA-256: `a10977e63bfe31774e13e41b25d0069c535ff0e8b7476979c981a960686da483`.
-- Local source/static/package integrity: passing (581 source assertions, all static contracts, deterministic ZIP, exact manifest, CRC, and archive-safety checks).
-- GitHub PHP 7.4/8.3 runtime checks: pending on the candidate commit.
-- Controlled staging, live deployment, and operational acceptance: pending.
+- Runtime / public contract / DB schema: `1.2.34` / `1.2.1` / `1.4.4`.
+- Governed lost-factor recovery: coded, serialized, audited and repository-tested.
+- Founder/Administrator recovery: 24-hour default cooling plus two distinct MFA-verified Administrator approvals; self-approval prohibited.
+- Old factor/session/recovery-code state: invalidated before a fresh pending authenticator enrollment is staged.
+- Candidate ZIP SHA-256: `6031004f2e45ef0fc0776eda732effdf75cdb242b0ac54f898702ab29897df3e`.
+- Local/source/static/runtime/package integrity: passing in the release workflow.
+- Controlled staging, exact deployed-code parity, live DB migration verification, File 19 delivery and live recovery re-test: pending.
+- Live Verification Status: UNRESOLVED until post-deploy evidence is collected.

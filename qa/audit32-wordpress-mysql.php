@@ -22,7 +22,7 @@ $check    = static function ( $condition, $label ) use ( &$failures, &$passed ) 
 };
 
 global $wpdb;
-$check( defined( 'SMC_VERSION' ) && '1.2.33' === SMC_VERSION, 'runtime 1.2.33 loaded in real WordPress' );
+$check( defined( 'SMC_VERSION' ) && '1.2.34' === SMC_VERSION, 'runtime 1.2.34 loaded in real WordPress' );
 $check( defined( 'SMC_DB_VERSION' ) && '1.4.4' === SMC_DB_VERSION, 'database contract 1.4.4 loaded' );
 $check( class_exists( 'SMC_Security' ) && class_exists( 'SMC_Installer' ), 'File 00 runtime classes loaded' );
 

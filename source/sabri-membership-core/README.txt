@@ -3,7 +3,7 @@ Contributors: sabrihomeopathy
 Tags: membership, identity, guardian consent, two-factor authentication, privacy
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 1.2.33
+Stable tag: 1.2.34
 License: GPL-2.0-or-later
 
 Canonical membership eligibility, identity assurance, guardian consent, security assertions, and verification governance for the Sabri Social Homeopathy Platform.
@@ -69,6 +69,14 @@ File 19 receives membership notices through its canonical sabri_notify integrati
 Local source and GitHub checks do not authorize production. Test fresh activation, 1.0.1 upgrade, MySQL advisory locks, concurrent reviewers, authorization matrices, filesystem denial and rollback, scanner providers, email/mobile/guardian delivery, File 02 Google sign-in and passkey assurance adapter, CF-01 provider/consumer contracts, all named cross-file integrations, advanced trust containment/revocation/selective-disclosure workflows, privacy erasure, restore, browser accessibility, and mobile layouts on Hostinger staging.
 
 == Changelog ==
+
+= 1.2.34 =
+* Adds governed lost-factor recovery when the enrolled authenticator and plaintext recovery codes are both unavailable.
+* Requires password reauthentication, contact-continuity binding, durable recovery cases, rate limits and serialized subject-level locking.
+* Founder/Administrator recovery defaults to a 24-hour cooling period and two distinct MFA-verified Administrator approvals; self-approval, duplicate approvers and duplicate evidence references are rejected.
+* Revokes all File 00 sessions before reset, invalidates the old TOTP secret, recovery codes and replay state, then stages a brand-new pending authenticator enrollment instead of bypassing MFA.
+* Stores only keyed hashes of out-of-band evidence references and records request/approval/reject/cancel/complete in the tamper-evident audit/event path without direct mail bypass.
+* Runtime 1.2.34; DB schema 1.4.4; public contract 1.2.1. Production remains unverified until exact deployment, migration completion and live re-test.
 
 = 1.2.33 =
 * Verifies immutable modern audit rows against an allowlisted historical keyring instead of assuming every row used the current derivation. This closes the pre-1.2.19 encoded-key transition that could falsely report a valid row as row_hash_mismatch.
