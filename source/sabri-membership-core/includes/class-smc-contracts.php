@@ -80,8 +80,6 @@ final class SMC_Contracts {
 		$row     = $state['application_exists'] ? smc_application( $user_id ) : false;
 		$status  = $state['status'];
 		$type    = $state['membership_type'];
-		$two_factor_ready = SMC_Security::two_factor_ready( $user_id );
-		$session_verified = SMC_Security::session_is_verified( $user_id );
 		$approved = (bool) $state['approved'];
 		$requested_types = self::requested_types( $user_id );
 		$approved_types  = self::approved_types( $user_id );
@@ -98,7 +96,7 @@ final class SMC_Contracts {
 		$institutional = (bool) $state['institutional_account'];
 		$contacts_verified = $institutional || ( $phone_verified && $email_verified );
 		$identity_documents_current = $institutional || self::identity_documents_current( $user_id );
-		$eligible = $approved && $professional_verified && $two_factor_ready && $guardian_verified && $contacts_verified && $identity_documents_current;
+		$eligible = $approved && $professional_verified && $guardian_verified && $contacts_verified && $identity_documents_current;
 		$suspended = in_array( $status, array( 'suspended', 'rejected', 'expired', 'appeal_review', 'erasure_pending', 'invalid_application' ), true );
 		$base = array(
 			'contract_version'       => SMC_CONTRACT_VERSION,
@@ -114,16 +112,19 @@ final class SMC_Contracts {
 			'approved'               => $approved,
 			'suspended'              => $suspended,
 			'eligible'               => $eligible,
-			'two_factor_ready'       => $two_factor_ready,
-			'session_two_factor'     => $session_verified,
+			'mfa_required'           => false,
+			'mfa_owner'              => 'none',
+			'mfa_policy_version'     => '2026-08-10-founder-mfa-retirement-v1',
+			'two_factor_ready'       => false,
+			'session_two_factor'     => false,
 			'phone_verified'         => $phone_verified,
 			'email_verified'         => $email_verified,
 			'guardian_verified'      => $guardian_verified,
 			'professional_verified'  => $professional_verified,
 			'identity_documents_current' => $identity_documents_current,
-			'can_message'            => $eligible && $session_verified,
-			'can_comment'            => $eligible && $session_verified,
-			'can_book_appointment'   => $eligible && $session_verified,
+			'can_message'            => $eligible,
+			'can_comment'            => $eligible,
+			'can_book_appointment'   => $eligible,
 			'can_practice'           => $eligible && in_array( 'doctor', $approved_types, true ),
 			'public_profile_allowed' => $eligible && ( smc_is_institutional_ai( $user_id ) || ( $row && ( 'public' === $row['profile_visibility'] || (bool) apply_filters( 'smc_public_profile_opt_in', false, $user_id, $row ) ) ) ),
 		);
@@ -136,8 +137,8 @@ final class SMC_Contracts {
 		if ( $base['institutional_ai'] ) {
 			$base['ai_identity'] = smc_institutional_ai_policy();
 		}
-		/* File 00 advanced trust containment/continuity is authoritative for protected actions. */
-		if ( class_exists( 'SMC_Advanced_Trust_2026' ) && ! SMC_Advanced_Trust_2026::protected_actions_allowed( $user_id ) ) {
+		/* File 00 advanced trust containment/continuity remains authoritative; retired MFA cannot create a block. */
+		if ( class_exists( 'SMC_MFA_Retirement' ) && ! SMC_MFA_Retirement::advanced_trust_allows_without_mfa( $user_id ) ) {
 			$base['eligible'] = false;
 			$base['can_message'] = false;
 			$base['can_comment'] = false;
@@ -189,15 +190,16 @@ final class SMC_Contracts {
 		$trusted_direct = $is_trusted && user_can( $user, 'smc_direct_publish' );
 		$doctor_direct = $is_doctor && $user && user_can( $user, 'smc_doctor_direct_publish' );
 		$ai_policy = $is_ai ? smc_institutional_ai_policy() : array();
-		$can_submit = ! empty( $base['eligible'] ) && ! empty( $base['session_two_factor'] ) && ( $is_founder || $is_admin || $is_doctor || $is_trusted || $is_ai || array_intersect( array( 'teacher', 'researcher', 'publisher' ), $approved_types ) );
+		$can_submit = ! empty( $base['eligible'] ) && ( $is_founder || $is_admin || $is_doctor || $is_trusted || $is_ai || array_intersect( array( 'teacher', 'researcher', 'publisher' ), $approved_types ) );
 		$direct = $can_submit && ( $is_founder || $is_admin || $trusted_direct || $doctor_direct || ( $is_ai && ! empty( $ai_policy['low_risk_auto_publish'] ) ) );
 		$authority = $is_founder ? 'founder' : ( $is_admin ? 'administrator' : ( $is_ai ? 'institutional_ai_publisher' : ( $is_trusted ? 'trusted_publisher' : ( $is_doctor ? 'verified_doctor' : 'submission_only' ) ) ) );
 		return array(
-			'policy_version'       => 'CHAT-AI-001/RCD-020-v2.1',
+			'policy_version'       => 'CHAT-AI-001/RCD-020-v2.2',
 			'authority_class'      => $authority,
 			'can_open_composer'    => (bool) $can_submit,
 			'can_submit_for_review'=> (bool) $can_submit,
 			'can_direct_publish'   => (bool) $direct,
+			'mfa_required'         => false,
 			'requires_human_review'=> (bool) ( $is_ai && empty( $ai_policy['low_risk_auto_publish'] ) ),
 			'doctor_verification_claim' => $is_ai ? false : (bool) $is_doctor,
 			'ai_generated_disclosure_required' => (bool) $is_ai,
@@ -211,10 +213,11 @@ final class SMC_Contracts {
 		$relationship = 0 === $recipient_id ? true : (bool) apply_filters( 'smc_transfer_relationship_authorized', false, absint( $user_id ), $recipient_id, $context );
 		$consent = 0 === $recipient_id ? true : (bool) apply_filters( 'smc_transfer_consent_authorized', false, absint( $user_id ), $recipient_id, $context );
 		$content_policy = (bool) apply_filters( 'smc_transfer_content_policy_authorized', true, absint( $user_id ), $recipient_id, $context );
-		$can = ! empty( $base['eligible'] ) && ! empty( $base['session_two_factor'] ) && empty( $base['suspended'] ) && $relationship && $consent && $content_policy;
+		$can = ! empty( $base['eligible'] ) && empty( $base['suspended'] ) && $relationship && $consent && $content_policy;
 		return array(
-			'policy_version'       => 'CHAT-XFER-001-v2.1',
+			'policy_version'       => 'CHAT-XFER-001-v2.2',
 			'can_initiate'         => (bool) $can,
+			'mfa_required'         => false,
 			'max_file_bytes'       => 1073741824,
 			'recipient_authorization_required' => true,
 			'relationship_authorized' => (bool) $relationship,
@@ -497,7 +500,7 @@ final class SMC_Contracts {
 			return $allcaps;
 		}
 		$a = self::assertions( $user->ID );
-		if ( ! $a['eligible'] || ! $a['session_two_factor'] ) {
+		if ( ! $a['eligible'] ) {
 			foreach ( self::$restricted_caps as $cap ) {
 				$allcaps[ $cap ] = false;
 			}
@@ -524,12 +527,8 @@ final class SMC_Contracts {
 			return;
 		}
 		$a = self::assertions( get_current_user_id() );
-		if ( ! $a['approved'] ) {
+		if ( ! $a['approved'] || ! $a['eligible'] ) {
 			wp_safe_redirect( smc_page_url( 'status', '/membership-status/' ) );
-			exit;
-		}
-		if ( ! $a['session_two_factor'] ) {
-			wp_safe_redirect( smc_page_url( 'security', '/membership-security/' ) );
 			exit;
 		}
 	}
@@ -539,7 +538,7 @@ final class SMC_Contracts {
 			return;
 		}
 		$a = self::assertions( get_current_user_id() );
-		if ( ! $a['eligible'] || ! $a['session_two_factor'] ) {
+		if ( ! $a['eligible'] ) {
 			wp_safe_redirect( smc_page_url( 'status', '/membership-status/' ) );
 			exit;
 		}
@@ -550,8 +549,8 @@ final class SMC_Contracts {
 			return $result;
 		}
 		$a = self::assertions( get_current_user_id() );
-		if ( ! $a['eligible'] || ! $a['session_two_factor'] ) {
-			return new WP_Error( 'smc_membership_restricted', __( 'Membership approval and a current two-factor challenge are required.', 'sabri-membership-core' ), array( 'status' => 403 ) );
+		if ( ! $a['eligible'] ) {
+			return new WP_Error( 'smc_membership_restricted', __( 'Membership approval and current eligibility are required.', 'sabri-membership-core' ), array( 'status' => 403 ) );
 		}
 		return $result;
 	}
@@ -560,7 +559,7 @@ final class SMC_Contracts {
 		$viewer = get_userdata( absint( $viewer_user_id ) );
 		$privileged = $viewer && ( user_can( $viewer, 'smc_review_verification' ) || user_can( $viewer, 'smc_manage_membership' ) );
 		if ( absint( $profile_user_id ) === absint( $viewer_user_id ) ) { return true; }
-		if ( $privileged && absint( $viewer_user_id ) === get_current_user_id() && SMC_Security::session_is_verified( absint( $viewer_user_id ) ) && empty( SMC_Authorization::is_hard_blocked( absint( $viewer_user_id ) ) ) ) { return true; }
+		if ( $privileged && absint( $viewer_user_id ) === get_current_user_id() && empty( SMC_Authorization::is_hard_blocked( absint( $viewer_user_id ) ) ) ) { return true; }
 		return self::assertions( $profile_user_id )['public_profile_allowed'];
 	}
 
@@ -574,8 +573,7 @@ final class SMC_Contracts {
 	private static function finish_contact_invalidation( $user_id, $channel, $reason ) {
 		$sessions_ok = SMC_Security::revoke_all_sessions( $user_id, $reason );
 		if ( ! $sessions_ok ) {
-			update_user_meta( $user_id, '_smc_revalidation_required_at', time() );
-			if ( class_exists( 'SMC_Completion' ) ) { SMC_Completion::queue_effects_repair( $user_id, 'contact_change', 'reverification_required', 'session_revocation' ); }
+			if ( class_exists( 'SMC_Completion' ) ) { SMC_Completion::queue_effects_repair( $user_id, 'contact_change', 'session_reconciliation_required', 'session_revocation' ); }
 			return false;
 		}
 		delete_user_meta( $user_id, '_smc_membership_effects_hold_v1' );

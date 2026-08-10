@@ -20,11 +20,11 @@ const failures = [];
 let passed = 0;
 function assert(condition, label) { if (condition) passed += 1; else failures.push(label); }
 
-assert(plugin.includes('Version: 1.2.34'), 'Plugin header is 1.2.34');
-assert(plugin.includes("define( 'SMC_VERSION', '1.2.34' )"), 'Runtime version is 1.2.34');
+assert(plugin.includes('Version: 1.2.35'), 'Plugin header is 1.2.35');
+assert(plugin.includes("define( 'SMC_VERSION', '1.2.35' )"), 'Runtime version is 1.2.35');
 assert(plugin.includes("define( 'SMC_DB_VERSION', '1.4.4' )"), 'Schema is 1.4.4');
-assert(plugin.includes("define( 'SMC_CONTRACT_VERSION', '1.2.1' )"), 'Contract remains 1.2.1');
-assert(readme.includes('Stable tag: 1.2.34'), 'Plugin readme stable tag is 1.2.34');
+assert(plugin.includes("define( 'SMC_CONTRACT_VERSION', '1.2.2' )"), 'Contract is 1.2.2 after Founder-approved MFA retirement');
+assert(readme.includes('Stable tag: 1.2.35'), 'Plugin readme stable tag is 1.2.35');
 assert(plugin.includes("register_deactivation_hook( SMC_FILE, array( 'SMC_Installer', 'deactivate' ) )"), 'Deactivation hook is registered');
 assert(installer.includes('public static function deactivate()'), 'Installer exposes deactivation cleanup');
 for (const hook of ['smc_lifecycle_daily','smc_process_file_jobs','smc_continue_migration']) {
@@ -69,8 +69,10 @@ assert(security.includes("WHERE id=%d AND ((status IN ('pending','retry')"), 'Fi
 assert(lifecycle.includes('GET_LOCK') && lifecycle.includes('RELEASE_LOCK'), 'Lifecycle job uses an advisory overlap lock');
 assert(workflow.indexOf('$wpdb->query( $sql )') < workflow.indexOf('SMC_Contact_Delivery::send_otp') && contactDelivery.includes("add_filter( 'smc_send_contact_otp'"), 'Contact OTP is persisted before provider delivery');
 assert(workflow.includes("DELETE FROM {$wpdb->prefix}smc_contact_otps"), 'Failed contact delivery deletes the exact unverified OTP');
-assert(security.includes('smc_mfa_factor_state WHERE user_id=%d LIMIT 1 FOR UPDATE') && security.includes('$global_last >= (int) $slice') && security.includes('last_totp_slice<VALUES(last_totp_slice)'), 'TOTP replay slice is rejected under a factor-state row lock');
-assert(!security.includes("if ( 1 !== $updated ) {\n\t\t\treturn self::register_session"), 'TOTP replay failure cannot reset the session');
+
+/* Historical MFA helpers remain dormant migration/regression code after the Founder-approved retirement. */
+assert(security.includes('smc_mfa_factor_state WHERE user_id=%d LIMIT 1 FOR UPDATE') && security.includes('$global_last >= (int) $slice') && security.includes('last_totp_slice<VALUES(last_totp_slice)'), 'Dormant historical TOTP replay logic remains internally race-safe');
+assert(!security.includes("if ( 1 !== $updated ) {\n\t\t\treturn self::register_session"), 'Dormant historical TOTP replay failure cannot reset the session');
 const registerSection = security.slice(security.indexOf('public static function register_session'), security.indexOf('public static function session_is_verified'));
 assert(!registerSection.includes('revoked_at=NULL'), 'Session registration cannot resurrect revoked sessions');
 assert(!registerSection.includes('last_totp_slice=NULL'), 'Session registration cannot reset replay state');
@@ -80,18 +82,20 @@ assert(security.includes('legacy_exact_token_unavailable'), 'Legacy revoke-one f
 assert(security.includes('SELECT @@session.in_transaction'), 'Session revocation is outer-transaction aware');
 assert(security.includes('$envelope_ok = self::delete_session_token_envelope'), 'Exact token envelope cleanup is in the success predicate');
 assert(security.includes('$envelopes_ok = true;'), 'Revoke-all verifies all envelope deletion');
-assert(security.includes('12 * HOUR_IN_SECONDS'), 'MFA absolute freshness is bounded');
+assert(security.includes('12 * HOUR_IN_SECONDS'), 'Historical MFA freshness bound remains auditable provenance');
 assert(security.includes('30 * MINUTE_IN_SECONDS'), 'Session inactivity timeout is bounded');
 assert(security.includes('5 * MINUTE_IN_SECONDS'), 'Activity writes are throttled');
-assert(security.includes('smc_recovery_codes') && security.includes('LIMIT 1 FOR UPDATE'), 'Recovery code consumption locks the row');
-assert(security.includes("'standalone' => true"), 'Standalone recovery-code audit is explicit');
+assert(security.includes('smc_recovery_codes') && security.includes('LIMIT 1 FOR UPDATE'), 'Dormant historical recovery-code consumption remains row-locked');
+assert(security.includes("'standalone' => true"), 'Dormant standalone recovery-code audit remains explicit');
 assert(security.includes('public static function verify_audit_chain'), 'Audit-chain verifier exists');
 assert(security.includes('min( 500, $maximum - $checked )') && security.includes('LIMIT %d'), 'Audit-chain verifier is streamed in bounded pages');
-assert(cf01.includes("'clinical_identity_link' => ! empty( $base['eligible'] ) && ! empty( $base['session_two_factor'] )"), 'CF-01 identity link requires current MFA');
-assert(cf01.includes("'issued_at'") && cf01.includes("'expires_at'"), 'CF-01 step-up has issue/expiry times');
-assert(cf01.includes("SMC_Security::rate_limited( 'cf01-step-up|"), 'CF-01 uses canonical atomic rate limiting');
-assert(cf01.includes("'method' => 'recovery_code'") && cf01.includes("'scope_hash' => (string) $scope_hash"), 'CF-01 recovery audit is purpose/scope bound');
-assert(cf01.includes('delete_option( $replay_marker )'), 'CF-01 TOTP marker is released after audit failure');
+
+/* Current CF-01 contract is membership assurance only and must not recreate File 00 MFA. */
+assert(cf01.includes("'authorization_scope'         => 'membership_prerequisite_only'"), 'CF-01 allow is membership prerequisite only');
+assert(cf01.includes("'authentication_assurance'    => 'not_owned_by_file00'"), 'CF-01 does not claim authentication assurance');
+assert(cf01.includes("'reason_code'       => 'authentication_assurance_not_owned_by_file00'"), 'CF-01 compatibility step-up delegates/fails unknown');
+assert(!cf01.includes("'_smc_totp_secret_enc'") && !cf01.includes('verify_setup_code') && !cf01.includes('consume_recovery_code_atomic'), 'CF-01 contains no active File 00 TOTP or recovery-code verifier');
+
 assert((ledger.match(/^## Review Round \d{2} —/gm) || []).length === 40, 'Ledger contains exactly forty rounds');
 for (let i = 1; i <= 40; i += 1) {
   assert(ledger.includes(`## Review Round ${String(i).padStart(2, '0')} —`), `Ledger includes review round ${i}`);

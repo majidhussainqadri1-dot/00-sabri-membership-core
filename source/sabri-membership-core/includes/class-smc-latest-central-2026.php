@@ -2,19 +2,24 @@
 defined( 'ABSPATH' ) || exit;
 
 /**
- * 6–7 August 2026 central-plan reconciliation for File 00.
+ * 6–10 August 2026 central-plan reconciliation for File 00.
  *
- * This layer deliberately owns no search index, profile, professional-evidence store,
- * donation ledger, authentication UI or ranking engine. It only publishes File 00's
- * canonical membership constitution/projections and invalidates derived assurance when
- * membership-security facts change.
+ * This layer deliberately owns no search index, profile, professional-evidence
+ * store, donation ledger, authentication UI or ranking engine. It publishes
+ * File 00's canonical membership constitution/projections and invalidates
+ * derived projections when membership-security facts change.
+ *
+ * Founder change-control dated 10 August 2026 retired File 00 MFA. The former
+ * _smc_revalidation_required_at / post-audit TOTP revalidation marker is no
+ * longer written here. Authentication assurance belongs to File 02 (or a
+ * separately approved authentication owner), while File 00 continues to
+ * invalidate dependent membership projections immediately.
  */
 final class SMC_Latest_Central_2026 {
-	const CONSTITUTION_VERSION = '2026-08-07-v1.0';
+	const CONSTITUTION_VERSION = '2026-08-10-v1.1';
 	const FILE26_CONTRACT_VERSION = '1.0.0';
-	const REVALIDATION_META = '_smc_revalidation_required_at';
 
-	private static $revalidation_actions = array(
+	private static $projection_invalidation_actions = array(
 		'guardian_consent_verified',
 		'guardian_consent_withdrawn',
 		'guardian_requirement_ended_at_adulthood',
@@ -38,7 +43,10 @@ final class SMC_Latest_Central_2026 {
 	);
 
 	public static function init() {
-		/* A mandatory audit guard can fail the caller's audit/transaction closed. */
+		/*
+		 * The guard remains mandatory so a failed projection invalidation can fail
+		 * the caller closed, but it no longer creates a File 00 MFA requirement.
+		 */
 		add_filter( 'smc_audit_record_guard', array( __CLASS__, 'audit_record_guard' ), 10, 5 );
 	}
 
@@ -47,6 +55,8 @@ final class SMC_Latest_Central_2026 {
 			'constitution_version'       => self::CONSTITUTION_VERSION,
 			'membership_owner'           => 'file00',
 			'authentication_owner'       => 'file02',
+			'mfa_owner'                  => 'none',
+			'file00_mfa_required'        => false,
 			'professional_owner'         => 'file09',
 			'search_discovery_owner'     => 'file26',
 			'numbered_file_range'        => '00-26',
@@ -85,12 +95,8 @@ final class SMC_Latest_Central_2026 {
 	}
 
 	/**
-	 * Privacy-minimal File 26 projection. File 26 owns indexing/ranking; File 00 only
-	 * supplies current membership eligibility and public-index permission.
-	 *
-	 * The returned contract deliberately uses File 00's opaque platform UUID instead
-	 * of the internal WordPress user ID so a search projection never becomes a public
-	 * identifier leak or a second identity authority.
+	 * Privacy-minimal File 26 projection. File 26 owns indexing/ranking; File 00
+	 * only supplies current membership eligibility and public-index permission.
 	 */
 	public static function file26_projection( $user_id ) {
 		$user_id = absint( $user_id );
@@ -105,10 +111,10 @@ final class SMC_Latest_Central_2026 {
 		if ( ! is_array( $a ) ) {
 			return self::hidden_file26_projection( $platform_uuid );
 		}
-		$approved = ! empty( $a['approved'] );
-		$eligible = ! empty( $a['eligible'] );
+		$approved  = ! empty( $a['approved'] );
+		$eligible  = ! empty( $a['eligible'] );
 		$suspended = ! empty( $a['suspended'] );
-		$public = ! empty( $a['public_profile_allowed'] );
+		$public    = ! empty( $a['public_profile_allowed'] );
 		$indexable = $approved && $eligible && ! $suspended && $public;
 		$app = smc_application( $user_id );
 		return array(
@@ -131,35 +137,27 @@ final class SMC_Latest_Central_2026 {
 	}
 
 	/**
-	 * Mandatory post-audit guard for security-state changes.
+	 * Mandatory post-audit guard for projection invalidation only.
 	 *
-	 * The marker is deliberately one second beyond the current wall-clock value.
-	 * Existing second-resolution `two_factor_at` values therefore cannot accidentally
-	 * satisfy the new requirement when an old challenge and the state change occurred
-	 * in the same second. A successful new TOTP/recovery challenge clears this marker
-	 * atomically before its session assurance is committed.
+	 * Extensions may add extra invalidation actions, but cannot delete File 00's
+	 * baseline. No MFA/TOTP revalidation marker is written.
 	 */
 	public static function audit_record_guard( $allowed, $action, $user_id, $details = array(), $audit_id = 0 ) {
 		if ( true !== $allowed ) {
 			return false;
 		}
 		unset( $details, $audit_id );
-		$action = sanitize_key( $action );
+		$action  = sanitize_key( $action );
 		$user_id = absint( $user_id );
 		if ( $user_id <= 0 ) {
 			return true;
 		}
 
-		/*
-		 * Extensions may add extra revalidation actions, but they cannot delete the
-		 * File 00 constitutional baseline. This prevents a lower-trust filter from
-		 * silently weakening age/guardian/consent/security revalidation.
-		 */
-		$filtered = (array) apply_filters( 'smc_revalidation_audit_actions', self::$revalidation_actions );
+		$filtered = (array) apply_filters( 'smc_projection_invalidation_audit_actions', self::$projection_invalidation_actions );
 		$watched = array_values(
 			array_unique(
 				array_merge(
-					self::$revalidation_actions,
+					self::$projection_invalidation_actions,
 					array_map( 'sanitize_key', $filtered )
 				)
 			)
@@ -167,15 +165,7 @@ final class SMC_Latest_Central_2026 {
 		if ( ! in_array( $action, $watched, true ) ) {
 			return true;
 		}
-		$previous = absint( get_user_meta( $user_id, self::REVALIDATION_META, true ) );
-		$stamp = max( time() + 1, $previous + 1 );
-		update_user_meta( $user_id, self::REVALIDATION_META, $stamp );
-		$stored = absint( get_user_meta( $user_id, self::REVALIDATION_META, true ) );
-		if ( $stored < $stamp ) {
-			/* Returning false makes SMC_Security::audit() fail and transactional callers roll back. */
-			return false;
-		}
-		clean_user_cache( $user_id );
+
 		do_action(
 			'smc_file26_projection_invalidated',
 			$user_id,
@@ -188,18 +178,10 @@ final class SMC_Latest_Central_2026 {
 	}
 }
 
-/**
- * Canonical File 00 constitution. Intentionally not filter-mediated: downstream
- * code may consume it but may not rewrite File 00's free-tier/ownership truth.
- */
 function smc_latest_central_constitution() {
 	return SMC_Latest_Central_2026::constitution();
 }
 
-/**
- * Canonical File 26 membership projection. File 26 can use these fields as inputs
- * to its own index/ranking policy, but cannot mutate File 00's membership verdict.
- */
 function smc_file26_membership_projection( $user_id ) {
 	return SMC_Latest_Central_2026::file26_projection( absint( $user_id ) );
 }

@@ -15,11 +15,11 @@ const failures = [];
 let passed = 0;
 function check(c, n) { if (c) passed++; else failures.push(n); }
 
-check(main.includes('Version: 1.2.34'), 'plugin header 1.2.34');
-check(main.includes("define( 'SMC_VERSION', '1.2.34' )"), 'runtime version 1.2.34');
+check(main.includes('Version: 1.2.35'), 'plugin header 1.2.35');
+check(main.includes("define( 'SMC_VERSION', '1.2.35' )"), 'runtime version 1.2.35');
 check(main.includes("define( 'SMC_DB_VERSION', '1.4.4' )"), 'schema is 1.4.4');
-check(main.includes("define( 'SMC_CONTRACT_VERSION', '1.2.1' )"), 'contract stays 1.2.1');
-check(readme.includes('Stable tag: 1.2.34'), 'readme stable tag');
+check(main.includes("define( 'SMC_CONTRACT_VERSION', '1.2.2' )"), 'contract is 1.2.2 after Founder-approved MFA retirement');
+check(readme.includes('Stable tag: 1.2.35'), 'readme stable tag');
 
 check(admin.includes('private static function approval_gate'), 'approval gate helper exists');
 check(admin.includes("'pending_senior'"), 'senior pending state exists');
@@ -50,13 +50,14 @@ check(workflow.includes("'applicant_version' => $next_applicant_version"), 'resu
 check(privacy.includes("'pending'        => true"), 'private-storage failure keeps erasure retryable');
 check(privacy.includes('Erasure completed, but completion audit evidence requires retry.') && privacy.includes("'done'=>false"), 'audit-evidence failure keeps erasure incomplete');
 
+/* Historical MFA helpers remain covered as dormant migration/regression code; v1.2.35 removes their active routes and public requirement. */
 const decryptPosition = workflow.indexOf("SMC_Security::decrypt( $receipt['envelope'], 'recovery-receipt'");
 const deletePosition = workflow.indexOf("self::delete_user_meta_verified( $user_id, '_smc_recovery_receipt_v2' )", decryptPosition);
-check(decryptPosition >= 0 && deletePosition > decryptPosition, 'v2 recovery receipt decrypts before verified one-time deletion');
-check(security.includes("if ($old_enabled) {update_user_meta($user_id,'_smc_2fa_enabled',$old_enabled);} else {delete_user_meta($user_id,'_smc_2fa_enabled');}"), 'incomplete 2FA setup restores the prior enabled flag');
-check(security.includes("if ( $old_secret ) { update_user_meta($user_id,'_smc_totp_secret_enc',$old_secret); } else { delete_user_meta($user_id,'_smc_totp_secret_enc'); }"), 'incomplete 2FA setup restores or removes the encrypted TOTP secret');
-check(security.includes("revoke_all_sessions( $user_id, 'two_factor_changed' )") && security.indexOf("$wpdb->query( 'COMMIT' )") < security.indexOf("revoke_all_sessions( $user_id, 'two_factor_changed' )"), 'committed 2FA changes revoke sessions after the atomic write');
-check(workflow.includes("$challenge = $user ? SMC_Security::verify_two_factor_challenge") && workflow.includes('true !== $challenge'), '2FA challenge result is checked exactly');
+check(decryptPosition >= 0 && deletePosition > decryptPosition, 'historical v2 recovery receipt code remains internally safe while dormant');
+check(security.includes("if ($old_enabled) {update_user_meta($user_id,'_smc_2fa_enabled',$old_enabled);} else {delete_user_meta($user_id,'_smc_2fa_enabled');}"), 'historical incomplete 2FA helper restores the prior enabled flag');
+check(security.includes("if ( $old_secret ) { update_user_meta($user_id,'_smc_totp_secret_enc',$old_secret); } else { delete_user_meta($user_id,'_smc_totp_secret_enc'); }"), 'historical incomplete 2FA helper restores or removes the encrypted TOTP secret');
+check(security.includes("revoke_all_sessions( $user_id, 'two_factor_changed' )") && security.indexOf("$wpdb->query( 'COMMIT' )") < security.indexOf("revoke_all_sessions( $user_id, 'two_factor_changed' )"), 'historical committed 2FA helper revokes sessions after atomic write');
+check(workflow.includes("$challenge = $user ? SMC_Security::verify_two_factor_challenge") && workflow.includes('true !== $challenge'), 'historical 2FA challenge helper checks result exactly while its active handler is retired');
 check(workflow.includes('$subject_hash = SMC_Security::subject_hash( $user_id );') && !workflow.includes("blind_index( (string) absint( $user_id ), 'audit-subject'"), 'security-event history queries the canonical audit subject hash');
 
 if (failures.length) {

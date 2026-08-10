@@ -30,12 +30,14 @@ jobs:
           php -l source/sabri-membership-core/includes/class-smc-workflow.php
           php -l source/sabri-membership-core/includes/class-smc-admin.php
           php -l source/sabri-membership-core/includes/class-smc-security.php
+          php -l source/sabri-membership-core/includes/class-smc-mfa-retirement.php
       - name: All user and reviewer button contracts
         run: |
           set -euo pipefail
           node qa/all-button-action-contract.mjs
+          node qa/mfa-retirement-contract.mjs
       - name: Package build still succeeds
         run: |
           set -euo pipefail
           python3 tools/build.py
-          python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.34.zip
+          python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.35.zip

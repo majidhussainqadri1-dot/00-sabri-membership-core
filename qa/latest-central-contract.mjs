@@ -4,14 +4,15 @@ const load = p => fs.readFileSync(new URL(p, root), 'utf8');
 const plugin = load('source/sabri-membership-core/sabri-membership-core.php');
 const functions = load('source/sabri-membership-core/includes/functions.php');
 const contracts = load('source/sabri-membership-core/includes/class-smc-contracts.php');
-const security = load('source/sabri-membership-core/includes/class-smc-security.php');
 const events = load('source/sabri-membership-core/includes/class-smc-events.php');
 const latest = load('source/sabri-membership-core/includes/class-smc-latest-central-2026.php');
+const retirement = load('source/sabri-membership-core/includes/class-smc-mfa-retirement.php');
 const css = load('source/sabri-membership-core/assets/membership.css');
 const doc = load('docs/FILE-00-LATEST-CENTRAL-TRACEABILITY-1.2.12.md');
 const checks = [
-  ['runtime 1.2.34', plugin.includes("define( 'SMC_VERSION', '1.2.34' );")],
+  ['runtime 1.2.35', plugin.includes("define( 'SMC_VERSION', '1.2.35' );")],
   ['latest central layer loaded', plugin.includes('class-smc-latest-central-2026.php') && plugin.includes("array( 'SMC_Latest_Central_2026', 'init' )")],
+  ['current central constitution reflects MFA retirement', latest.includes("const CONSTITUTION_VERSION = '2026-08-10-v1.1'") && latest.includes("'mfa_owner'                  => 'none'") && latest.includes("'file00_mfa_required'        => false")],
   ['F00-CEN-01 single free tier', functions.includes("'single_free_tier'        => true") && functions.includes("'paid_unlocks_enabled'    => false") && functions.includes("'legacy_pricing_enabled'  => false")],
   ['F00-CEN-02 donor neutral', functions.includes("'donation_affects_rank'    => false") && functions.includes("'donation_affects_entitlement' => false") && functions.includes("'donation_affects_support'     => false")],
   ['zero commission', functions.includes("'commission_percent'       => 0")],
@@ -27,16 +28,15 @@ const checks = [
   ['File 09 canonical claim', contracts.includes('smc_file09_doctor_verification_claim_v1') && contracts.includes('Never infer professional truth from stale display/user-meta') && !contracts.includes("return 'verified' === get_user_meta( $user_id, '_spd_verification_status', true );")],
   ['mandatory audit guard bridge', events.includes("apply_filters( 'smc_audit_record_guard', true") && events.includes('if ( true !== $guard_ok )') && latest.includes("add_filter( 'smc_audit_record_guard'")],
   ['audit observer remains after mandatory guard', events.indexOf("apply_filters( 'smc_audit_record_guard'") < events.indexOf("do_action( 'smc_audit_recorded'")],
-  ['F00-CEN-03 baseline actions cannot be removed by filter', latest.includes('array_merge(\n\t\t\t\t\tself::$revalidation_actions,') && latest.includes("apply_filters( 'smc_revalidation_audit_actions', self::$revalidation_actions )")],
-  ['F00-CEN-03 marker cannot be satisfied by same-second old challenge', latest.includes('$stamp = max( time() + 1, $previous + 1 );') && security.includes("'_smc_revalidation_required_at'") && security.includes('max( $base_cutoff, $required_after )')],
-  ['all guardian-state changes include adulthood transition', latest.includes("'guardian_consent_verified'") && latest.includes("'guardian_consent_withdrawn'") && latest.includes("'guardian_requirement_ended_at_adulthood'")],
-  ['successful TOTP clears revalidation marker before audit', security.includes('private static function clear_revalidation_requirement') && security.includes('$revalidation_ok = false !== $factor_updated && 1 === $updated && self::clear_revalidation_requirement( $user_id );') && security.includes("$audit_ok = $revalidation_ok && self::audit( 'two_factor_passed'")],
-  ['successful recovery challenge clears revalidation marker', security.includes('$revalidation_ok = 1 === $code_updated && 1 === $session_updated && self::clear_revalidation_requirement( $user_id );') && security.includes("$audit_ok = $revalidation_ok && self::audit( 'recovery_code_used'")],
+  ['projection invalidation baseline cannot be removed by filter', latest.includes('array_merge(\n\t\t\t\t\tself::$projection_invalidation_actions,') && latest.includes("apply_filters( 'smc_projection_invalidation_audit_actions', self::$projection_invalidation_actions )")],
+  ['retired TOTP revalidation marker is not written', !latest.includes("REVALIDATION_META") && !latest.includes("update_user_meta( $user_id, self::REVALIDATION_META") && !latest.includes("smc_revalidation_audit_actions")],
+  ['Founder retirement cleanup removes legacy marker', retirement.includes("'_smc_revalidation_required_at'") && retirement.includes('retire_legacy_factor_state')],
+  ['all guardian-state changes still invalidate File 26 projection', latest.includes("'guardian_consent_verified'") && latest.includes("'guardian_consent_withdrawn'") && latest.includes("'guardian_requirement_ended_at_adulthood'")],
   ['security changes invalidate File 26 projection', latest.includes("do_action(\n\t\t\t'smc_file26_projection_invalidated'")],
-  ['traceability maps latest requirements', doc.includes('F00-CEN-01') && doc.includes('F00-CEN-02') && doc.includes('F00-CEN-03') && doc.includes('File 26') && doc.includes('AJ-25') && doc.includes('CV-280')],
-  ['external gates remain separate', doc.includes('Staging-Accepted | pending') && doc.includes('Live-Deployed | pending') && doc.includes('Operational | pending')],
+  ['historical traceability maps prior latest requirements', doc.includes('F00-CEN-01') && doc.includes('F00-CEN-02') && doc.includes('F00-CEN-03') && doc.includes('File 26') && doc.includes('AJ-25') && doc.includes('CV-280')],
+  ['historical external gates remain separate', doc.includes('Staging-Accepted | pending') && doc.includes('Live-Deployed | pending') && doc.includes('Operational | pending')],
 ];
 let failed = 0;
 for (const [name, ok] of checks) { console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}`); if (!ok) failed++; }
 if (failed) process.exit(1);
-console.log(`${checks.length}/${checks.length} latest-central static assertions passed.`);
+console.log(`${checks.length}/${checks.length} latest-central static assertions passed for current File 00 1.2.35; historical 1.2.12 evidence remains provenance only.`);
