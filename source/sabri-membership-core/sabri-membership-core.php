@@ -3,7 +3,7 @@
  * Plugin Name: Sabri Membership Core
  * Plugin URI: https://github.com/majidhussainqadri1-dot/00-sabri-membership-core
  * Description: Canonical membership eligibility, identity assurance, guardian consent, security assertions, and verification governance for the Sabri Social Homeopathy Platform.
- * Version: 1.2.34
+ * Version: 1.2.35
  * Requires at least: 6.4
  * Requires PHP: 7.4
  * Author: Dr. Allamah Majid Hussain Sabri Muhaddith Mursheed
@@ -13,9 +13,9 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'SMC_VERSION', '1.2.34' );
+define( 'SMC_VERSION', '1.2.35' );
 define( 'SMC_DB_VERSION', '1.4.4' );
-define( 'SMC_CONTRACT_VERSION', '1.2.1' );
+define( 'SMC_CONTRACT_VERSION', '1.2.2' );
 define( 'SMC_CF01_CONTRACT_VERSION', '1.0.0' );
 define( 'SMC_ADVANCED_TRUST_CONTRACT_VERSION', '1.0.0' );
 define( 'SMC_FILE', __FILE__ );
@@ -32,8 +32,7 @@ require_once SMC_PATH . 'includes/class-smc-contracts.php';
 require_once SMC_PATH . 'includes/class-smc-cf01-contract.php';
 require_once SMC_PATH . 'includes/class-smc-authorization.php';
 require_once SMC_PATH . 'includes/class-smc-workflow.php';
-require_once SMC_PATH . 'includes/class-smc-account-recovery-lock.php';
-require_once SMC_PATH . 'includes/class-smc-account-recovery.php';
+require_once SMC_PATH . 'includes/class-smc-mfa-retirement.php';
 require_once SMC_PATH . 'includes/class-smc-contact-delivery.php';
 require_once SMC_PATH . 'includes/class-smc-admin.php';
 require_once SMC_PATH . 'includes/class-smc-privacy.php';
@@ -108,8 +107,7 @@ add_action(
 			array( 'SMC_CF01_Contract', 'init' ),
 			array( 'SMC_Authorization', 'init' ),
 			array( 'SMC_Workflow', 'init' ),
-			array( 'SMC_Account_Recovery_Lock', 'init' ),
-			array( 'SMC_Account_Recovery', 'init' ),
+			array( 'SMC_MFA_Retirement', 'init' ),
 			array( 'SMC_Host_Compat', 'init' ),
 			array( 'SMC_Contact_Delivery', 'init' ),
 			array( 'SMC_Admin', 'init' ),
