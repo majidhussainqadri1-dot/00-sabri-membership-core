@@ -10,7 +10,7 @@
 
 ## Current implementation identity
 
-- Runtime implementation release: `1.2.38`
+- Runtime implementation release: `1.2.39`
 - Public membership contract: `1.2.2`
 - Database schema: `1.4.4`
 - MFA policy: `2026-08-10-founder-mfa-retirement-v1`
@@ -49,6 +49,14 @@ After `1.2.37` was deployed, live Hostinger evidence proved that the named-index
 Exact v1.2.37 source showed that `SMC_Contracts::sync_wordpress_roles()` deliberately returned `false` for every `manage_options` user to protect Administrator roles from File 00 membership-role mutation. `SMC_Installer::backfill_role_grants()` interpreted that same `false` as a failed write and aborted. The protection itself was correct; the boolean contract was not.
 
 Release `1.2.38` preserves the institutional boundary and changes only its success semantics: a valid Administrator is a protected successful no-op for WordPress role synchronization, while a missing user or privacy-erasure lock still returns failure. The canonical File 00 role grant can therefore be backfilled without adding/removing native Administrator roles. The real WordPress 7.0.1 + MariaDB 11.4 gate now recreates the Administrator + legacy application condition, removes the role-grant checkpoint, reruns migration, and requires DB `1.4.4`, a complete role-grant checkpoint, the expected pending canonical grant, unchanged Administrator roles, preserved institutional identity precedence, current named indexes, and downstream tables.
+
+## Live-proven orphaned application role-backfill correction — 1.2.39
+
+After `1.2.38` was deployed, fresh Hostinger DB evidence proved the Administrator item was no longer the only relevant state. The live `smc_applications` table contained seven historical rows while WordPress principals for application IDs `3` and `4` (`user_id=7` and `user_id=8`) no longer existed. The only migration checkpoint remained `legacy-users-to-1.2.0=complete`; `role-grants-to-1.3.0` was still absent. Exact runtime code creates/updates a role grant before attempting `sync_wordpress_roles()`, so the first missing principal causes the backfill to abort and can leave a derivative orphan grant even though the historical application row itself must be preserved.
+
+Release `1.2.39` adds a narrowly gated compatibility bridge in `SMC_Schema_Compat`. It runs only when the exact live-proven `Role-grant backfill failed.` marker is present, the legacy `1.2.0` baseline is complete, the required modern tables exist, the keyring is ready, and audit infrastructure verifies successfully. Existing WordPress users continue through the canonical `upsert_role_grant()` + `sync_wordpress_roles()` path. A missing WordPress principal is not fabricated and the historical application is not deleted; instead a deterministic `smc_application_repairs` record is created, any derivative role grant for that nonexistent principal is suspended, an append-only audit event is written, and the migration cursor advances. Privacy-erasure locks remain a separate fail-closed condition and are never reclassified as missing-user orphans. Per-row checkpointing makes the bridge restartable and deterministic.
+
+A post-bootstrap compatibility finalizer retries the normal installer only after this orphan-safe checkpoint reaches `complete`. It clears only the exact stale role-backfill/deferred-key markers after DB promotion actually reaches `1.4.4`; unrelated migration failures are preserved. The DB schema target remains `1.4.4` because this is historical data-state reconciliation, not a new canonical schema contract.
 
 ## Current evidence
 

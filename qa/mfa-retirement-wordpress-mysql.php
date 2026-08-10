@@ -22,7 +22,7 @@ $check    = static function ( $condition, $label ) use ( &$failures, &$passed ) 
 };
 
 global $wpdb;
-$check( defined( 'SMC_VERSION' ) && '1.2.38' === SMC_VERSION, 'runtime 1.2.38 loaded' );
+$check( defined( 'SMC_VERSION' ) && '1.2.39' === SMC_VERSION, 'runtime 1.2.39 loaded' );
 $check( defined( 'SMC_CONTRACT_VERSION' ) && '1.2.2' === SMC_CONTRACT_VERSION, 'membership contract 1.2.2 loaded' );
 $check( defined( 'SMC_DB_VERSION' ) && '1.4.4' === SMC_DB_VERSION, 'database target 1.4.4 loaded' );
 $check( class_exists( 'SMC_MFA_Retirement' ), 'MFA retirement runtime loaded' );
@@ -60,6 +60,11 @@ if ( ! $user instanceof WP_User ) {
 	exit( 3 );
 }
 wp_set_current_user( $user->ID );
+
+// A prior admin_init in this compound integration run may already have retired
+// an empty fixture. Reset only the test completion marker before deliberately
+// reseeding obsolete state so this test exercises a fresh retirement pass.
+delete_option( SMC_MFA_Retirement::STATE_OPTION );
 
 // Seed representative obsolete factor state only after canonical migration is ready.
 update_user_meta( $user->ID, '_smc_2fa_enabled', '1' );

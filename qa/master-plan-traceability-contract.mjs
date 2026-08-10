@@ -37,9 +37,9 @@ if (evidence.conclusion === 'success') {
   assert((evidence.head_sha ?? '') === '' && (evidence.workflow_run_id ?? 0) === 0 && evidence.package_sha256 === '', 'Pending evidence blank');
 }
 const plugin = read('source/sabri-membership-core/sabri-membership-core.php');
-assert(plugin.includes('Version: 1.2.38') && plugin.includes("define( 'SMC_DB_VERSION', '1.4.4' )") && plugin.includes("define( 'SMC_CONTRACT_VERSION', '1.2.2' )") && plugin.includes("define( 'SMC_CF01_CONTRACT_VERSION', '1.1.0' )") && plugin.includes("define( 'SMC_ADVANCED_TRUST_CONTRACT_VERSION', '1.0.0' )"), 'Current runtime identity 1.2.38/1.4.4/1.2.2 + CF-01 1.1.0 + advanced trust 1.0.0');
+assert(plugin.includes('Version: 1.2.39') && plugin.includes("define( 'SMC_DB_VERSION', '1.4.4' )") && plugin.includes("define( 'SMC_CONTRACT_VERSION', '1.2.2' )") && plugin.includes("define( 'SMC_CF01_CONTRACT_VERSION', '1.1.0' )") && plugin.includes("define( 'SMC_ADVANCED_TRUST_CONTRACT_VERSION', '1.0.0' )"), 'Current runtime identity 1.2.39/1.4.4/1.2.2 + CF-01 1.1.0 + advanced trust 1.0.0');
 const master = read('docs/FILE-00-MASTER-PLAN-2026.md');
-assert(master.includes('Runtime implementation release: `1.2.38`'), 'Master index current runtime');
+assert(master.includes('Runtime implementation release: `1.2.39`'), 'Master index current runtime');
 assert(master.includes('Public membership contract: `1.2.2`'), 'Master index current public contract');
 assert(master.includes('File 00 MFA owner: `none`'), 'Master index records Founder-approved MFA retirement');
 assert(master.includes('File 26 membership projection contract: `1.0.0`'), 'Master index File 26 projection');
