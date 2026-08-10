@@ -61,7 +61,7 @@ jobs:
           mapfile -t php_files < <(find source qa -type f -name '*.php' -print | sort)
           test "${#php_files[@]}" -ge 15
           for file in "${php_files[@]}"; do php -l "$file"; done
-      - name: Run inherited, CF-01, forty-round and fifth-fresh suites
+      - name: Run inherited, CF-01, forty-round and MFA-retirement suites
         run: npm test
-      - name: Build and verify deterministic 1.2.33 package
+      - name: Build and verify deterministic 1.2.35 package
         run: npm run verify
