@@ -4,6 +4,8 @@
  * Run through WP-CLI eval-file with SMC_RECOVERY_TEST_MODE.
  */
 
+global $wpdb;
+
 $mode = getenv( 'SMC_RECOVERY_TEST_MODE' ) ?: 'assert-request';
 $password = getenv( 'SMC_RECOVERY_TEST_PASSWORD' ) ?: 'Recovery-CI-Password!9';
 $user = get_user_by( 'login', 'founder' );
