@@ -1,0 +1,85 @@
+name: File 00 80-Review Round 2 Immediate Fix
+
+on:
+  push:
+    branches: [audit/80-round-review-v1.2.40]
+    paths: [.github/workflows/zz-80-review-round2-fix.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-round-2:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: audit/80-round-review-v1.2.40
+          fetch-depth: 0
+      - name: Replace retired File 00 MFA dependencies with File 02 assurance
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path('source/sabri-membership-core')
+
+          p=root/'includes/class-smc-mfa-retirement.php'; s=p.read_text()
+          needle="\tprivate static function assertions_without_mfa( $user_id ) {\n"
+          helper="""\tpublic static function sensitive_action_authorized( $user_id, $action = 'default' ) {\n\t\t$user_id = absint( $user_id );\n\t\t$action = sanitize_key( $action );\n\t\tif ( ! $user_id || ! self::advanced_trust_allows_without_mfa( $user_id ) || ! class_exists( 'SMC_Advanced_Trust_2026' ) || ! is_callable( array( 'SMC_Advanced_Trust_2026', 'step_up_requirement' ) ) ) { return false; }\n\t\t$requirement = SMC_Advanced_Trust_2026::step_up_requirement( $user_id, $action ?: 'default' );\n\t\treturn is_array( $requirement ) && ! empty( $requirement['satisfied'] );\n\t}\n\n"""
+          if helper not in s: s=s.replace(needle,helper+needle)
+          p.write_text(s)
+
+          p=root/'includes/class-smc-advanced-trust-2026.php'; s=p.read_text()
+          old="""\t\t$session_mfa = class_exists( 'SMC_Security' ) && SMC_Security::session_is_verified( $user_id );\n\t\t$session_verified_at = $session_mfa && method_exists( 'SMC_Security', 'session_verified_at' ) ? absint( SMC_Security::session_verified_at( $user_id ) ) : 0;\n\t\tif ( $session_mfa && $session_verified_at <= 0 ) {\n\t\t\t$session_mfa = false;\n\t\t}\n\t\t$baseline = array(\n\t\t\t'contract_version' => '1.0.0',\n\t\t\t'owner' => 'file00',\n\t\t\t'level' => $session_mfa ? 2 : 1,\n\t\t\t'method' => $session_mfa ? 'file00_totp_or_recovery' : 'primary_authentication_unasserted',\n\t\t\t'passkey_asserted' => false,\n\t\t\t'hardware_backed' => false,\n\t\t\t'verified_at' => $session_verified_at,\n\t\t);\n"""
+          new="""\t\t$baseline = array(\n\t\t\t'contract_version' => '1.0.0',\n\t\t\t'owner' => 'none',\n\t\t\t'level' => 0,\n\t\t\t'method' => 'authentication_assurance_unavailable',\n\t\t\t'passkey_asserted' => false,\n\t\t\t'hardware_backed' => false,\n\t\t\t'verified_at' => 0,\n\t\t);\n"""
+          if old not in s: raise SystemExit('advanced authentication baseline not found')
+          s=s.replace(old,new)
+          s=s.replace("'authentication' => array( 'owner' => sanitize_key( $auth['owner'] ?? 'file00' )","'authentication' => array( 'owner' => sanitize_key( $auth['owner'] ?? 'none' )")
+          s=s.replace("self::actor_is_current( $actor_id, 'smc_finalize_verification' ) && SMC_Security::session_is_verified( $actor_id )","self::actor_meets_step_up( $actor_id, 'identity_change', 'smc_finalize_verification' )")
+          s=s.replace("self::actor_is_current( $actor_id, 'smc_manage_membership' ) && SMC_Security::session_is_verified( $actor_id )","self::actor_meets_step_up( $actor_id, 'default', 'smc_manage_membership' )")
+          s=s.replace("if ( ! self::actor_is_current( $actor_id, 'smc_manage_membership' ) || ! SMC_Security::session_is_verified( $actor_id ) ) {\n\t\t\treturn false;\n\t\t}","if ( ! self::actor_meets_step_up( $actor_id, 'delegation_grant', 'smc_manage_membership' ) ) {\n\t\t\treturn false;\n\t\t}")
+          s=s.replace("! self::actor_is_current( $actor_id, 'manage_options', true ) || ! SMC_Security::session_is_verified( $actor_id )","! self::actor_meets_step_up( $actor_id, 'default', 'manage_options', true )")
+          s=s.replace("if ( ! self::actor_is_current( $actor_id, 'smc_manage_membership' ) || ! SMC_Security::session_is_verified( $actor_id ) ) { return new WP_Error( 'smc_continuity_authorization'","if ( ! self::actor_meets_step_up( $actor_id, 'default', 'smc_manage_membership' ) ) { return new WP_Error( 'smc_continuity_authorization'")
+          s=s.replace("if ( ! self::actor_is_current( $actor_id, $capability, $founder_or_admin ) || ! class_exists( 'SMC_Security' ) || ! SMC_Security::session_is_verified( $actor_id ) ) { return false; }\n\t\t$requirement = self::step_up_requirement","if ( ! self::actor_is_current( $actor_id, $capability, $founder_or_admin ) ) { return false; }\n\t\t$requirement = self::step_up_requirement")
+          p.write_text(s)
+
+          p=root/'includes/class-smc-admin.php'; s=p.read_text()
+          marker="\tpublic static function menu() {\n"
+          helper="""\tprivate static function sensitive_reviewer_session( $action = 'default' ) {\n\t\treturn class_exists( 'SMC_MFA_Retirement' ) && SMC_MFA_Retirement::sensitive_action_authorized( get_current_user_id(), $action );\n\t}\n\n"""
+          if helper not in s: s=s.replace(marker,helper+marker)
+          s=s.replace("! current_user_can( 'smc_review_verification' ) || ! SMC_Security::session_is_verified( get_current_user_id() )","! current_user_can( 'smc_review_verification' ) || ! self::sensitive_reviewer_session()")
+          s=s.replace("\t\t\t__( 'Two-factor setup', 'sabri-membership-core' ) => $a['two_factor_ready'] ? __( 'Enabled', 'sabri-membership-core' ) : __( 'Incomplete', 'sabri-membership-core' ),\n",'')
+          s=s.replace('Approve, reject, suspend and restore require a current two-factor session. Appeals must be decided by an independent reviewer.','Approve, reject, suspend and restore require current File 02 authentication assurance plus an independent reviewer where policy requires it. Appeals must be decided by an independent reviewer.')
+          s=s.replace("if ( ! SMC_Security::session_is_verified( get_current_user_id() ) ) { wp_die( esc_html__( 'A current two-factor reviewer session is required for this high-risk decision.', 'sabri-membership-core' ), '', array( 'response' => 403 ) ); }","if ( ! self::sensitive_reviewer_session() ) { wp_die( esc_html__( 'Current File 02 authentication assurance is required for this high-risk decision.', 'sabri-membership-core' ), '', array( 'response' => 403 ) ); }")
+          s=s.replace("\n\t\t\t! $a['two_factor_ready'] || ! $a['guardian_verified'] || ! $a['professional_verified'] ||","\n\t\t\t! $a['guardian_verified'] || ! $a['professional_verified'] ||")
+          s=s.replace('Approval predicates failed: age, guardian, contacts, two-factor setup, professional-owner verification, exact approved documents, or explicit identity-name comparison is incomplete.','Approval predicates failed: age, guardian, contacts, professional-owner verification, exact approved documents, or explicit identity-name comparison is incomplete.')
+          s=s.replace("! current_user_can( 'manage_options' ) || ! SMC_Security::session_is_verified( get_current_user_id() ) || defined( 'SMC_FOUNDER_USER_ID' )","! current_user_can( 'manage_options' ) || ! self::sensitive_reviewer_session() || defined( 'SMC_FOUNDER_USER_ID' )")
+          p.write_text(s)
+
+          p=root/'includes/class-smc-three-plan.php'; s=p.read_text()
+          s=s.replace("! current_user_can( 'manage_options' ) || ! SMC_Security::session_is_verified( get_current_user_id() ) || defined( 'SMC_INSTITUTIONAL_AI_USER_ID' )","! current_user_can( 'manage_options' ) || ! class_exists( 'SMC_MFA_Retirement' ) || ! SMC_MFA_Retirement::sensitive_action_authorized( get_current_user_id(), 'default' ) || defined( 'SMC_INSTITUTIONAL_AI_USER_ID' )")
+          p.write_text(s)
+
+          p=root/'includes/class-smc-completion.php'; s=p.read_text()
+          s=s.replace("return SMC_MFA_Retirement::advanced_trust_allows_without_mfa( get_current_user_id() );","return SMC_MFA_Retirement::sensitive_action_authorized( get_current_user_id(), 'default' );")
+          p.write_text(s)
+
+          p=root/'includes/class-smc-security.php'; s=p.read_text()
+          s=s.replace("if ( ! current_user_can( 'smc_view_private_documents' ) || ! self::session_is_verified( $user_id ) ) {\n\t\t\twp_die( esc_html__( 'A current two-factor session and File 00 private-document capability are required.', 'sabri-membership-core' ), '', array( 'response' => 403 ) );\n\t\t}","if ( ! current_user_can( 'smc_view_private_documents' ) || ! class_exists( 'SMC_MFA_Retirement' ) || ! SMC_MFA_Retirement::sensitive_action_authorized( $user_id, 'default' ) ) {\n\t\t\twp_die( esc_html__( 'Current File 02 authentication assurance and the File 00 private-document capability are required.', 'sabri-membership-core' ), '', array( 'response' => 403 ) );\n\t\t}")
+          p.write_text(s)
+          PY
+      - name: Verify round 2 correction
+        run: |
+          set -euo pipefail
+          for f in source/sabri-membership-core/includes/{class-smc-mfa-retirement.php,class-smc-advanced-trust-2026.php,class-smc-admin.php,class-smc-three-plan.php,class-smc-completion.php,class-smc-security.php}; do php -l "$f"; done
+          ! grep -Eq 'session_is_verified|two-factor setup|current two-factor|file00_totp_or_recovery' source/sabri-membership-core/includes/class-smc-admin.php source/sabri-membership-core/includes/class-smc-three-plan.php source/sabri-membership-core/includes/class-smc-advanced-trust-2026.php source/sabri-membership-core/includes/class-smc-completion.php
+          ! grep -Eq 'two-factor session' source/sabri-membership-core/includes/class-smc-security.php
+          grep -q "'owner' => 'none'" source/sabri-membership-core/includes/class-smc-advanced-trust-2026.php
+          git diff --check
+      - name: Commit immediate round 2 correction
+        run: |
+          git config user.name 'File 00 QA Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add source/sabri-membership-core/includes/class-smc-mfa-retirement.php source/sabri-membership-core/includes/class-smc-advanced-trust-2026.php source/sabri-membership-core/includes/class-smc-admin.php source/sabri-membership-core/includes/class-smc-three-plan.php source/sabri-membership-core/includes/class-smc-completion.php source/sabri-membership-core/includes/class-smc-security.php
+          git commit -m 'Round 2: enforce File 02 ownership for sensitive authentication assurance'
+          git push origin HEAD:audit/80-round-review-v1.2.40
