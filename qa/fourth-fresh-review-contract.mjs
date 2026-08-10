@@ -17,7 +17,7 @@ const checks=[
  ['MFA provenance reads actual session time',sec.includes('public static function session_verified_at')&&sec.includes('SELECT two_factor_at FROM')&&adv.includes('SMC_Security::session_verified_at')],
  ['new encryption key ID documented',readme.includes('define SMC_MASTER_KEY with at least 256 bits of entropy and SMC_MASTER_KEY_ID as a stable non-secret key identifier')],
  ['advanced runtime fixture preserves prior 1.2.34 compatibility',qa.includes("define('SMC_VERSION', '1.2.34');")],
- ['historical first-fresh changelog identity repaired',readme.includes('= 1.2.14 =')&&readme.split('= 1.2.15 =').length-1===1],
+ ['historical release lineage retained through retirement boundary',readme.includes('= 1.2.34 =')&&readme.includes('= 1.2.33 =')&&readme.includes('superseded by the Founder-approved File 00 MFA retirement in 1.2.35')],
  ['public membership contract current',main.includes("SMC_CONTRACT_VERSION', '1.2.2")],
  ['advanced trust contract preserved',main.includes("SMC_ADVANCED_TRUST_CONTRACT_VERSION', '1.0.0")],
 ];
