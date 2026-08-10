@@ -89,7 +89,7 @@ jobs:
             echo "PASS canonical File 00 schema and audit infrastructure ready\n";
           ' --path=/tmp/wordpress
 
-      - name: Build realistic lost-factor fixture
+      - name: Build realistic lost-factor and independent-approver fixtures
         env:
           SMC_RECOVERY_TEST_MODE: setup
           SMC_RECOVERY_TEST_PASSWORD: Recovery-CI-Password!9
@@ -123,9 +123,63 @@ jobs:
           set -euo pipefail
           php /tmp/wp-cli.phar eval-file "$GITHUB_WORKSPACE/qa/account-recovery-wordpress-mysql.php" --path=/tmp/wordpress
 
-      - name: Prepare approved-and-cooled completion fixture
+      - name: Attempt prohibited Founder self-approval
         env:
-          SMC_RECOVERY_TEST_MODE: approve-fixture
+          SMC_RECOVERY_TEST_MODE: self-approve
+          SMC_RECOVERY_TEST_PASSWORD: Recovery-CI-Password!9
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file "$GITHUB_WORKSPACE/qa/account-recovery-wordpress-mysql.php" --path=/tmp/wordpress > /tmp/self-approval.log 2>&1
+          cat /tmp/self-approval.log
+          if grep -Eqi 'deadlock|WordPress database error|lock wait timeout' /tmp/self-approval.log; then exit 45; fi
+
+      - name: Prove self-approval left no approval evidence
+        env:
+          SMC_RECOVERY_TEST_MODE: assert-self-rejected
+          SMC_RECOVERY_TEST_PASSWORD: Recovery-CI-Password!9
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file "$GITHUB_WORKSPACE/qa/account-recovery-wordpress-mysql.php" --path=/tmp/wordpress
+
+      - name: Execute first independent MFA-verified Administrator approval
+        env:
+          SMC_RECOVERY_TEST_MODE: approve-a
+          SMC_RECOVERY_TEST_PASSWORD: Recovery-CI-Password!9
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file "$GITHUB_WORKSPACE/qa/account-recovery-wordpress-mysql.php" --path=/tmp/wordpress > /tmp/approval-a.log 2>&1
+          cat /tmp/approval-a.log
+          if grep -Eqi 'deadlock|WordPress database error|lock wait timeout' /tmp/approval-a.log; then exit 46; fi
+
+      - name: Prove one approval cannot satisfy Founder dual control
+        env:
+          SMC_RECOVERY_TEST_MODE: assert-approval-one
+          SMC_RECOVERY_TEST_PASSWORD: Recovery-CI-Password!9
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file "$GITHUB_WORKSPACE/qa/account-recovery-wordpress-mysql.php" --path=/tmp/wordpress
+
+      - name: Advance only the test clock beyond the cooling boundary
+        env:
+          SMC_RECOVERY_TEST_MODE: elapse-cooling
+          SMC_RECOVERY_TEST_PASSWORD: Recovery-CI-Password!9
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file "$GITHUB_WORKSPACE/qa/account-recovery-wordpress-mysql.php" --path=/tmp/wordpress
+
+      - name: Execute second distinct MFA-verified Administrator approval
+        env:
+          SMC_RECOVERY_TEST_MODE: approve-b
+          SMC_RECOVERY_TEST_PASSWORD: Recovery-CI-Password!9
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file "$GITHUB_WORKSPACE/qa/account-recovery-wordpress-mysql.php" --path=/tmp/wordpress > /tmp/approval-b.log 2>&1
+          cat /tmp/approval-b.log
+          if grep -Eqi 'deadlock|WordPress database error|lock wait timeout' /tmp/approval-b.log; then exit 47; fi
+
+      - name: Prove real dual approval and hashed out-of-band evidence
+        env:
+          SMC_RECOVERY_TEST_MODE: assert-approved
           SMC_RECOVERY_TEST_PASSWORD: Recovery-CI-Password!9
         run: |
           set -euo pipefail
