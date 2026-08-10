@@ -22,7 +22,7 @@ $check    = static function ( $condition, $label ) use ( &$failures, &$passed ) 
 };
 
 global $wpdb;
-$check( defined( 'SMC_VERSION' ) && '1.2.35' === SMC_VERSION, 'runtime 1.2.35 loaded' );
+$check( defined( 'SMC_VERSION' ) && '1.2.36' === SMC_VERSION, 'runtime 1.2.36 loaded' );
 $check( defined( 'SMC_CONTRACT_VERSION' ) && '1.2.2' === SMC_CONTRACT_VERSION, 'membership contract 1.2.2 loaded' );
 $check( defined( 'SMC_DB_VERSION' ) && '1.4.4' === SMC_DB_VERSION, 'database target 1.4.4 loaded' );
 $check( class_exists( 'SMC_MFA_Retirement' ), 'MFA retirement runtime loaded' );
@@ -47,8 +47,10 @@ $key = SMC_Security::ensure_key_ready();
 $check( ! is_wp_error( $key ), 'encryption/audit key ready' );
 $audit = SMC_Installer::ensure_audit_infrastructure();
 $check( ! is_wp_error( $audit ), 'audit infrastructure ready' );
+SMC_Schema_Compat::reconcile_verification_queue_index();
 SMC_Installer::maybe_upgrade();
 $check( SMC_DB_VERSION === (string) get_option( 'smc_db_version', '' ), 'database migration reached 1.4.4' );
+SMC_Schema_Compat::assert_current_queue_indexes();
 $check( true === SMC_Installer::audit_infrastructure_ready(), 'audit infrastructure reports ready' );
 
 $user = get_user_by( 'login', 'founder' );
