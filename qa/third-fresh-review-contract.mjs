@@ -8,7 +8,7 @@ const privacy=read('source/sabri-membership-core/includes/class-smc-privacy.php'
 const completion=read('source/sabri-membership-core/includes/class-smc-completion.php');
 const bootstrap=read('source/sabri-membership-core/sabri-membership-core.php');
 const assertions=[
- ['runtime 1.2.34', bootstrap.includes("Version: 1.2.34") && bootstrap.includes("SMC_VERSION', '1.2.34")],
+ ['runtime 1.2.35', bootstrap.includes("Version: 1.2.35") && bootstrap.includes("SMC_VERSION', '1.2.35")],
  ['explicit non-secret key ID', security.includes("SMC_MASTER_KEY_ID") && security.includes("private static function configured_key_record") && security.includes("'key_id' => $key_id")],
  ['new encryption fails closed without key ID', security.includes("smc_key_id_missing")],
  ['legacy key id limited to compatibility', security.includes("if ( 2 === (int) $version )") && security.includes("hash_equals( $derived_kid, (string) $legacy_stored_kid )")],
