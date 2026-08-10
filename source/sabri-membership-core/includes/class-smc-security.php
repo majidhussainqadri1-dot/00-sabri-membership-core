@@ -828,8 +828,8 @@ final class SMC_Security {
 
 	public static function serve_document() {
 		$user_id = get_current_user_id();
-		if ( ! current_user_can( 'smc_view_private_documents' ) || ! self::session_is_verified( $user_id ) ) {
-			wp_die( esc_html__( 'A current two-factor session and File 00 private-document capability are required.', 'sabri-membership-core' ), '', array( 'response' => 403 ) );
+		if ( ! current_user_can( 'smc_view_private_documents' ) || ! class_exists( 'SMC_MFA_Retirement' ) || ! SMC_MFA_Retirement::sensitive_action_authorized( $user_id, 'default' ) ) {
+			wp_die( esc_html__( 'Current File 02 authentication assurance and the File 00 private-document capability are required.', 'sabri-membership-core' ), '', array( 'response' => 403 ) );
 		}
 		$id = isset( $_GET['document_id'] ) ? absint( $_GET['document_id'] ) : 0;
 		check_admin_referer( 'smc_document_' . $id );

@@ -88,6 +88,14 @@ final class SMC_MFA_Retirement {
 			&& ! $reverification_required && ! $reverification_stale && ! $critical_pending && ! $merge_finalizing;
 	}
 
+	public static function sensitive_action_authorized( $user_id, $action = 'default' ) {
+		$user_id = absint( $user_id );
+		$action = sanitize_key( $action );
+		if ( ! $user_id || ! self::advanced_trust_allows_without_mfa( $user_id ) || ! class_exists( 'SMC_Advanced_Trust_2026' ) || ! is_callable( array( 'SMC_Advanced_Trust_2026', 'step_up_requirement' ) ) ) { return false; }
+		$requirement = SMC_Advanced_Trust_2026::step_up_requirement( $user_id, $action ?: 'default' );
+		return is_array( $requirement ) && ! empty( $requirement['satisfied'] );
+	}
+
 	private static function assertions_without_mfa( $user_id ) {
 		$a = class_exists( 'SMC_Contracts' ) ? SMC_Contracts::assertions( absint( $user_id ) ) : array();
 		$a = is_array( $a ) ? $a : array();

@@ -12,6 +12,10 @@ final class SMC_Admin {
 		add_action( 'admin_post_smc_save_founder', array( __CLASS__, 'save_founder' ) );
 	}
 
+	private static function sensitive_reviewer_session( $action = 'default' ) {
+		return class_exists( 'SMC_MFA_Retirement' ) && SMC_MFA_Retirement::sensitive_action_authorized( get_current_user_id(), $action );
+	}
+
 	public static function menu() {
 		add_menu_page( __( 'Sabri Membership', 'sabri-membership-core' ), __( 'Membership', 'sabri-membership-core' ), 'smc_review_verification', 'smc-membership', array( __CLASS__, 'queue' ), 'dashicons-id-alt', 3 );
 		add_submenu_page( 'smc-membership', __( 'Verification Queue', 'sabri-membership-core' ), __( 'Verification Queue', 'sabri-membership-core' ), 'smc_review_verification', 'smc-membership', array( __CLASS__, 'queue' ) );
@@ -40,7 +44,7 @@ final class SMC_Admin {
 	}
 
 	public static function queue() {
-		if ( ! current_user_can( 'smc_review_verification' ) || ! SMC_Security::session_is_verified( get_current_user_id() ) ) {
+		if ( ! current_user_can( 'smc_review_verification' ) || ! self::sensitive_reviewer_session() ) {
 			wp_die( esc_html__( 'A current authorized reviewer session is required.', 'sabri-membership-core' ), '', array( 'response' => 403 ) );
 		}
 		$user_id = isset( $_GET['user_id'] ) ? absint( $_GET['user_id'] ) : 0;
@@ -130,7 +134,6 @@ final class SMC_Admin {
 			__( 'Guardian consent', 'sabri-membership-core' ) => $app['guardian_required'] ? ( $guardian['status'] ?? __( 'Missing', 'sabri-membership-core' ) ) : __( 'Not required', 'sabri-membership-core' ),
 			__( 'Email ownership', 'sabri-membership-core' ) => $a['email_verified'] ? __( 'Verified', 'sabri-membership-core' ) : __( 'Pending', 'sabri-membership-core' ),
 			__( 'Mobile ownership', 'sabri-membership-core' ) => $a['phone_verified'] ? __( 'Verified', 'sabri-membership-core' ) : __( 'Pending', 'sabri-membership-core' ),
-			__( 'Two-factor setup', 'sabri-membership-core' ) => $a['two_factor_ready'] ? __( 'Enabled', 'sabri-membership-core' ) : __( 'Incomplete', 'sabri-membership-core' ),
 			__( 'Professional owner status', 'sabri-membership-core' ) => $a['professional_verified'] ? __( 'Verified or not required', 'sabri-membership-core' ) : __( 'Pending in canonical professional module', 'sabri-membership-core' ),
 		);
 		foreach ( $facts as $label => $value ) {
@@ -148,11 +151,11 @@ final class SMC_Admin {
 		wp_nonce_field( 'smc_review_transition_' . $request['id'], 'smc_nonce' );
 		echo '<p><label>' . esc_html__( 'Decision', 'sabri-membership-core' ) . ' <select name="decision" required><option value="under_review">' . esc_html__( 'Claim / continue review', 'sabri-membership-core' ) . '</option><option value="more_information">' . esc_html__( 'Request more information', 'sabri-membership-core' ) . '</option><option value="approve">' . esc_html__( 'Approve / cast approval vote', 'sabri-membership-core' ) . '</option><option value="reject">' . esc_html__( 'Reject', 'sabri-membership-core' ) . '</option><option value="suspend">' . esc_html__( 'Suspend approved membership', 'sabri-membership-core' ) . '</option><option value="restore">' . esc_html__( 'Restore after successful independent appeal', 'sabri-membership-core' ) . '</option></select></label></p>';
 		echo '<p><label>' . esc_html__( 'Reason code', 'sabri-membership-core' ) . ' <select name="reason_code" required><option value="">' . esc_html__( 'Select', 'sabri-membership-core' ) . '</option>'; foreach ( smc_review_reason_codes() as $code => $label ) { echo '<option value="' . esc_attr( $code ) . '">' . esc_html( $label ) . '</option>'; } echo '</select></label></p>';
-		echo '<p><label><input type="checkbox" name="name_match" value="matched"> ' . esc_html__( 'I compared the legal name and authenticated identity evidence and record an exact or adequately explained match.', 'sabri-membership-core' ) . '</label></p><p><label><input type="checkbox" name="confirm_high_risk" value="1"> ' . esc_html__( 'For approve, reject, suspend or restore, I confirm the current applicant version, evidence, conflict declaration and irreversible/downstream effects shown above.', 'sabri-membership-core' ) . '</label></p><p><label>' . esc_html__( 'Mandatory reason', 'sabri-membership-core' ) . '<br><textarea name="reason" required minlength="12" style="width:100%"></textarea></label></p><p>' . esc_html__( 'Approve, reject, suspend and restore require a current two-factor session. Appeals must be decided by an independent reviewer.', 'sabri-membership-core' ) . '</p><button class="button button-primary">' . esc_html__( 'Apply Controlled Decision', 'sabri-membership-core' ) . '</button></form></div></div>';
+		echo '<p><label><input type="checkbox" name="name_match" value="matched"> ' . esc_html__( 'I compared the legal name and authenticated identity evidence and record an exact or adequately explained match.', 'sabri-membership-core' ) . '</label></p><p><label><input type="checkbox" name="confirm_high_risk" value="1"> ' . esc_html__( 'For approve, reject, suspend or restore, I confirm the current applicant version, evidence, conflict declaration and irreversible/downstream effects shown above.', 'sabri-membership-core' ) . '</label></p><p><label>' . esc_html__( 'Mandatory reason', 'sabri-membership-core' ) . '<br><textarea name="reason" required minlength="12" style="width:100%"></textarea></label></p><p>' . esc_html__( 'Approve, reject, suspend and restore require current File 02 authentication assurance plus an independent reviewer where policy requires it. Appeals must be decided by an independent reviewer.', 'sabri-membership-core' ) . '</p><button class="button button-primary">' . esc_html__( 'Apply Controlled Decision', 'sabri-membership-core' ) . '</button></form></div></div>';
 	}
 
 	public static function handle_document() {
-		if ( ! current_user_can( 'smc_review_verification' ) || ! SMC_Security::session_is_verified( get_current_user_id() ) ) { wp_die( esc_html__( 'A current authorized reviewer session is required.', 'sabri-membership-core' ), '', array( 'response' => 403 ) ); }
+		if ( ! current_user_can( 'smc_review_verification' ) || ! self::sensitive_reviewer_session() ) { wp_die( esc_html__( 'A current authorized reviewer session is required.', 'sabri-membership-core' ), '', array( 'response' => 403 ) ); }
 		$id = absint( $_POST['document_id'] ?? 0 ); check_admin_referer( 'smc_review_document_' . $id, 'smc_nonce' );
 		$version = absint( $_POST['document_version'] ?? 0 ); $decision = sanitize_key( wp_unslash( $_POST['decision'] ?? '' ) ); $note = sanitize_textarea_field( wp_unslash( $_POST['note'] ?? '' ) );
 		if ( ! in_array( $decision, array( 'approved','rejected' ), true ) || strlen( $note ) < 8 ) { wp_die( esc_html__( 'Invalid document decision.', 'sabri-membership-core' ), '', array( 'response' => 400 ) ); }
@@ -171,7 +174,7 @@ final class SMC_Admin {
 	}
 
 	public static function handle_assignment() {
-		if ( ! current_user_can( 'smc_review_verification' ) || ! SMC_Security::session_is_verified( get_current_user_id() ) ) { wp_die( esc_html__( 'A current authorized reviewer session is required.', 'sabri-membership-core' ), '', array( 'response' => 403 ) ); }
+		if ( ! current_user_can( 'smc_review_verification' ) || ! self::sensitive_reviewer_session() ) { wp_die( esc_html__( 'A current authorized reviewer session is required.', 'sabri-membership-core' ), '', array( 'response' => 403 ) ); }
 		$id = absint( $_POST['request_id'] ?? 0 ); check_admin_referer( 'smc_assign_review_' . $id, 'smc_nonce' ); global $wpdb; $wpdb->query( 'START TRANSACTION' );
 		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}smc_verification_requests WHERE id=%d LIMIT 1 FOR UPDATE", $id ), ARRAY_A );
 		$claimable_states = array( 'submitted', 'resubmitted', 'under_review', 'approval_pending', 'appeal_review' );
@@ -188,7 +191,7 @@ final class SMC_Admin {
 	}
 
 	public static function handle_conflict() {
-		if ( ! current_user_can( 'smc_review_verification' ) || ! SMC_Security::session_is_verified( get_current_user_id() ) ) { wp_die( esc_html__( 'A current authorized reviewer session is required.', 'sabri-membership-core' ), '', array( 'response' => 403 ) ); }
+		if ( ! current_user_can( 'smc_review_verification' ) || ! self::sensitive_reviewer_session() ) { wp_die( esc_html__( 'A current authorized reviewer session is required.', 'sabri-membership-core' ), '', array( 'response' => 403 ) ); }
 		$id = absint( $_POST['request_id'] ?? 0 ); check_admin_referer( 'smc_declare_conflict_' . $id, 'smc_nonce' );
 		$status = sanitize_key( wp_unslash( $_POST['conflict_status'] ?? '' ) ); $note = sanitize_textarea_field( wp_unslash( $_POST['conflict_note'] ?? '' ) );
 		if ( ! in_array( $status, array( 'none','conflict' ), true ) || ( 'conflict' === $status && strlen( $note ) < 8 ) ) { wp_die( esc_html__( 'A valid conflict declaration is required.', 'sabri-membership-core' ), '', array( 'response' => 400 ) ); }
@@ -240,7 +243,7 @@ final class SMC_Admin {
 		}
 		if ( in_array( $decision, array( 'approve', 'reject', 'suspend', 'restore' ), true ) ) {
 			if ( empty( $_POST['confirm_high_risk'] ) ) { wp_die( esc_html__( 'Explicit confirmation is required for this high-risk decision.', 'sabri-membership-core' ), '', array( 'response'=>400 ) ); }
-			if ( ! SMC_Security::session_is_verified( get_current_user_id() ) ) { wp_die( esc_html__( 'A current two-factor reviewer session is required for this high-risk decision.', 'sabri-membership-core' ), '', array( 'response' => 403 ) ); }
+			if ( ! self::sensitive_reviewer_session() ) { wp_die( esc_html__( 'Current File 02 authentication assurance is required for this high-risk decision.', 'sabri-membership-core' ), '', array( 'response' => 403 ) ); }
 		}
 		if ( 'restore' === $decision ) {
 			if ( ! current_user_can( 'smc_restore_membership' ) && ! current_user_can( 'smc_finalize_verification' ) ) {
@@ -313,14 +316,14 @@ final class SMC_Admin {
 			! $app || false === $age || false === $minimum_age || $age < $minimum_age ||
 			( $age < 18 && (bool) array_intersect( SMC_Contracts::requested_types( $user_id ), smc_professional_types() ) ) ||
 			! $a['email_verified'] || ! $a['phone_verified'] ||
-			! $a['two_factor_ready'] || ! $a['guardian_verified'] || ! $a['professional_verified'] ||
+			! $a['guardian_verified'] || ! $a['professional_verified'] ||
 			array_diff( $required, $approved_docs ) || ! $identity ||
 			( ! empty( $app['guardian_required'] ) && ( ! $guardian || 'verified' !== $guardian['status'] || ! empty( $guardian['withdrawn_at'] ) ) ) ||
 			(int) $request['applicant_version'] <= 0 ||
 			'matched' !== sanitize_key( wp_unslash( $_POST['name_match'] ?? '' ) )
 		) {
 			$wpdb->query( 'ROLLBACK' );
-			wp_die( esc_html__( 'Approval predicates failed: age, guardian, contacts, two-factor setup, professional-owner verification, exact approved documents, or explicit identity-name comparison is incomplete.', 'sabri-membership-core' ), '', array( 'response' => 409 ) );
+			wp_die( esc_html__( 'Approval predicates failed: age, guardian, contacts, professional-owner verification, exact approved documents, or explicit identity-name comparison is incomplete.', 'sabri-membership-core' ), '', array( 'response' => 409 ) );
 		}
 
 		$document_snapshot = array();
@@ -494,7 +497,7 @@ final class SMC_Admin {
 	}
 
 	public static function save_founder() {
-		if ( ! current_user_can( 'manage_options' ) || ! SMC_Security::session_is_verified( get_current_user_id() ) || defined( 'SMC_FOUNDER_USER_ID' ) ) {
+		if ( ! current_user_can( 'manage_options' ) || ! self::sensitive_reviewer_session() || defined( 'SMC_FOUNDER_USER_ID' ) ) {
 			wp_die( esc_html__( 'Not authorized.', 'sabri-membership-core' ), '', array( 'response' => 403 ) );
 		}
 		check_admin_referer( 'smc_save_founder', 'smc_nonce' );

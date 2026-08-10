@@ -342,7 +342,7 @@ final class SMC_Completion {
 		if ( ! is_user_logged_in() || ! class_exists( 'SMC_MFA_Retirement' ) ) {
 			return false;
 		}
-		return SMC_MFA_Retirement::advanced_trust_allows_without_mfa( get_current_user_id() );
+		return SMC_MFA_Retirement::sensitive_action_authorized( get_current_user_id(), 'default' );
 	}
 
 	private static function require_high_risk_authority() {
