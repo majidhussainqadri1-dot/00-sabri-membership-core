@@ -151,3 +151,5 @@ final class SMC_Schema_Compat {
 		return true;
 	}
 }
+
+SMC_Schema_Compat::init();
