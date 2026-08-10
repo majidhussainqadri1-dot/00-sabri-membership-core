@@ -66,7 +66,10 @@ jobs:
           sha256sum source/sabri-membership-core/includes/class-smc-cf01-contract.php
           sha256sum source/sabri-membership-core/includes/class-smc-latest-central-2026.php
           sha256sum source/sabri-membership-core/sabri-membership-core.php
-      - name: Run inherited, CF-01, forty-round and MFA-retirement suites
-        run: npm test
-      - name: Build and verify deterministic 1.2.36 package
+      - name: Regenerate package manifest, then run inherited suites
+        run: |
+          set -euo pipefail
+          npm run build
+          npm test
+      - name: Build and verify deterministic 1.2.37 package
         run: npm run verify

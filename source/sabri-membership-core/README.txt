@@ -3,7 +3,7 @@ Contributors: sabrihomeopathy
 Tags: membership, identity, guardian consent, privacy, governance
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 1.2.36
+Stable tag: 1.2.37
 License: GPL-2.0-or-later
 
 Canonical membership eligibility, identity assurance, guardian consent, security assertions, and verification governance for the Sabri Social Homeopathy Platform.
@@ -70,6 +70,13 @@ File 19 receives membership notices through its canonical sabri_notify integrati
 Local source and GitHub checks do not authorize production. Test fresh activation, legacy upgrade, DB/audit migration, legacy factor retirement, MySQL advisory locks, concurrent reviewers, authorization matrices, filesystem denial and rollback, scanner providers, email/mobile/guardian delivery, File 02 authentication integration, CF-01 provider/consumer contracts, all named cross-file integrations, advanced trust containment/revocation/selective-disclosure workflows, privacy erasure, restore, browser accessibility, and mobile layouts on Hostinger staging.
 
 == Changelog ==
+
+= 1.2.37 =
+* Repairs the second live-proven MariaDB same-name index migration failure, `Duplicate key name 'decision'`, on `smc_approval_votes` while retaining the successful v1.2.36 queue repair.
+* Recognizes only the exact historical non-unique BTREE `decision(request_id,decision)` signature, removes only that obsolete secondary index, and lets normal dbDelta create `decision(request_id,approval_generation,decision)`.
+* Treats fresh/current/absent decision indexes as no-ops, refuses unknown shapes fail-closed, and read-back verifies the current decision index together with both current queue indexes.
+* Extends the WordPress 7.0.1 + MariaDB 11.4 live-state regression fixture to reproduce both historical queue and decision transitions before proving promotion to DB schema 1.4.4 and creation of downstream tables.
+* Runtime 1.2.37; DB schema 1.4.4; public contract 1.2.2. Live resolution still requires deployment and post-deployment verification.
 
 = 1.2.36 =
 * Repairs the live-proven MariaDB migration failure `Duplicate key name 'queue'` on `smc_verification_requests` without changing the DB schema target.

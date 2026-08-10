@@ -81,11 +81,12 @@ jobs:
             echo "PASS canonical File 00 migration ready\n";
           ' --path=/tmp/wordpress
 
-      - name: Reproduce and repair exact live legacy queue-index transition
+      - name: Reproduce and repair exact live legacy named-index transitions
         run: |
           set -euo pipefail
           php /tmp/wp-cli.phar db query "
             ALTER TABLE wp_smc_verification_requests DROP INDEX queue, ADD KEY queue(status,assigned_reviewer);
+            ALTER TABLE wp_smc_approval_votes DROP INDEX decision, ADD KEY decision(request_id,decision);
             DROP TABLE IF EXISTS wp_smc_event_outbox;
             DROP TABLE IF EXISTS wp_smc_event_inbox;
             DROP TABLE IF EXISTS wp_smc_application_repairs;
@@ -94,21 +95,25 @@ jobs:
           " --path=/tmp/wordpress
           php /tmp/wp-cli.phar eval '
             global $wpdb;
-            $legacy = $wpdb->get_col("SELECT COLUMN_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=\"wp_smc_verification_requests\" AND INDEX_NAME=\"queue\" ORDER BY SEQ_IN_INDEX");
-            if ( array("status","assigned_reviewer") !== array_values($legacy) ) { fwrite(STDERR,"legacy fixture not established\n"); exit(50); }
+            $legacy_queue = $wpdb->get_col("SELECT COLUMN_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=\"wp_smc_verification_requests\" AND INDEX_NAME=\"queue\" ORDER BY SEQ_IN_INDEX");
+            if ( array("status","assigned_reviewer") !== array_values($legacy_queue) ) { fwrite(STDERR,"legacy queue fixture not established\n"); exit(50); }
+            $legacy_decision = $wpdb->get_col("SELECT COLUMN_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=\"wp_smc_approval_votes\" AND INDEX_NAME=\"decision\" ORDER BY SEQ_IN_INDEX");
+            if ( array("request_id","decision") !== array_values($legacy_decision) ) { fwrite(STDERR,"legacy decision fixture not established\n"); exit(54); }
             SMC_Schema_Compat::reconcile_verification_queue_index();
             SMC_Installer::maybe_upgrade();
             if ( SMC_DB_VERSION !== get_option("smc_db_version","") ) {
-              fwrite(STDERR,"legacy queue migration incomplete: ".wp_json_encode(get_option("smc_last_migration_failure",array()))."\n");
+              fwrite(STDERR,"legacy named-index migration incomplete: ".wp_json_encode(get_option("smc_last_migration_failure",array()))."\n");
               exit(51);
             }
             SMC_Schema_Compat::assert_current_queue_indexes();
-            $current = $wpdb->get_col("SELECT COLUMN_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=\"wp_smc_verification_requests\" AND INDEX_NAME=\"queue\" ORDER BY SEQ_IN_INDEX");
-            if ( array("status","queue_type","assigned_reviewer") !== array_values($current) ) { fwrite(STDERR,"current queue index mismatch\n"); exit(52); }
+            $current_queue = $wpdb->get_col("SELECT COLUMN_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=\"wp_smc_verification_requests\" AND INDEX_NAME=\"queue\" ORDER BY SEQ_IN_INDEX");
+            if ( array("status","queue_type","assigned_reviewer") !== array_values($current_queue) ) { fwrite(STDERR,"current queue index mismatch\n"); exit(52); }
+            $current_decision = $wpdb->get_col("SELECT COLUMN_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=\"wp_smc_approval_votes\" AND INDEX_NAME=\"decision\" ORDER BY SEQ_IN_INDEX");
+            if ( array("request_id","approval_generation","decision") !== array_values($current_decision) ) { fwrite(STDERR,"current decision index mismatch\n"); exit(55); }
             foreach ( array("wp_smc_event_outbox","wp_smc_event_inbox","wp_smc_application_repairs") as $table ) {
               if ( $table !== $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s",$table)) ) { fwrite(STDERR,"missing post-repair table: ".$table."\n"); exit(53); }
             }
-            echo "PASS exact live legacy queue-index transition repaired and migration promoted\n";
+            echo "PASS exact live legacy queue + decision transitions repaired and migration promoted\n";
           ' --path=/tmp/wordpress
 
       - name: Prove MFA retirement in real WordPress and MariaDB
@@ -120,12 +125,12 @@ jobs:
         run: |
           set -euo pipefail
           python3 tools/build.py
-          python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.36.zip
+          python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.37.zip
 
-      - name: Upload installable File 00 v1.2.36 ZIP
+      - name: Upload installable File 00 v1.2.37 ZIP
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: File-00-Sabri-Membership-Core-1.2.36-Migration-Fixed
-          path: dist/00-sabri-membership-core-1.2.36.zip
+          name: File-00-Sabri-Membership-Core-1.2.37-Live-Migration-Fixed
+          path: dist/00-sabri-membership-core-1.2.37.zip
           if-no-files-found: error
           retention-days: 30
