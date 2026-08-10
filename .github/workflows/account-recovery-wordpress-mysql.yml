@@ -43,6 +43,14 @@ jobs:
       - name: Install Node QA dependencies
         run: npm ci --ignore-scripts
 
+      - name: Record exact recovery source digests
+        run: |
+          set -euo pipefail
+          sha256sum \
+            source/sabri-membership-core/includes/class-smc-account-recovery.php \
+            source/sabri-membership-core/includes/class-smc-account-recovery-lock.php \
+            source/sabri-membership-core/sabri-membership-core.php
+
       - name: Run source and recovery contract gates
         run: |
           set -euo pipefail
@@ -102,6 +110,10 @@ jobs:
           wait "$PID_B"
           cat /tmp/recovery-request-a.log
           cat /tmp/recovery-request-b.log
+          if grep -Eqi 'deadlock|WordPress database error|lock wait timeout' /tmp/recovery-request-a.log /tmp/recovery-request-b.log; then
+            echo 'Concurrent recovery requests emitted a database-lock failure.' >&2
+            exit 44
+          fi
 
       - name: Prove serialized request state and durable evidence
         env:
