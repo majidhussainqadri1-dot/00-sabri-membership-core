@@ -85,7 +85,7 @@ jobs:
               ("test \"$(node -p \"require('./package-lock.json').version\")\" = '1.2.33'", "test \"$(node -p \"require('./package-lock.json').version\")\" = '1.2.34'"),
               ("test \"$(node -p \"require('./package-lock.json').packages[''].version\")\" = '1.2.33'", "test \"$(node -p \"require('./package-lock.json').packages[''].version\")\" = '1.2.34'"),
               ('test -f dist/00-sabri-membership-core-1.2.33.zip', 'test -f dist/00-sabri-membership-core-1.2.34.zip'),
-              ('name: 00-sabri-membership-core-1.2.33-${{ github.sha }}', 'name: 00-sabri-membership-core-1.2.34-${{ github.sha }}'),
+              ('name: 00-sabri-membership-core-1.2.33-', 'name: 00-sabri-membership-core-1.2.34-'),
               ('dist/00-sabri-membership-core-1.2.33.zip', 'dist/00-sabri-membership-core-1.2.34.zip'),
               ('RELEASE-1.2.33.md', 'RELEASE-1.2.34.md'),
           ]
