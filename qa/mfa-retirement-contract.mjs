@@ -38,6 +38,9 @@ has(schemaCompat, "const ORPHAN_BACKFILL_FAILURE = 'Role-grant backfill failed.'
 has(schemaCompat, "'legacy-users-to-1.2.0'", 'orphan compatibility requires completed live baseline');
 has(schemaCompat, "'orphaned_application_missing_user'", 'missing principal gets explicit repair quarantine');
 has(schemaCompat, "'orphaned_membership_application_quarantined'", 'orphan quarantine appends audit evidence');
+has(schemaCompat, "SELECT id,user_id,repair_type,details", 'existing deterministic quarantine record is validated before reuse');
+has(schemaCompat, "$audit_exists", 'quarantine checks for prior audit evidence');
+has(schemaCompat, "if ( ! $audit_exists && ! SMC_Security::audit", 'missing quarantine audit evidence is retried after an interrupted insert');
 has(schemaCompat, "SET status='suspended'", 'interrupted derivative orphan grants are quarantined');
 has(schemaCompat, "if ( smc_privacy_erasure_lock( $user_id ) )", 'privacy erasure remains fail closed rather than orphan-skipped');
 has(schemaCompat, "self::role_grant_checkpoint( 'running', $cursor )", 'orphan-safe backfill checkpoints per handled application');
