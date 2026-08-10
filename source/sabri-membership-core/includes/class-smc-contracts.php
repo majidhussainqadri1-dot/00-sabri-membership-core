@@ -131,6 +131,8 @@ final class SMC_Contracts {
 		$base['entitlements'] = self::entitlement_assertions( $user_id, $base );
 		$base['publishing']   = self::publishing_assertions( $user_id, $base );
 		$base['transfer']     = self::transfer_assertions( $user_id, 0, array(), $base );
+		$base['age_context']  = self::age_context( $user_id );
+		$base['clinical_commerce'] = self::clinical_commerce_assertions( $user_id, $base );
 		$base['can_publish']  = (bool) $base['publishing']['can_open_composer'];
 		$base['can_direct_publish'] = (bool) $base['publishing']['can_direct_publish'];
 		$base['can_transfer_files'] = (bool) $base['transfer']['can_initiate'];
@@ -264,12 +266,12 @@ final class SMC_Contracts {
 		);
 	}
 
-	private static function communication_age_context( $user_id ) {
+	private static function age_context( $user_id ) {
 		$user_id = absint( $user_id );
 		$app = smc_application( $user_id );
 		$out = array(
 			'known'             => false,
-			'age_years'         => null,
+			'age_band'          => 'unknown',
 			'minor'             => (bool) ( $app && ! empty( $app['guardian_required'] ) ),
 			'guardian_required' => (bool) ( $app && ! empty( $app['guardian_required'] ) ),
 		);
@@ -278,7 +280,7 @@ final class SMC_Contracts {
 			$age = is_wp_error( $dob ) ? false : smc_age_from_dob( $dob );
 			if ( false !== $age ) {
 				$out['known'] = true;
-				$out['age_years'] = (int) $age;
+				$out['age_band'] = (int) $age < 18 ? 'minor' : 'adult';
 				$out['minor'] = (int) $age < 18;
 				$out['guardian_required'] = $out['minor'];
 			}
@@ -286,9 +288,36 @@ final class SMC_Contracts {
 		return $out;
 	}
 
+	public static function clinical_commerce_assertions( $user_id, $base = null ) {
+		$base = is_array( $base ) ? $base : self::assertions( $user_id );
+		$age = self::age_context( $user_id );
+		$minor = ! empty( $age['minor'] );
+		$guardian_ok = ! $minor || ! empty( $base['guardian_verified'] );
+		$eligible = ! empty( $base['eligible'] ) && empty( $base['suspended'] ) && $guardian_ok;
+		return array(
+			'contract_version' => $base['contract_version'],
+			'user_id' => absint( $user_id ),
+			'eligible' => $eligible,
+			'suspended' => ! empty( $base['suspended'] ),
+			'identity_current' => ! empty( $base['identity_documents_current'] ),
+			'guardian_verified' => $guardian_ok,
+			'age_context' => $age,
+			'appointment_allowed' => $eligible,
+			'appointment_requires_guardian_context' => $minor,
+			'clinical_contact_requires_context' => $minor,
+			'emergency_online_case_allowed' => false,
+			'doctor_practice_allowed' => ! empty( $base['can_practice'] ),
+			'marketplace_browse_allowed' => true,
+			'marketplace_direct_deal_allowed' => $eligible && ! $minor,
+			'marketplace_seller_actions_allowed' => $eligible && ! $minor,
+			'platform_commission_percent' => 0,
+			'consumer_authorization_recheck_required' => true,
+		);
+	}
+
 	public static function communication_assertions( $user_id ) {
 		$a = self::assertions( $user_id );
-		$age = self::communication_age_context( $user_id );
+		$age = self::age_context( $user_id );
 		$minor = ! empty( $age['minor'] );
 		$guardian_ok = ! $minor || ! empty( $a['guardian_verified'] );
 		$eligible = ! empty( $a['can_message'] ) && $guardian_ok;
