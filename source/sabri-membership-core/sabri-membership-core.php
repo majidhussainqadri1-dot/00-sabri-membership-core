@@ -124,6 +124,7 @@ add_action(
 				smc_record_bootstrap_failure( strtolower( $initializer[0] . '_' . $initializer[1] ), $error );
 				break;
 			}
+		}
 	},
 	20
 );
