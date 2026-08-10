@@ -1,0 +1,100 @@
+name: File 00 MFA Retirement WordPress MariaDB Gate
+
+on:
+  pull_request:
+    branches: ['main']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mfa-retirement:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_DATABASE: wordpress
+          MARIADB_USER: wordpress
+          MARIADB_PASSWORD: wordpress
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: Checkout exact MFA-retirement candidate
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Set up PHP 8.3
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240
+        with:
+          php-version: '8.3'
+          coverage: none
+          extensions: mysqli, openssl, mbstring, json
+          tools: none
+
+      - name: Install Node QA dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Static syntax and contract gates
+        run: |
+          set -euo pipefail
+          find source/sabri-membership-core -name '*.php' -print0 | xargs -0 -n1 php -l
+          node qa/mfa-retirement-contract.mjs
+
+      - name: Install pinned WP-CLI and WordPress 7.0.1
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 https://github.com/wp-cli/wp-cli/releases/download/v2.12.0/wp-cli-2.12.0.phar -o /tmp/wp-cli.phar
+          php /tmp/wp-cli.phar --info
+          php /tmp/wp-cli.phar core download --version=7.0.1 --path=/tmp/wordpress --force
+          php /tmp/wp-cli.phar config create --path=/tmp/wordpress --dbname=wordpress --dbuser=wordpress --dbpass=wordpress --dbhost=127.0.0.1:3306 --skip-check
+          php /tmp/wp-cli.phar config set SMC_MASTER_KEY 'base64:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=' --type=constant --path=/tmp/wordpress
+          php /tmp/wp-cli.phar config set SMC_MASTER_KEY_ID 'mfa-retirement-ci-key-v1' --type=constant --path=/tmp/wordpress
+          php /tmp/wp-cli.phar config set WP_ENVIRONMENT_TYPE 'staging' --type=constant --path=/tmp/wordpress
+          php /tmp/wp-cli.phar core install --path=/tmp/wordpress --url=http://mfa-retirement.local --title='File 00 MFA Retirement CI' --admin_user=founder --admin_password='MFA-Retirement-CI-Password!9' --admin_email=founder@example.test --skip-email
+
+      - name: Activate candidate and complete canonical migration
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/wordpress/wp-content/plugins/sabri-membership-core
+          cp -R source/sabri-membership-core /tmp/wordpress/wp-content/plugins/sabri-membership-core
+          php /tmp/wp-cli.phar plugin activate sabri-membership-core --path=/tmp/wordpress
+          php /tmp/wp-cli.phar eval '
+            $key = SMC_Security::ensure_key_ready();
+            if ( is_wp_error( $key ) ) { fwrite(STDERR, $key->get_error_code().": ".$key->get_error_message()."\n"); exit(40); }
+            $audit = SMC_Installer::ensure_audit_infrastructure();
+            if ( is_wp_error( $audit ) ) { fwrite(STDERR, $audit->get_error_code().": ".$audit->get_error_message()."\n"); exit(41); }
+            SMC_Installer::maybe_upgrade();
+            if ( SMC_DB_VERSION !== get_option("smc_db_version","") ) {
+              fwrite(STDERR, "schema migration incomplete: ".wp_json_encode(get_option("smc_last_migration_failure",array()))."\n");
+              exit(42);
+            }
+            echo "PASS canonical File 00 migration ready\n";
+          ' --path=/tmp/wordpress
+
+      - name: Prove MFA retirement in real WordPress and MariaDB
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file "$GITHUB_WORKSPACE/qa/mfa-retirement-wordpress-mysql.php" --path=/tmp/wordpress
+
+      - name: Build and verify installable File 00 package
+        run: |
+          set -euo pipefail
+          python3 tools/build.py
+          python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.35.zip
+
+      - name: Upload installable File 00 v1.2.35 ZIP
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: File-00-Sabri-Membership-Core-1.2.35-MFA-Retired
+          path: dist/00-sabri-membership-core-1.2.35.zip
+          if-no-files-found: error
+          retention-days: 30
