@@ -1,15 +1,5 @@
 (() => {
 	'use strict';
-	const copyRecovery = document.querySelector('[data-smc-copy-recovery]');
-	const printRecovery = document.querySelector('[data-smc-print-recovery]');
-	const recoveryFeedback = document.querySelector('[data-smc-recovery-feedback]');
-	copyRecovery?.addEventListener('click', async () => {
-		const codes = Array.from(document.querySelectorAll('#smc-recovery-codes code')).map((node) => node.textContent.trim()).filter(Boolean).join('\n');
-		try { await navigator.clipboard.writeText(codes); if (recoveryFeedback) recoveryFeedback.textContent = 'Recovery codes copied. Keep them private.'; }
-		catch (error) { if (recoveryFeedback) recoveryFeedback.textContent = 'Automatic copy was unavailable. Select and copy the codes manually.'; }
-	});
-	printRecovery?.addEventListener('click', () => window.print());
-
 	const form = document.getElementById('smc-membership-application');
 	if (!form || !window.smcPolicy) return;
 

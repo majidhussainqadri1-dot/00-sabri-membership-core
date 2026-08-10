@@ -38,11 +38,11 @@ final class SMC_Completion {
 		}
 		$action = sanitize_key( wp_unslash( $_REQUEST['action'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$allowed = array(
-			'smc_challenge_2fa', 'smc_revoke_session', 'smc_revoke_all_sessions', 'smc_retry_repair', 'smc_retry_outbox',
+			'smc_revoke_session', 'smc_revoke_all_sessions', 'smc_retry_repair', 'smc_retry_outbox',
 			'smc_post_restore_reconcile', 'smc_download_backup_manifest',
 		);
 		if ( 0 === strpos( $action, 'smc_' ) && ! in_array( $action, $allowed, true ) ) {
-			wp_die( esc_html__( 'Sabri Membership Safe Mode is active. Risky writes are temporarily blocked while status, recovery and scoped repair remain available.', 'sabri-membership-core' ), '', array( 'response' => 503 ) );
+			wp_die( esc_html__( 'Sabri Membership Safe Mode is active. Risky writes are temporarily blocked while status, session revocation and scoped repair remain available.', 'sabri-membership-core' ), '', array( 'response' => 503 ) );
 		}
 	}
 
@@ -338,15 +338,22 @@ final class SMC_Completion {
 		add_submenu_page( 'smc-membership', __( 'Health and Repair', 'sabri-membership-core' ), __( 'Health and Repair', 'sabri-membership-core' ), 'smc_manage_membership', 'smc-health-repair', array( __CLASS__, 'health_page' ) );
 	}
 
+	private static function current_trust_allows_high_risk_action() {
+		if ( ! is_user_logged_in() || ! class_exists( 'SMC_MFA_Retirement' ) ) {
+			return false;
+		}
+		return SMC_MFA_Retirement::advanced_trust_allows_without_mfa( get_current_user_id() );
+	}
+
 	private static function require_high_risk_authority() {
-		if ( ! current_user_can( 'smc_manage_membership' ) || ! SMC_Security::session_is_verified( get_current_user_id() ) ) {
-			wp_die( esc_html__( 'A current two-factor session and membership-management capability are required.', 'sabri-membership-core' ), '', array( 'response' => 403 ) );
+		if ( ! current_user_can( 'smc_manage_membership' ) || ! self::current_trust_allows_high_risk_action() ) {
+			wp_die( esc_html__( 'A current authenticated membership-management session with an active trust state is required.', 'sabri-membership-core' ), '', array( 'response' => 403 ) );
 		}
 	}
 
 	private static function require_retention_authority() {
-		if ( ! current_user_can( 'smc_manage_retention_holds' ) || ! SMC_Security::session_is_verified( get_current_user_id() ) ) {
-			wp_die( esc_html__( 'A current two-factor session and retention-hold capability are required.', 'sabri-membership-core' ), '', array( 'response' => 403 ) );
+		if ( ! current_user_can( 'smc_manage_retention_holds' ) || ! self::current_trust_allows_high_risk_action() ) {
+			wp_die( esc_html__( 'A current authenticated retention-hold session with an active trust state is required.', 'sabri-membership-core' ), '', array( 'response' => 403 ) );
 		}
 	}
 

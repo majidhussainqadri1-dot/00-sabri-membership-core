@@ -5,18 +5,12 @@ final class SMC_Workflow {
 	public static function init() {
 		add_shortcode( 'smc_membership_application', array( __CLASS__, 'application_shortcode' ) );
 		add_shortcode( 'smc_membership_status', array( __CLASS__, 'status_shortcode' ) );
-		add_shortcode( 'smc_membership_security', array( __CLASS__, 'security_shortcode' ) );
 		add_shortcode( 'smc_guardian_consent', array( __CLASS__, 'guardian_shortcode' ) );
 		foreach (
 			array(
 				'submit_application',
 				'request_contact_otp',
 				'verify_contact_otp',
-				'start_2fa',
-				'finish_2fa',
-				'challenge_2fa',
-				'rotate_recovery',
-				'ack_recovery_receipt',
 				'revoke_session',
 				'revoke_all_sessions',
 				'resubmit',
@@ -43,9 +37,6 @@ final class SMC_Workflow {
 			'saved'          => array( __( 'Your membership application was saved and submitted.', 'sabri-membership-core' ), 'success' ),
 			'otp_sent'       => array( __( 'A verification code was sent through the configured secure provider.', 'sabri-membership-core' ), 'success' ),
 			'otp_verified'   => array( __( 'Contact ownership was verified.', 'sabri-membership-core' ), 'success' ),
-			'two_factor'     => array( __( 'Two-factor authentication is active. Save the one-time recovery codes now.', 'sabri-membership-core' ), 'success' ),
-			'challenge'      => array( __( 'This session passed the two-factor challenge.', 'sabri-membership-core' ), 'success' ),
-			'recovery_saved' => array( __( 'Recovery codes were acknowledged and the temporary receipt was removed.', 'sabri-membership-core' ), 'success' ),
 			'session_revoked'=> array( __( 'The selected session was revoked.', 'sabri-membership-core' ), 'success' ),
 			'resubmitted'    => array( __( 'The requested information was resubmitted for review.', 'sabri-membership-core' ), 'success' ),
 			'appealed'       => array( __( 'Your appeal was submitted for independent review.', 'sabri-membership-core' ), 'success' ),
@@ -54,13 +45,6 @@ final class SMC_Workflow {
 			'provider'       => array( __( 'The required verification provider is unavailable. No approval state changed.', 'sabri-membership-core' ), 'error' ),
 			'cooldown'       => array( __( 'Please wait before requesting another verification code.', 'sabri-membership-core' ), 'warning' ),
 			'invalid'        => array( __( 'The request could not be verified. Review the fields and try again.', 'sabri-membership-core' ), 'error' ),
-			'totp_format'    => array( __( 'Enter exactly six digits from the authenticator app.', 'sabri-membership-core' ), 'error' ),
-			'totp_expired'   => array( __( 'This authenticator setup expired. Start a new authenticator setup and use the new secret.', 'sabri-membership-core' ), 'warning' ),
-			'totp_mismatch'  => array( __( 'The six-digit authenticator code does not match the pending setup secret. Use a time-based TOTP profile with SHA-1, six digits and a 30-second period, and keep the phone time automatic.', 'sabri-membership-core' ), 'error' ),
-			'totp_backend'   => array( __( 'The authenticator code was accepted, but File 00 could not complete the protected enrollment transaction. No successful 2FA state is being claimed.', 'sabri-membership-core' ), 'error' ),
-			'totp_audit'     => array( __( 'The authenticator code was accepted, but required security-audit evidence could not be committed. Two-factor enrollment remains fail-closed.', 'sabri-membership-core' ), 'error' ),
-			'totp_storage'   => array( __( 'The authenticator code was accepted, but protected factor or recovery-code state could not be stored. Two-factor enrollment remains fail-closed.', 'sabri-membership-core' ), 'error' ),
-			'totp_revalidate'=> array( __( 'Two-factor enrollment completed, but existing sessions could not be fully reconciled. Sign in again and verify the new authenticator before protected actions.', 'sabri-membership-core' ), 'warning' ),
 		);
 		if ( ! isset( $messages[ $key ] ) ) {
 			return '';
@@ -69,25 +53,6 @@ final class SMC_Workflow {
 		$trace_id = isset( $_GET['trace_id'] ) ? sanitize_text_field( wp_unslash( $_GET['trace_id'] ) ) : '';
 		if ( $trace_id && preg_match( '/^[0-9a-f-]{36}$/i', $trace_id ) ) {
 			$text .= ' ' . sprintf( __( 'Reference: %s', 'sabri-membership-core' ), strtolower( $trace_id ) );
-		}
-		if ( 'totp_audit' === $key && current_user_can( 'manage_options' ) ) {
-			$reason = isset( $_GET['smc_audit_reason'] ) ? sanitize_key( wp_unslash( $_GET['smc_audit_reason'] ) ) : '';
-			$chain = isset( $_GET['smc_chain_reason'] ) ? sanitize_key( wp_unslash( $_GET['smc_chain_reason'] ) ) : '';
-			$failed = isset( $_GET['smc_failed_id'] ) ? absint( $_GET['smc_failed_id'] ) : 0;
-			$tail = isset( $_GET['smc_tail_state'] ) ? sanitize_key( wp_unslash( $_GET['smc_tail_state'] ) ) : '';
-			$legacy = isset( $_GET['smc_legacy_state'] ) ? sanitize_key( wp_unslash( $_GET['smc_legacy_state'] ) ) : '';
-			if ( $reason ) {
-				$text .= ' ' . sprintf( __( 'Audit diagnostic: %s.', 'sabri-membership-core' ), $reason );
-			}
-			if ( $chain ) {
-				$text .= ' ' . sprintf( __( 'Chain status: %1$s%2$s.', 'sabri-membership-core' ), $chain, $failed ? ' (record ' . $failed . ')' : '' );
-			}
-			if ( $tail ) {
-				$text .= ' ' . sprintf( __( 'Audit tail: %s.', 'sabri-membership-core' ), $tail );
-			}
-			if ( $legacy && 'none' !== $legacy ) {
-				$text .= ' ' . sprintf( __( 'Legacy audit snapshot: %s.', 'sabri-membership-core' ), $legacy );
-			}
 		}
 		return smc_notice( $text, $messages[ $key ][1] );
 	}
@@ -760,44 +725,10 @@ final class SMC_Workflow {
 
 	public static function security_shortcode() {
 		$required = self::login_required();
-		if ( $required ) {
-			return $required;
-		}
+		if ( $required ) { return $required; }
 		$user_id = get_current_user_id();
-		$enabled = SMC_Security::two_factor_ready( $user_id );
-		$pending = get_user_meta( $user_id, '_smc_totp_pending_enc', true );
-		$expires = (int) get_user_meta( $user_id, '_smc_totp_pending_expires', true );
-		$secret = '';
-		if ( $pending && $expires > time() ) {
-			$secret = SMC_Security::decrypt( $pending, 'totp-pending', array( 'user_id' => $user_id, 'expires' => $expires ) );
-			$secret = is_wp_error( $secret ) ? '' : $secret;
-		}
-		$receipt = self::recovery_receipt( $user_id );
-		ob_start();
-		?>
-		<main class="smc-panel" aria-labelledby="smc-security-title">
-			<?php echo self::message(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
-			<h1 id="smc-security-title"><?php esc_html_e( 'Membership Security', 'sabri-membership-core' ); ?></h1>
-			<?php if ( $receipt ) : ?><section class="smc-subpanel" role="status" id="smc-recovery-receipt"><h2><?php esc_html_e( 'One-time recovery codes', 'sabri-membership-core' ); ?></h2><p><?php esc_html_e( 'Save these now. This protected receipt remains available for five minutes or until you explicitly confirm that it was saved.', 'sabri-membership-core' ); ?></p><ol id="smc-recovery-codes"><?php foreach ( $receipt as $code ) : ?><li><code><?php echo esc_html( $code ); ?></code></li><?php endforeach; ?></ol><div class="smc-actions"><button class="smc-button smc-button--secondary" type="button" data-smc-copy-recovery><?php esc_html_e( 'Copy Recovery Codes', 'sabri-membership-core' ); ?></button><button class="smc-button smc-button--secondary" type="button" data-smc-print-recovery><?php esc_html_e( 'Print Recovery Codes', 'sabri-membership-core' ); ?></button></div><p class="smc-muted" aria-live="polite" data-smc-recovery-feedback></p><form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"><input type="hidden" name="action" value="smc_ack_recovery_receipt"><?php wp_nonce_field( 'smc_ack_recovery_receipt', 'smc_nonce' ); ?><button class="smc-button"><?php esc_html_e( 'I saved these recovery codes', 'sabri-membership-core' ); ?></button></form></section><?php endif; ?>
-			<?php if ( ! $enabled && ! $secret ) : ?>
-				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"><input type="hidden" name="action" value="smc_start_2fa"><?php wp_nonce_field( 'smc_start_2fa', 'smc_nonce' ); ?><button class="smc-button"><?php esc_html_e( 'Begin Authenticator Setup', 'sabri-membership-core' ); ?></button></form>
-			<?php elseif ( $secret ) : ?>
-				<section class="smc-subpanel"><h2><?php esc_html_e( 'Authenticator setup', 'sabri-membership-core' ); ?></h2><p><?php esc_html_e( 'Enter this secret in a standards-compatible authenticator, then confirm a current code.', 'sabri-membership-core' ); ?></p><p><strong><?php esc_html_e( 'Required authenticator profile:', 'sabri-membership-core' ); ?></strong> <?php esc_html_e( 'Time-based TOTP, SHA-1, six digits, 30-second period.', 'sabri-membership-core' ); ?></p><p><?php echo esc_html( sprintf( __( 'This setup secret expires in about %d minute(s).', 'sabri-membership-core' ), max( 1, (int) ceil( ( $expires - time() ) / MINUTE_IN_SECONDS ) ) ) ); ?></p><p><code><?php echo esc_html( $secret ); ?></code></p>
-				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="smc-inline-form"><input type="hidden" name="action" value="smc_finish_2fa"><?php wp_nonce_field( 'smc_finish_2fa', 'smc_nonce' ); ?><label><?php esc_html_e( 'Six-digit code', 'sabri-membership-core' ); ?><input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required></label><button class="smc-button"><?php esc_html_e( 'Enable Two-Factor Authentication', 'sabri-membership-core' ); ?></button></form></section>
-			<?php elseif ( ! SMC_Security::session_is_verified( $user_id ) ) : ?>
-				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="smc-inline-form"><input type="hidden" name="action" value="smc_challenge_2fa"><?php wp_nonce_field( 'smc_challenge_2fa', 'smc_nonce' ); ?><label><?php esc_html_e( 'Authenticator or recovery code', 'sabri-membership-core' ); ?><input name="code" autocomplete="one-time-code" required></label><button class="smc-button"><?php esc_html_e( 'Verify This Session', 'sabri-membership-core' ); ?></button></form>
-			<?php else : ?>
-				<p><?php esc_html_e( 'This session has a current two-factor verification.', 'sabri-membership-core' ); ?></p>
-				<?php self::session_list( $user_id ); ?>
-				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="smc-form"><input type="hidden" name="action" value="smc_revoke_all_sessions"><?php wp_nonce_field( 'smc_revoke_all_sessions', 'smc_nonce' ); ?><label class="smc-check"><input type="checkbox" name="confirm_revoke_all" value="1" required> <?php esc_html_e( 'I understand this signs out every device, including this one.', 'sabri-membership-core' ); ?></label><button class="smc-button smc-button--danger"><?php esc_html_e( 'Revoke All Sessions', 'sabri-membership-core' ); ?></button></form>
-				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="smc-form"><input type="hidden" name="action" value="smc_start_2fa"><?php wp_nonce_field( 'smc_start_2fa', 'smc_nonce' ); ?><h2><?php esc_html_e( 'Replace Authenticator', 'sabri-membership-core' ); ?></h2><label><?php esc_html_e( 'Current password', 'sabri-membership-core' ); ?><input name="password" type="password" autocomplete="current-password" required></label><label><?php esc_html_e( 'Current authenticator or recovery code', 'sabri-membership-core' ); ?><input name="current_code" autocomplete="one-time-code" required></label><button class="smc-button"><?php esc_html_e( 'Start Secure Authenticator Replacement', 'sabri-membership-core' ); ?></button></form>
-				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="smc-form"><input type="hidden" name="action" value="smc_rotate_recovery"><?php wp_nonce_field( 'smc_rotate_recovery', 'smc_nonce' ); ?><label><?php esc_html_e( 'Current password', 'sabri-membership-core' ); ?><input name="password" type="password" autocomplete="current-password" required></label><label><?php esc_html_e( 'Current authenticator code', 'sabri-membership-core' ); ?><input name="code" inputmode="numeric" pattern="[0-9]{6}" required></label><button class="smc-button"><?php esc_html_e( 'Replace Recovery Codes', 'sabri-membership-core' ); ?></button></form>
-			<?php endif; ?>
-			<section class="smc-subpanel"><h2><?php esc_html_e( 'Recovery guidance', 'sabri-membership-core' ); ?></h2><p><?php esc_html_e( 'Keep recovery codes offline and private. If you lose the authenticator and all recovery codes, use the governed account-recovery path; support staff cannot simply take over or bypass identity assurance.', 'sabri-membership-core' ); ?></p></section>
-			<?php self::security_event_list( $user_id ); ?>
-		</main>
-		<?php
-		return ob_get_clean();
+		ob_start(); ?>
+		<main class="smc-panel" aria-labelledby="smc-security-title"><h1 id="smc-security-title"><?php esc_html_e( 'Membership Security', 'sabri-membership-core' ); ?></h1><?php echo smc_notice( __( 'File 00 no longer uses two-factor authentication, authenticator codes or recovery codes. Normal sign-in and account recovery belong to Sabri Authentication (File 02).', 'sabri-membership-core' ), 'success' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?><p><?php esc_html_e( 'Membership session visibility and revocation remain available below.', 'sabri-membership-core' ); ?></p><?php self::session_list( $user_id ); ?><form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="smc-form"><input type="hidden" name="action" value="smc_revoke_all_sessions"><?php wp_nonce_field( 'smc_revoke_all_sessions', 'smc_nonce' ); ?><label class="smc-check"><input type="checkbox" name="confirm_revoke_all" value="1" required> <?php esc_html_e( 'I understand this signs out every device, including this one.', 'sabri-membership-core' ); ?></label><button class="smc-button smc-button--danger"><?php esc_html_e( 'Revoke All Sessions', 'sabri-membership-core' ); ?></button></form></main><?php return ob_get_clean();
 	}
 
 	private static function security_event_list( $user_id ) {
@@ -816,7 +747,7 @@ final class SMC_Workflow {
 		echo '</ul></section>';
 	}
 
-	private static function session_list( $user_id ) {
+	public static function session_list( $user_id ) {
 		global $wpdb;
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(
@@ -844,7 +775,7 @@ final class SMC_Workflow {
 	public static function handle_revoke_all_sessions() {
 		self::guard_user_action( 'smc_revoke_all_sessions' );
 		$user_id = get_current_user_id();
-		if ( empty( $_POST['confirm_revoke_all'] ) || ! SMC_Security::session_is_verified( $user_id ) ) {
+		if ( empty( $_POST['confirm_revoke_all'] ) ) {
 			self::redirect( 'security', 'invalid' );
 		}
 		if ( ! SMC_Security::revoke_all_sessions( $user_id, 'user_requested_revoke_all' ) ) {
@@ -997,7 +928,7 @@ final class SMC_Workflow {
 
 	public static function handle_revoke_session() {
 		$user_id = get_current_user_id();
-		if ( ! is_user_logged_in() || ! SMC_Security::session_is_verified( $user_id ) ) {
+		if ( ! is_user_logged_in() ) {
 			auth_redirect();
 		}
 		$id = absint( $_POST['session_id'] ?? 0 );
