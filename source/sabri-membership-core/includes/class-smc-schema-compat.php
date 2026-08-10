@@ -44,7 +44,7 @@ final class SMC_Schema_Compat {
 			$wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) )
 		);
 		if ( ! $exists ) {
-			return true;
+			return self::reconcile_approval_decision_index();
 		}
 
 		$wpdb->last_error = '';
@@ -62,7 +62,7 @@ final class SMC_Schema_Compat {
 			throw new RuntimeException( 'Could not inspect the verification queue index: ' . sanitize_text_field( $wpdb->last_error ) );
 		}
 		if ( empty( $rows ) ) {
-			return true;
+			return self::reconcile_approval_decision_index();
 		}
 
 		$columns = array();
@@ -80,7 +80,7 @@ final class SMC_Schema_Compat {
 		$current = array( 'status', 'queue_type', 'assigned_reviewer' );
 		$legacy  = array( 'status', 'assigned_reviewer' );
 		if ( $current === $columns ) {
-			return true;
+			return self::reconcile_approval_decision_index();
 		}
 		if ( $legacy !== $columns ) {
 			throw new RuntimeException( 'Unsupported verification queue index definition; automatic migration refused.' );
@@ -102,14 +102,98 @@ final class SMC_Schema_Compat {
 			throw new RuntimeException( 'Legacy verification queue index removal did not complete.' );
 		}
 
+		return self::reconcile_approval_decision_index();
+	}
+
+	/**
+	 * Reconcile the live-proven pre-approval_generation decision index before dbDelta.
+	 *
+	 * Historical File 00 deployments can contain the non-unique BTREE index
+	 * decision(request_id,decision). Current schema requires
+	 * decision(request_id,approval_generation,decision). WordPress dbDelta may
+	 * attempt to ADD the changed named index without first dropping the old named
+	 * index, causing MySQL/MariaDB to abort with "Duplicate key name 'decision'".
+	 *
+	 * Only the exact live-proven legacy signature is removed. Fresh/current
+	 * schemas and an absent index are no-ops. Any other shape fails closed.
+	 *
+	 * @return bool True when the approval-vote schema is safe for dbDelta.
+	 * @throws RuntimeException When the index cannot be inspected or is unknown.
+	 */
+	public static function reconcile_approval_decision_index() {
+		global $wpdb;
+
+		$table = $wpdb->prefix . 'smc_approval_votes';
+		$exists = $table === $wpdb->get_var(
+			$wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) )
+		);
+		if ( ! $exists ) {
+			return true;
+		}
+
+		$wpdb->last_error = '';
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT SEQ_IN_INDEX,COLUMN_NAME,SUB_PART,NON_UNIQUE,INDEX_TYPE
+				 FROM information_schema.STATISTICS
+				 WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=%s AND INDEX_NAME='decision'
+				 ORDER BY SEQ_IN_INDEX",
+				$table
+			),
+			ARRAY_A
+		);
+		if ( '' !== (string) $wpdb->last_error ) {
+			throw new RuntimeException( 'Could not inspect the approval decision index: ' . sanitize_text_field( $wpdb->last_error ) );
+		}
+		if ( empty( $rows ) ) {
+			return true;
+		}
+
+		$columns = array();
+		foreach ( (array) $rows as $row ) {
+			if (
+				1 !== (int) ( $row['NON_UNIQUE'] ?? -1 ) ||
+				'BTREE' !== strtoupper( (string) ( $row['INDEX_TYPE'] ?? '' ) ) ||
+				null !== ( $row['SUB_PART'] ?? null )
+			) {
+				throw new RuntimeException( 'Unsupported approval decision index attributes; automatic migration refused.' );
+			}
+			$columns[] = (string) ( $row['COLUMN_NAME'] ?? '' );
+		}
+
+		$current = array( 'request_id', 'approval_generation', 'decision' );
+		$legacy  = array( 'request_id', 'decision' );
+		if ( $current === $columns ) {
+			return true;
+		}
+		if ( $legacy !== $columns ) {
+			throw new RuntimeException( 'Unsupported approval decision index definition; automatic migration refused.' );
+		}
+
+		$wpdb->last_error = '';
+		if ( false === $wpdb->query( "ALTER TABLE {$table} DROP INDEX `decision`" ) ) {
+			throw new RuntimeException( 'Legacy approval decision index could not be removed safely: ' . sanitize_text_field( $wpdb->last_error ) );
+		}
+
+		$remaining = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COUNT(*) FROM information_schema.STATISTICS
+				 WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=%s AND INDEX_NAME='decision'",
+				$table
+			)
+		);
+		if ( 0 !== $remaining ) {
+			throw new RuntimeException( 'Legacy approval decision index removal did not complete.' );
+		}
+
 		return true;
 	}
 
 	/**
-	 * Prove the final queue-index signatures after the normal dbDelta migration.
+	 * Prove the final queue and approval-decision index signatures after dbDelta.
 	 *
 	 * @return bool
-	 * @throws RuntimeException When either critical queue index is not exact.
+	 * @throws RuntimeException When a critical current index is not exact.
 	 */
 	public static function assert_current_queue_indexes() {
 		global $wpdb;
@@ -148,6 +232,38 @@ final class SMC_Schema_Compat {
 				throw new RuntimeException( 'Current queue index columns are invalid for ' . $table . '.' );
 			}
 		}
+
+		$table = $wpdb->prefix . 'smc_approval_votes';
+		$wanted = array( 'request_id', 'approval_generation', 'decision' );
+		$wpdb->last_error = '';
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT SEQ_IN_INDEX,COLUMN_NAME,SUB_PART,NON_UNIQUE,INDEX_TYPE
+				 FROM information_schema.STATISTICS
+				 WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=%s AND INDEX_NAME='decision'
+				 ORDER BY SEQ_IN_INDEX",
+				$table
+			),
+			ARRAY_A
+		);
+		if ( '' !== (string) $wpdb->last_error || count( (array) $rows ) !== count( $wanted ) ) {
+			throw new RuntimeException( 'Current approval decision index could not be verified.' );
+		}
+		$actual = array();
+		foreach ( (array) $rows as $row ) {
+			if (
+				1 !== (int) ( $row['NON_UNIQUE'] ?? -1 ) ||
+				'BTREE' !== strtoupper( (string) ( $row['INDEX_TYPE'] ?? '' ) ) ||
+				null !== ( $row['SUB_PART'] ?? null )
+			) {
+				throw new RuntimeException( 'Current approval decision index attributes are invalid.' );
+			}
+			$actual[] = (string) ( $row['COLUMN_NAME'] ?? '' );
+		}
+		if ( $wanted !== $actual ) {
+			throw new RuntimeException( 'Current approval decision index columns are invalid.' );
+		}
+
 		return true;
 	}
 }
