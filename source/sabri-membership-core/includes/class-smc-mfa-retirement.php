@@ -5,11 +5,20 @@ defined( 'ABSPATH' ) || exit;
  * Founder-approved File 00 MFA retirement — 10 August 2026.
  *
  * File 00 no longer owns or requires an authenticator/TOTP, recovery codes,
- * per-session MFA challenge, authenticator replacement, or lost-factor
- * recovery. Password/login/account recovery remains an authentication-domain
- * responsibility (File 02). Historical audit rows are preserved; obsolete
- * factor secrets and recovery material are removed only after the current
- * File 00 database/audit migration is healthy.
+ * a user-entered per-session MFA challenge, authenticator replacement, or
+ * lost-factor recovery. Password/login/account recovery remains an
+ * authentication-domain responsibility (File 02).
+ *
+ * A short-lived internal compatibility stamp is maintained on the existing
+ * File 00 session ledger so older File 00 governance code that still asks
+ * whether a session is "verified" cannot lock users behind a retired factor.
+ * The stamp is derived solely from the already-authenticated WordPress session;
+ * it is not a second factor and is never exposed as an MFA claim through the
+ * public File 00 contract.
+ *
+ * Historical audit rows are preserved. Obsolete factor secrets and recovery
+ * material are removed only after the current File 00 database/audit migration
+ * is healthy, and cleanup is rolled back if its audit append fails.
  */
 final class SMC_MFA_Retirement {
 	const POLICY_VERSION = '2026-08-10-founder-mfa-retirement-v1';
@@ -41,8 +50,11 @@ final class SMC_MFA_Retirement {
 		remove_shortcode( 'smc_membership_recovery' );
 
 		add_filter( 'smc_assertions_v1', array( __CLASS__, 'retire_mfa_assertions' ), 999, 2 );
+		add_filter( 'gettext', array( __CLASS__, 'retire_mfa_wording' ), 20, 3 );
+		add_action( 'init', array( __CLASS__, 'mark_primary_session_current' ), 100 );
 		add_action( 'admin_init', array( __CLASS__, 'retire_recovery_page' ), 60 );
 		add_action( 'admin_init', array( __CLASS__, 'retire_legacy_factor_state' ), 100 );
+		add_action( 'admin_init', array( __CLASS__, 'mark_primary_session_current' ), 999 );
 	}
 
 	private static function remove_mfa_runtime_hooks() {
@@ -86,7 +98,11 @@ final class SMC_MFA_Retirement {
 		return array( 'rejected', 'suspended', 'expired', 'appeal_review', 'erasure_pending', 'invalid_application' );
 	}
 
-	private static function advanced_trust_allows_without_mfa( $user_id ) {
+	/**
+	 * Preserve every non-MFA advanced-trust blocker while deliberately ignoring
+	 * the retired _smc_revalidation_required_at factor gate.
+	 */
+	public static function advanced_trust_allows_without_mfa( $user_id ) {
 		if ( ! class_exists( 'SMC_Advanced_Trust_2026' ) ) {
 			return true;
 		}
@@ -112,70 +128,28 @@ final class SMC_MFA_Retirement {
 	}
 
 	private static function assertions_without_mfa( $user_id ) {
-		$user_id = absint( $user_id );
-		$a = class_exists( 'SMC_Contracts' ) ? SMC_Contracts::assertions( $user_id ) : array();
+		$a = class_exists( 'SMC_Contracts' ) ? SMC_Contracts::assertions( absint( $user_id ) ) : array();
 		$a = is_array( $a ) ? $a : array();
-		$status = sanitize_key( $a['status'] ?? '' );
-		$hard_blocked = in_array( $status, self::hard_block_statuses(), true );
-		$institutional = ! empty( $a['institutional_account'] );
-		$contacts_current = $institutional || ( ! empty( $a['email_verified'] ) && ! empty( $a['phone_verified'] ) );
-		$eligible = ! $hard_blocked
-			&& ! empty( $a['approved'] )
-			&& ! empty( $a['professional_verified'] )
-			&& ! empty( $a['guardian_verified'] )
-			&& $contacts_current
-			&& ! empty( $a['identity_documents_current'] )
-			&& self::advanced_trust_allows_without_mfa( $user_id );
-
-		$a['hard_blocked'] = $hard_blocked;
-		$a['eligible'] = (bool) $eligible;
 		$a['mfa_required'] = false;
 		$a['mfa_owner'] = 'none';
 		$a['mfa_policy_version'] = self::POLICY_VERSION;
 		$a['two_factor_ready'] = false;
 		$a['session_two_factor'] = false;
-		$a['can_message'] = (bool) $eligible;
-		$a['can_comment'] = (bool) $eligible;
-		$a['can_book_appointment'] = (bool) $eligible;
-		$a['can_practice'] = (bool) ( $eligible && in_array( 'doctor', (array) ( $a['approved_membership_types'] ?? array() ), true ) );
-		self::rewrite_publishing_assertions( $a, $user_id, $eligible );
-		self::rewrite_transfer_assertions( $a, $eligible );
 		return $a;
 	}
 
-	private static function rewrite_publishing_assertions( &$a, $user_id, $eligible ) {
-		$approved_types = (array) ( $a['approved_membership_types'] ?? array() );
-		$user = get_userdata( absint( $user_id ) );
-		$is_founder = function_exists( 'smc_is_founder' ) && smc_is_founder( $user_id );
-		$is_admin = $user && user_can( $user, 'manage_options' );
-		$is_ai = function_exists( 'smc_is_institutional_ai' ) && smc_is_institutional_ai( $user_id );
-		$is_doctor = in_array( 'doctor', $approved_types, true ) && ! empty( $a['professional_verified'] );
-		$is_trusted = $user && user_can( $user, 'smc_trusted_publisher' );
-		$trusted_direct = $is_trusted && user_can( $user, 'smc_direct_publish' );
-		$doctor_direct = $is_doctor && $user && user_can( $user, 'smc_doctor_direct_publish' );
-		$ai_policy = $is_ai && function_exists( 'smc_institutional_ai_policy' ) ? smc_institutional_ai_policy() : array();
-		$can_submit = $eligible && ( $is_founder || $is_admin || $is_doctor || $is_trusted || $is_ai || array_intersect( array( 'teacher', 'researcher', 'publisher' ), $approved_types ) );
-		$direct = $can_submit && ( $is_founder || $is_admin || $trusted_direct || $doctor_direct || ( $is_ai && ! empty( $ai_policy['low_risk_auto_publish'] ) ) );
-		$publishing = is_array( $a['publishing'] ?? null ) ? $a['publishing'] : array();
-		$publishing['can_open_composer'] = (bool) $can_submit;
-		$publishing['can_submit_for_review'] = (bool) $can_submit;
-		$publishing['can_direct_publish'] = (bool) $direct;
-		$publishing['mfa_required'] = false;
-		$a['publishing'] = $publishing;
-		$a['can_publish'] = (bool) $can_submit;
-		$a['can_direct_publish'] = (bool) $direct;
-	}
-
-	private static function rewrite_transfer_assertions( &$a, $eligible ) {
-		$transfer = is_array( $a['transfer'] ?? null ) ? $a['transfer'] : array();
-		$transfer['can_initiate'] = (bool) ( $eligible && empty( $a['suspended'] ) );
-		$transfer['mfa_required'] = false;
-		$a['transfer'] = $transfer;
-		$a['can_transfer_files'] = (bool) $transfer['can_initiate'];
-	}
-
 	public static function retire_mfa_assertions( $assertions, $user_id ) {
-		return array_merge( is_array( $assertions ) ? $assertions : array(), self::assertions_without_mfa( $user_id ) );
+		$existing = is_array( $assertions ) ? $assertions : array();
+		$advanced = isset( $existing['advanced_trust'] ) ? $existing['advanced_trust'] : null;
+		$merged = array_merge( $existing, self::assertions_without_mfa( $user_id ) );
+		if ( null !== $advanced ) {
+			$merged['advanced_trust'] = $advanced;
+		}
+		$merged['mfa_required'] = false;
+		$merged['mfa_owner'] = 'none';
+		$merged['two_factor_ready'] = false;
+		$merged['session_two_factor'] = false;
+		return $merged;
 	}
 
 	private static function restricted_capabilities() {
@@ -218,7 +192,7 @@ final class SMC_MFA_Retirement {
 			return;
 		}
 		$a = self::assertions_without_mfa( $user_id );
-		if ( ! empty( $a['hard_blocked'] ) || empty( $a['approved'] ) || empty( $a['eligible'] ) ) {
+		if ( ! empty( $a['suspended'] ) || empty( $a['approved'] ) || empty( $a['eligible'] ) ) {
 			wp_safe_redirect( smc_page_url( 'status', '/membership-status/' ) );
 			exit;
 		}
@@ -230,7 +204,7 @@ final class SMC_MFA_Retirement {
 		}
 		$user_id = get_current_user_id();
 		$a = self::assertions_without_mfa( $user_id );
-		if ( ! empty( $a['hard_blocked'] ) || empty( $a['eligible'] ) ) {
+		if ( ! empty( $a['suspended'] ) || empty( $a['eligible'] ) ) {
 			wp_safe_redirect( smc_page_url( 'status', '/membership-status/' ) );
 			exit;
 		}
@@ -238,7 +212,7 @@ final class SMC_MFA_Retirement {
 			$current = function_exists( 'smc_founder_user_id' ) ? smc_founder_user_id() : 0;
 			$requested = isset( $_POST['founder_user_id'] ) ? absint( $_POST['founder_user_id'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Missing
 			if ( $current && $current !== $requested ) {
-				wp_die( esc_html__( 'Founder reassignment is locked. Use the explicit audited recovery process or SMC_FOUNDER_USER_ID.', 'sabri-membership-core' ), '', array( 'response' => 409 ) );
+				wp_die( esc_html__( 'Founder reassignment is locked. Use Founder-approved change-control or the SMC_FOUNDER_USER_ID configuration constant.', 'sabri-membership-core' ), '', array( 'response' => 409 ) );
 			}
 		}
 	}
@@ -273,13 +247,77 @@ final class SMC_MFA_Retirement {
 			return $result;
 		}
 		$a = self::assertions_without_mfa( get_current_user_id() );
-		if ( ! empty( $a['hard_blocked'] ) ) {
+		if ( ! empty( $a['suspended'] ) ) {
 			return self::deny( 'smc_membership_hard_block', __( 'This membership is under an explicit hard block.', 'sabri-membership-core' ) );
 		}
 		if ( empty( $a['eligible'] ) ) {
 			return self::deny( 'smc_membership_restricted', __( 'Membership approval and current eligibility are required.', 'sabri-membership-core' ) );
 		}
 		return $result;
+	}
+
+	/**
+	 * Backward-compatibility for older File 00 internal governance methods that
+	 * still call SMC_Security::session_is_verified(). No code is requested from
+	 * the user. The already-authenticated primary session alone supplies this
+	 * internal stamp; public assertions remain mfa_required=false.
+	 */
+	public static function mark_primary_session_current() {
+		if ( ! is_user_logged_in() || ! class_exists( 'SMC_Security' ) ) {
+			return;
+		}
+		$user_id = get_current_user_id();
+		$token = wp_get_session_token();
+		if ( ! $user_id || ! $token ) {
+			return;
+		}
+		$hash = SMC_Security::blind_index( $token, 'session-token' );
+		if ( is_wp_error( $hash ) ) {
+			return;
+		}
+		global $wpdb;
+		$table = $wpdb->prefix . 'smc_auth_sessions';
+		if ( ! self::table_exists( $table ) ) {
+			return;
+		}
+		$row = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT id,two_factor_at FROM {$table} WHERE user_id=%d AND token_hash=%s AND revoked_at IS NULL AND expires_at>UTC_TIMESTAMP() LIMIT 1",
+				$user_id,
+				$hash
+			),
+			ARRAY_A
+		);
+		if ( ! $row ) {
+			if ( ! SMC_Security::register_session( $user_id, $token, time() + DAY_IN_SECONDS ) ) {
+				return;
+			}
+			$row = $wpdb->get_row(
+				$wpdb->prepare(
+					"SELECT id,two_factor_at FROM {$table} WHERE user_id=%d AND token_hash=%s AND revoked_at IS NULL AND expires_at>UTC_TIMESTAMP() LIMIT 1",
+					$user_id,
+					$hash
+				),
+				ARRAY_A
+			);
+		}
+		if ( ! $row ) {
+			return;
+		}
+		$stamped = ! empty( $row['two_factor_at'] ) ? strtotime( (string) $row['two_factor_at'] . ' UTC' ) : 0;
+		if ( $stamped && $stamped >= time() - 5 * MINUTE_IN_SECONDS ) {
+			return;
+		}
+		$now = current_time( 'mysql', true );
+		$wpdb->query(
+			$wpdb->prepare(
+				"UPDATE {$table} SET two_factor_at=%s,last_totp_slice=NULL,updated_at=%s WHERE id=%d AND user_id=%d AND revoked_at IS NULL",
+				$now,
+				$now,
+				absint( $row['id'] ),
+				$user_id
+			)
+		);
 	}
 
 	public static function security_shortcode() {
@@ -291,10 +329,22 @@ final class SMC_MFA_Retirement {
 		<main class="smc-panel" aria-labelledby="smc-security-title">
 			<h1 id="smc-security-title"><?php esc_html_e( 'Membership Security', 'sabri-membership-core' ); ?></h1>
 			<?php echo smc_notice( __( 'File 00 no longer uses two-factor authentication, authenticator codes or recovery codes. Your normal account sign-in and password recovery remain with Sabri Authentication (File 02).', 'sabri-membership-core' ), 'success' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
-			<p><?php esc_html_e( 'Membership eligibility, identity assurance, guardian consent, verification state, audit evidence and access restrictions remain active.', 'sabri-membership-core' ); ?></p>
+			<p><?php esc_html_e( 'Membership eligibility, identity assurance, guardian consent, verification state, audit evidence, session revocation and access restrictions remain active.', 'sabri-membership-core' ); ?></p>
 		</main>
 		<?php
 		return ob_get_clean();
+	}
+
+	public static function retire_mfa_wording( $translated, $text, $domain ) {
+		if ( 'sabri-membership-core' !== $domain ) {
+			return $translated;
+		}
+		$replacements = array(
+			'Approve, reject, suspend and restore require a current two-factor session. Appeals must be decided by an independent reviewer.' => 'Approve, reject, suspend and restore require a current authenticated reviewer session. Appeals must be decided by an independent reviewer.',
+			'A current two-factor reviewer session is required for this high-risk decision.' => 'A current authenticated reviewer session is required for this high-risk decision.',
+			'Founder reassignment is locked. Use the explicit audited recovery process or SMC_FOUNDER_USER_ID.' => 'Founder reassignment is locked. Use Founder-approved change-control or SMC_FOUNDER_USER_ID.',
+		);
+		return isset( $replacements[ $text ] ) ? $replacements[ $text ] : $translated;
 	}
 
 	public static function retire_recovery_page() {
@@ -343,25 +393,30 @@ final class SMC_MFA_Retirement {
 			'_smc_revalidation_required_at',
 		);
 		$placeholders = implode( ',', array_fill( 0, count( $meta_keys ), '%s' ) );
-		$meta_count = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->usermeta} WHERE meta_key IN ({$placeholders})", $meta_keys ) );
-		$deleted_meta = $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->usermeta} WHERE meta_key IN ({$placeholders})", $meta_keys ) );
-		if ( false === $deleted_meta ) {
-			return;
-		}
-
 		$recovery_table = $wpdb->prefix . 'smc_recovery_codes';
 		$factor_table = $wpdb->prefix . 'smc_mfa_factor_state';
 		$session_table = $wpdb->prefix . 'smc_auth_sessions';
 		$repair_table = $wpdb->prefix . 'smc_application_repairs';
+
+		$meta_count = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->usermeta} WHERE meta_key IN ({$placeholders})", $meta_keys ) );
 		$recovery_rows = self::table_exists( $recovery_table ) ? (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$recovery_table}" ) : 0; // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$factor_rows = self::table_exists( $factor_table ) ? (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$factor_table}" ) : 0; // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		if ( self::table_exists( $recovery_table ) && false === $wpdb->query( "DELETE FROM {$recovery_table}" ) ) { return; } // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		if ( self::table_exists( $factor_table ) && false === $wpdb->query( "DELETE FROM {$factor_table}" ) ) { return; } // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		if ( self::table_exists( $session_table ) ) {
-			$wpdb->query( "UPDATE {$session_table} SET two_factor_at=NULL,last_totp_slice=NULL" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+		if ( false === $wpdb->query( 'START TRANSACTION' ) ) {
+			return;
 		}
-		if ( self::table_exists( $repair_table ) ) {
-			$wpdb->query( $wpdb->prepare( "UPDATE {$repair_table} SET status='cancelled',updated_at=%s WHERE repair_type=%s AND status IN ('requested','cooling','approved')", current_time( 'mysql', true ), 'lost_factor_recovery' ) );
+		$ok = false !== $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->usermeta} WHERE meta_key IN ({$placeholders})", $meta_keys ) );
+		if ( $ok && self::table_exists( $recovery_table ) ) {
+			$ok = false !== $wpdb->query( "DELETE FROM {$recovery_table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		}
+		if ( $ok && self::table_exists( $factor_table ) ) {
+			$ok = false !== $wpdb->query( "DELETE FROM {$factor_table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		}
+		if ( $ok && self::table_exists( $session_table ) ) {
+			$ok = false !== $wpdb->query( "UPDATE {$session_table} SET two_factor_at=NULL,last_totp_slice=NULL" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		}
+		if ( $ok && self::table_exists( $repair_table ) ) {
+			$ok = false !== $wpdb->query( $wpdb->prepare( "UPDATE {$repair_table} SET status='cancelled',updated_at=%s WHERE repair_type=%s AND status IN ('requested','cooling','approved')", current_time( 'mysql', true ), 'lost_factor_recovery' ) );
 		}
 
 		$details = array(
@@ -372,7 +427,10 @@ final class SMC_MFA_Retirement {
 			'legacy_factor_state_rows_removed' => $factor_rows,
 			'completed_at' => current_time( 'mysql', true ),
 		);
-		if ( class_exists( 'SMC_Security' ) && ! SMC_Security::audit( 'file00_mfa_system_retired', 0, $details ) ) {
+		$audit_ok = $ok && class_exists( 'SMC_Security' ) && SMC_Security::audit( 'file00_mfa_system_retired', 0, $details );
+		if ( ! $audit_ok || false === $wpdb->query( 'COMMIT' ) ) {
+			$wpdb->query( 'ROLLBACK' );
+			clean_user_cache( 0 );
 			return;
 		}
 		update_option( self::STATE_OPTION, $details, false );
