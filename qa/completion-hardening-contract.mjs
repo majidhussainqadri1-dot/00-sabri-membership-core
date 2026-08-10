@@ -66,3 +66,6 @@ if (failures.length) {
   process.exit(1);
 }
 console.log(`completion hardening contract: ${passed} PASS, 0 FAIL`);
+
+if (events.includes("'age', 'type'")) throw new Error('cross-file event payload must not allow exact age');
+if (!events.includes("'age_band', 'type'")) throw new Error('cross-file event payload must allow privacy-minimal age_band');

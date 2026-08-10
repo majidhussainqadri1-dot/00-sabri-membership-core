@@ -48,7 +48,7 @@ final class SMC_Events {
 	private static function minimal_payload( $details ) {
 		$details = is_array( $details ) ? $details : array();
 		$allowed = array(
-			'age', 'type', 'guardian_required', 'applicant_version', 'status', 'old_status', 'new_status',
+			'age_band', 'type', 'guardian_required', 'applicant_version', 'status', 'old_status', 'new_status',
 			'document_key', 'version', 'channel', 'reason_code', 'scope', 'source_version', 'policy_version',
 			'contract_version', 'queue_type', 'trace_id', 'role_types',
 		);
