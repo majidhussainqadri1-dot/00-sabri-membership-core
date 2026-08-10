@@ -3,7 +3,7 @@
  * Plugin Name: Sabri Membership Core
  * Plugin URI: https://github.com/majidhussainqadri1-dot/00-sabri-membership-core
  * Description: Canonical membership eligibility, identity assurance, guardian consent, security assertions, and verification governance for the Sabri Social Homeopathy Platform.
- * Version: 1.2.35
+ * Version: 1.2.36
  * Requires at least: 6.4
  * Requires PHP: 7.4
  * Author: Dr. Allamah Majid Hussain Sabri Muhaddith Mursheed
@@ -13,7 +13,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'SMC_VERSION', '1.2.35' );
+define( 'SMC_VERSION', '1.2.36' );
 define( 'SMC_DB_VERSION', '1.4.4' );
 define( 'SMC_CONTRACT_VERSION', '1.2.2' );
 define( 'SMC_CF01_CONTRACT_VERSION', '1.1.0' );
@@ -24,6 +24,7 @@ define( 'SMC_URL', plugin_dir_url( __FILE__ ) );
 
 require_once SMC_PATH . 'includes/functions.php';
 require_once SMC_PATH . 'includes/class-smc-installer.php';
+require_once SMC_PATH . 'includes/class-smc-schema-compat.php';
 require_once SMC_PATH . 'includes/class-smc-host-compat.php';
 require_once SMC_PATH . 'includes/class-smc-security.php';
 require_once SMC_PATH . 'includes/class-smc-events.php';
@@ -141,7 +142,11 @@ add_action(
 			if ( is_wp_error( $key_ready ) ) { throw new RuntimeException( $key_ready->get_error_message() ); }
 			$audit_ready = SMC_Installer::ensure_audit_infrastructure();
 			if ( is_wp_error( $audit_ready ) ) { throw new RuntimeException( $audit_ready->get_error_code() . ': ' . $audit_ready->get_error_message() ); }
+			SMC_Schema_Compat::reconcile_verification_queue_index();
 			SMC_Installer::maybe_upgrade();
+			if ( SMC_DB_VERSION === (string) get_option( 'smc_db_version', '' ) ) {
+				SMC_Schema_Compat::assert_current_queue_indexes();
+			}
 		} catch ( Throwable $error ) {
 			smc_record_bootstrap_failure( 'deferred_upgrade', $error );
 			return;
