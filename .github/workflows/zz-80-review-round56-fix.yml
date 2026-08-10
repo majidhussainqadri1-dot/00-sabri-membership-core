@@ -1,0 +1,54 @@
+name: File 00 80-Review Round 56 Immediate Fix
+
+on:
+  push:
+    branches: [audit/80-round-review-v1.2.40]
+    paths: [.github/workflows/zz-80-review-round56-fix.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-round-56:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: audit/80-round-review-v1.2.40
+          fetch-depth: 0
+      - name: Remove exact age from cross-file event allowlist
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('source/sabri-membership-core/includes/class-smc-events.php')
+          s=p.read_text()
+          old="\t\t\t'age', 'type', 'guardian_required', 'applicant_version', 'status', 'old_status', 'new_status',\n"
+          new="\t\t\t'age_band', 'type', 'guardian_required', 'applicant_version', 'status', 'old_status', 'new_status',\n"
+          if old not in s: raise SystemExit('event minimal payload age allowlist not found')
+          p.write_text(s.replace(old,new))
+          q=Path('qa/completion-hardening-contract.mjs')
+          if q.exists():
+              t=q.read_text()
+              add="\nif (events.includes(\"'age', 'type'\")) throw new Error('cross-file event payload must not allow exact age');\nif (!events.includes(\"'age_band', 'type'\")) throw new Error('cross-file event payload must allow privacy-minimal age_band');\n"
+              if 'cross-file event payload must not allow exact age' not in t:
+                  if "const events" not in t:
+                      t=t.replace("const completion = fs.readFileSync", "const events = fs.readFileSync(`${root}/includes/class-smc-events.php`, 'utf8');\nconst completion = fs.readFileSync")
+                  t += add
+                  q.write_text(t)
+          PY
+      - name: Verify round 56 correction
+        run: |
+          set -euo pipefail
+          php -l source/sabri-membership-core/includes/class-smc-events.php
+          ! grep -q "'age', 'type'" source/sabri-membership-core/includes/class-smc-events.php
+          grep -q "'age_band', 'type'" source/sabri-membership-core/includes/class-smc-events.php
+          git diff --check
+      - name: Commit immediate round 56 correction
+        run: |
+          git config user.name 'File 00 QA Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add source/sabri-membership-core/includes/class-smc-events.php
+          test ! -f qa/completion-hardening-contract.mjs || git add qa/completion-hardening-contract.mjs
+          git commit -m 'Round 56: minimize age in durable cross-file events'
+          git push origin HEAD:audit/80-round-review-v1.2.40
