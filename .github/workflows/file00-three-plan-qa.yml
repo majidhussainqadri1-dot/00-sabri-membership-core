@@ -1,4 +1,4 @@
-name: File 00 1.2.37 Current + Historical Audit-Key Transition QA
+name: File 00 1.2.38 Current + Historical Audit-Key Transition QA
 
 on:
   pull_request:
@@ -38,21 +38,22 @@ jobs:
       - name: Exact current release and retained governing traceability
         run: |
           set -euo pipefail
-          grep -Fq 'Version: 1.2.37' source/sabri-membership-core/sabri-membership-core.php
-          grep -Fq '"version": "1.2.37"' package.json
-          test "$(node -p "require('./package-lock.json').version")" = '1.2.37'
-          test "$(node -p "require('./package-lock.json').packages[''].version")" = '1.2.37'
+          grep -Fq 'Version: 1.2.38' source/sabri-membership-core/sabri-membership-core.php
+          grep -Fq '"version": "1.2.38"' package.json
+          test "$(node -p "require('./package-lock.json').version")" = '1.2.38'
+          test "$(node -p "require('./package-lock.json').packages[''].version")" = '1.2.38'
           grep -Fq "define( 'SMC_DB_VERSION', '1.4.4' )" source/sabri-membership-core/sabri-membership-core.php
           grep -Fq "define( 'SMC_CONTRACT_VERSION', '1.2.2' )" source/sabri-membership-core/sabri-membership-core.php
           grep -Fq "define( 'SMC_ADVANCED_TRUST_CONTRACT_VERSION', '1.0.0' )" source/sabri-membership-core/sabri-membership-core.php
           node qa/fifth-fresh-review-contract.mjs
           php qa/fifth-fresh-review-runtime.php
           node qa/mfa-retirement-contract.mjs
-          test -f dist/00-sabri-membership-core-1.2.37.zip
+          test -f dist/00-sabri-membership-core-1.2.38.zip
           test -z "$(git ls-files 'dist/*')"
-          grep -Fq 'Runtime implementation release: `1.2.37`' docs/FILE-00-MASTER-PLAN-2026.md
+          grep -Fq 'Runtime implementation release: `1.2.38`' docs/FILE-00-MASTER-PLAN-2026.md
           grep -Fq 'Founder change-control' docs/FILE-00-MASTER-PLAN-2026.md
-          grep -Fq 'Live-proven schema compatibility correction — 1.2.37' docs/FILE-00-MASTER-PLAN-2026.md
+          grep -Fq 'Live-proven institutional Administrator role-backfill correction — 1.2.38' docs/FILE-00-MASTER-PLAN-2026.md
+          test -f RELEASE-1.2.38.md
           test -f RELEASE-1.2.37.md
           test -f RELEASE-1.2.36.md
           test -f RELEASE-1.2.35.md
@@ -87,10 +88,11 @@ jobs:
           test ! -e .github/workflows/apply-fifth-round10-fix.yml
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: 00-sabri-membership-core-1.2.37-${{ github.sha }}
+          name: 00-sabri-membership-core-1.2.38-${{ github.sha }}
           path: |
-            dist/00-sabri-membership-core-1.2.37.zip
+            dist/00-sabri-membership-core-1.2.38.zip
             dist/CHECKSUMS.sha256
+            RELEASE-1.2.38.md
             RELEASE-1.2.37.md
             RELEASE-1.2.36.md
             RELEASE-1.2.35.md
