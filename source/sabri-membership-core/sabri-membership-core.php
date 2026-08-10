@@ -16,7 +16,7 @@ defined( 'ABSPATH' ) || exit;
 define( 'SMC_VERSION', '1.2.35' );
 define( 'SMC_DB_VERSION', '1.4.4' );
 define( 'SMC_CONTRACT_VERSION', '1.2.2' );
-define( 'SMC_CF01_CONTRACT_VERSION', '1.0.0' );
+define( 'SMC_CF01_CONTRACT_VERSION', '1.1.0' );
 define( 'SMC_ADVANCED_TRUST_CONTRACT_VERSION', '1.0.0' );
 define( 'SMC_FILE', __FILE__ );
 define( 'SMC_PATH', plugin_dir_path( __FILE__ ) );
@@ -124,7 +124,6 @@ add_action(
 				smc_record_bootstrap_failure( strtolower( $initializer[0] . '_' . $initializer[1] ), $error );
 				break;
 			}
-		}
 	},
 	20
 );
