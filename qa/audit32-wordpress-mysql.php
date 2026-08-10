@@ -22,7 +22,7 @@ $check    = static function ( $condition, $label ) use ( &$failures, &$passed ) 
 };
 
 global $wpdb;
-$check( defined( 'SMC_VERSION' ) && '1.2.36' === SMC_VERSION, 'runtime 1.2.36 loaded in real WordPress' );
+$check( defined( 'SMC_VERSION' ) && '1.2.37' === SMC_VERSION, 'runtime 1.2.37 loaded in real WordPress' );
 $check( defined( 'SMC_DB_VERSION' ) && '1.4.4' === SMC_DB_VERSION, 'database contract 1.4.4 loaded' );
 $check( class_exists( 'SMC_Security' ) && class_exists( 'SMC_Installer' ) && class_exists( 'SMC_Schema_Compat' ), 'File 00 runtime classes loaded' );
 
@@ -34,7 +34,7 @@ foreach ( $tables as $table ) {
 }
 
 SMC_Schema_Compat::assert_current_queue_indexes();
-$check( true, 'critical queue indexes match current schema' );
+$check( true, 'critical queue and approval decision indexes match current schema' );
 
 $guardian_table = $wpdb->prefix . 'smc_guardian_consents';
 $vote_table     = $wpdb->prefix . 'smc_approval_votes';
