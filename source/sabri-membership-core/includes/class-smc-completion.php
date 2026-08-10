@@ -242,16 +242,24 @@ final class SMC_Completion {
 				continue;
 			}
 			$details = json_decode( (string) $row['details'], true );
-			$resolved = (bool) apply_filters( 'smc_repair_application_item', false, $row, is_array( $details ) ? $details : array() );
-			if ( ! $resolved && 'application_document_incomplete' === $row['repair_type'] ) { $resolved = self::application_documents_complete( (int) $row['user_id'] ); }
-			if ( ! $resolved && 'membership_effects_reconciliation' === $row['repair_type'] ) { $resolved = self::reconcile_membership_effects( (int) $row['user_id'] ); }
-			if ( ! $resolved && 'advanced_trust_transition' === $row['repair_type'] && class_exists( 'SMC_Advanced_Trust_2026' ) ) { $resolved = SMC_Advanced_Trust_2026::repair_transition_hold( (int) $row['user_id'] ); }
+			$resolved = false;
+			$repair_error = '';
+			try {
+				$resolved = (bool) apply_filters( 'smc_repair_application_item', false, $row, is_array( $details ) ? $details : array() );
+				if ( ! $resolved && 'application_document_incomplete' === $row['repair_type'] ) { $resolved = self::application_documents_complete( (int) $row['user_id'] ); }
+				if ( ! $resolved && 'membership_effects_reconciliation' === $row['repair_type'] ) { $resolved = self::reconcile_membership_effects( (int) $row['user_id'] ); }
+				if ( ! $resolved && 'advanced_trust_transition' === $row['repair_type'] && class_exists( 'SMC_Advanced_Trust_2026' ) ) { $resolved = SMC_Advanced_Trust_2026::repair_transition_hold( (int) $row['user_id'] ); }
+			} catch ( Throwable $error ) {
+				$resolved = false;
+				$repair_error = 'Repair adapter raised an exception; retry is required.';
+			}
 			if ( $resolved ) {
 				$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_application_repairs SET status='complete',last_error=NULL,resolved_at=%s,updated_at=%s WHERE id=%d AND status='processing'", current_time( 'mysql', true ), current_time( 'mysql', true ), (int) $row['id'] ) );
 			} else {
 				$attempts = (int) $row['attempts'] + 1;
 				$status = $attempts >= 10 ? 'dead_letter' : 'retry';
-				$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_application_repairs SET status=%s,next_attempt_at=%s,last_error=%s,updated_at=%s WHERE id=%d AND status='processing'", $status, gmdate( 'Y-m-d H:i:s', time() + min( DAY_IN_SECONDS, (int) pow( 2, min( 10, $attempts ) ) * MINUTE_IN_SECONDS ) ), 'The repair condition is still unresolved.', current_time( 'mysql', true ), (int) $row['id'] ) );
+				$last_error = '' !== $repair_error ? $repair_error : 'The repair condition is still unresolved.';
+				$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_application_repairs SET status=%s,next_attempt_at=%s,last_error=%s,updated_at=%s WHERE id=%d AND status='processing'", $status, gmdate( 'Y-m-d H:i:s', time() + min( DAY_IN_SECONDS, (int) pow( 2, min( 10, $attempts ) ) * MINUTE_IN_SECONDS ) ), $last_error, current_time( 'mysql', true ), (int) $row['id'] ) );
 			}
 		}
 	}
