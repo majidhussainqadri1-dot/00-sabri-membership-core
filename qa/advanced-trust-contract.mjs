@@ -2,9 +2,10 @@ import fs from 'node:fs';
 const cls = fs.readFileSync('source/sabri-membership-core/includes/class-smc-advanced-trust-2026.php','utf8');
 const main = fs.readFileSync('source/sabri-membership-core/sabri-membership-core.php','utf8');
 const contracts = fs.readFileSync('source/sabri-membership-core/includes/class-smc-contracts.php','utf8');
+const retirement = fs.readFileSync('source/sabri-membership-core/includes/class-smc-mfa-retirement.php','utf8');
 const trace = JSON.parse(fs.readFileSync('qa/advanced-trust-traceability.json','utf8'));
 const checks = [
-  ['runtime 1.2.34', main.includes('Version: 1.2.34') && main.includes("SMC_VERSION', '1.2.34")],
+  ['runtime 1.2.35', main.includes('Version: 1.2.35') && main.includes("SMC_VERSION', '1.2.35")],
   ['advanced contract constant', main.includes("SMC_ADVANCED_TRUST_CONTRACT_VERSION', '1.0.0")],
   ['advanced class loaded', main.includes("class-smc-advanced-trust-2026.php") && main.includes("array( 'SMC_Advanced_Trust_2026', 'init' )")],
   ['EXT-001 assurance levels', cls.includes('F00-EXT-001') && cls.includes('identity_assurance_level')],
@@ -30,7 +31,7 @@ const checks = [
   ['actor binding prevents confused deputy', cls.includes('actor_can_change_subject') && cls.includes('get_current_user_id() !== $actor_id')],
   ['reverification and merge-finalizing directly block protected actions', cls.includes("'_smc_reverification_required'") && cls.includes("'finalizing' === ( $merge['state']") && cls.includes('protected_actions_allowed')],
   ['containment strips sensitive caps', cls.includes('filter_capabilities') && cls.includes("$allcaps[ $cap ] = false")],
-  ['base assertions enforce containment directly', contracts.includes('SMC_Advanced_Trust_2026::protected_actions_allowed') && contracts.includes("$base['eligible'] = false")],
+  ['base assertions enforce containment through MFA-retirement compatibility boundary', contracts.includes('SMC_MFA_Retirement::advanced_trust_allows_without_mfa') && contracts.includes("$base['eligible'] = false") && retirement.includes('SMC_Advanced_Trust_2026') && retirement.includes('containment_state') && retirement.includes('continuity_state') && retirement.includes("'_smc_reverification_required'") && retirement.includes("'finalizing' === ( $merge['state']")],
   ['no parallel auth/pro/search owner', cls.includes('Authentication') && cls.includes('File 02') && cls.includes('File 09') && cls.includes('File 26')],
   ['public helper APIs', cls.includes('smc_advanced_trust_assertions') && cls.includes('smc_identity_assurance_profile') && cls.includes('smc_step_up_requirement') && cls.includes('smc_trust_timeline')],
   ['trace has all 20 extensions', Array.isArray(trace.requirements) && trace.requirements.length === 20 && trace.requirements.every((r,i)=>r.id===`F00-EXT-${String(i+1).padStart(3,'0')}` && r.coded===true && r.tested===true)],
