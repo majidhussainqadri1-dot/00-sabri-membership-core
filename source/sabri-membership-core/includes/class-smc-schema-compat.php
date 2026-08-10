@@ -10,6 +10,17 @@ defined( 'ABSPATH' ) || exit;
  */
 final class SMC_Schema_Compat {
 	/**
+	 * Register the preflight ahead of the scheduled legacy-migration callback.
+	 *
+	 * The normal administrator bootstrap invokes the same preflight explicitly.
+	 * This early cron hook closes the alternate `smc_continue_migration` entry
+	 * point so a scheduled retry cannot reach dbDelta with the stale named index.
+	 */
+	public static function init() {
+		add_action( 'smc_continue_migration', array( __CLASS__, 'reconcile_verification_queue_index' ), 1 );
+	}
+
+	/**
 	 * Reconcile the pre-queue_type verification queue index before dbDelta runs.
 	 *
 	 * Historical File 00 deployments can contain the non-unique BTREE index
