@@ -68,5 +68,5 @@ jobs:
           sha256sum source/sabri-membership-core/sabri-membership-core.php
       - name: Run inherited, CF-01, forty-round and MFA-retirement suites
         run: npm test
-      - name: Build and verify deterministic 1.2.35 package
+      - name: Build and verify deterministic 1.2.36 package
         run: npm run verify
