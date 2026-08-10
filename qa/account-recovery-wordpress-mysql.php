@@ -6,15 +6,15 @@
 
 global $wpdb;
 
-$mode = getenv( 'SMC_RECOVERY_TEST_MODE' ) ?: 'assert-request';
+$mode     = getenv( 'SMC_RECOVERY_TEST_MODE' ) ?: 'assert-request';
 $password = getenv( 'SMC_RECOVERY_TEST_PASSWORD' ) ?: 'Recovery-CI-Password!9';
-$user = get_user_by( 'login', 'founder' );
+$user     = get_user_by( 'login', 'founder' );
 if ( ! $user ) {
 	fwrite( STDERR, "founder fixture missing\n" );
 	exit( 70 );
 }
 $user_id = (int) $user->ID;
-$table = $wpdb->prefix . 'smc_application_repairs';
+$table   = $wpdb->prefix . 'smc_application_repairs';
 
 $assert = static function ( $condition, $message, $code = 71 ) {
 	if ( ! $condition ) {
@@ -23,21 +23,87 @@ $assert = static function ( $condition, $message, $code = 71 ) {
 	}
 };
 
+$ensure_admin = static function ( $login, $email ) use ( $assert ) {
+	$actor = get_user_by( 'login', $login );
+	if ( ! $actor ) {
+		$id = wp_insert_user(
+			array(
+				'user_login' => $login,
+				'user_pass'  => 'Recovery-Approver-Password!9',
+				'user_email' => $email,
+				'role'       => 'administrator',
+			)
+		);
+		$assert( ! is_wp_error( $id ), 'Could not create independent recovery approver fixture.', 94 );
+		$actor = get_userdata( (int) $id );
+	}
+	$actor->set_role( 'administrator' );
+	delete_user_meta( (int) $actor->ID, '_smc_revalidation_required_at' );
+	return $actor;
+};
+
+$verified_actor = static function ( $login ) use ( $assert, $wpdb ) {
+	$actor = get_user_by( 'login', $login );
+	$assert( $actor && user_can( $actor, 'manage_options' ), 'Approval actor must be an Administrator.', 95 );
+	$actor_id = (int) $actor->ID;
+	wp_set_current_user( $actor_id );
+	delete_user_meta( $actor_id, '_smc_revalidation_required_at' );
+
+	$expiration = time() + 2 * HOUR_IN_SECONDS;
+	$manager    = WP_Session_Tokens::get_instance( $actor_id );
+	$token      = $manager->create( $expiration );
+	$_COOKIE[ LOGGED_IN_COOKIE ] = wp_generate_auth_cookie( $actor_id, $expiration, 'logged_in', $token );
+	$hash = SMC_Security::blind_index( $token, 'session-token' );
+	$assert( ! is_wp_error( $hash ), 'Could not blind-index approver session token.', 96 );
+	$now = current_time( 'mysql', true );
+	$stored = $wpdb->query(
+		$wpdb->prepare(
+			"INSERT INTO {$wpdb->prefix}smc_auth_sessions (user_id,token_hash,expires_at,two_factor_at,last_totp_slice,ip_hash,device_hash,revoked_at,created_at,updated_at) VALUES (%d,%s,%s,%s,NULL,NULL,NULL,NULL,%s,%s) ON DUPLICATE KEY UPDATE expires_at=VALUES(expires_at),two_factor_at=VALUES(two_factor_at),revoked_at=NULL,updated_at=VALUES(updated_at)",
+			$actor_id,
+			$hash,
+			gmdate( 'Y-m-d H:i:s', $expiration ),
+			$now,
+			$now,
+			$now
+		)
+	);
+	$assert( false !== $stored, 'Could not persist MFA-verified approver session fixture.', 97 );
+	$assert( SMC_Security::session_is_verified( $actor_id ), 'Approver session must satisfy the real File 00 MFA-session verifier.', 98 );
+	return $actor;
+};
+
+$current_case = static function () use ( $wpdb, $table, $user_id ) {
+	return $wpdb->get_row(
+		$wpdb->prepare(
+			"SELECT * FROM {$table} WHERE user_id=%d AND repair_type=%s ORDER BY id DESC LIMIT 1",
+			$user_id,
+			'lost_factor_recovery'
+		),
+		ARRAY_A
+	);
+};
+
 if ( 'setup' === $mode ) {
 	$assert( SMC_DB_VERSION === get_option( 'smc_db_version', '' ), 'File 00 schema migration must be complete before recovery tests run.' );
 	$engine = (string) $wpdb->get_var( $wpdb->prepare( 'SELECT ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=%s', $table ) );
 	$assert( 'InnoDB' === $engine, 'Recovery case table must exist and use InnoDB.' );
 	update_option( 'smc_founder_user_id', $user_id, false );
 
+	$approver_a = $ensure_admin( 'recovery-approver-a', 'recovery-approver-a@example.test' );
+	$approver_b = $ensure_admin( 'recovery-approver-b', 'recovery-approver-b@example.test' );
+	$assert( (int) $approver_a->ID !== $user_id && (int) $approver_b->ID !== $user_id && (int) $approver_a->ID !== (int) $approver_b->ID, 'Recovery approvers must be distinct from each other and from the Founder.', 99 );
+
 	$wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE user_id=%d AND repair_type=%s", $user_id, 'lost_factor_recovery' ) );
 	$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->prefix}smc_recovery_codes WHERE user_id=%d", $user_id ) );
 	$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->prefix}smc_mfa_factor_state WHERE user_id=%d", $user_id ) );
-	$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->prefix}smc_auth_sessions WHERE user_id=%d", $user_id ) );
+	foreach ( array( $user_id, (int) $approver_a->ID, (int) $approver_b->ID ) as $session_user_id ) {
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->prefix}smc_auth_sessions WHERE user_id=%d", $session_user_id ) );
+	}
 	foreach ( array( '_smc_totp_secret_enc', '_smc_totp_secret', '_smc_2fa_enabled', '_smc_totp_pending_enc', '_smc_totp_pending_expires', '_smc_revalidation_required_at' ) as $key ) {
 		delete_user_meta( $user_id, $key );
 	}
 
-	$secret = SMC_Security::base32_secret();
+	$secret   = SMC_Security::base32_secret();
 	$envelope = SMC_Security::encrypt( $secret, 'totp-secret', array( 'user_id' => $user_id ) );
 	$assert( ! is_wp_error( $envelope ), 'TOTP fixture encryption failed.' );
 	update_user_meta( $user_id, '_smc_totp_secret_enc', $envelope );
@@ -72,7 +138,7 @@ if ( 'request' === $mode ) {
 if ( 'assert-request' === $mode ) {
 	$count = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE user_id=%d AND repair_type=%s AND status IN ('requested','cooling','approved')", $user_id, 'lost_factor_recovery' ) );
 	$assert( 1 === $count, 'Concurrent recovery requests must serialize to exactly one active case.', 72 );
-	$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE user_id=%d AND repair_type=%s ORDER BY id DESC LIMIT 1", $user_id, 'lost_factor_recovery' ), ARRAY_A );
+	$row     = $current_case();
 	$details = json_decode( (string) $row['details'], true );
 	$assert( is_array( $details ), 'Recovery details must be valid JSON.', 73 );
 	$assert( ! empty( $details['privileged'] ), 'Founder case must be privileged.', 74 );
@@ -86,18 +152,103 @@ if ( 'assert-request' === $mode ) {
 	return;
 }
 
-if ( 'approve-fixture' === $mode ) {
-	$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE user_id=%d AND repair_type=%s ORDER BY id DESC LIMIT 1", $user_id, 'lost_factor_recovery' ), ARRAY_A );
-	$assert( is_array( $row ), 'Recovery case missing before completion fixture.', 79 );
-	$details = json_decode( (string) $row['details'], true );
-	$details['ready_after'] = gmdate( 'Y-m-d H:i:s', time() - 60 );
-	$details['approvals'] = array(
-		array( 'actor_id' => 9001, 'evidence_type' => 'video', 'reference_hash' => hash( 'sha256', 'evidence-a' ), 'approved_at' => current_time( 'mysql', true ), 'evidence_version' => 'lost-factor-v1' ),
-		array( 'actor_id' => 9002, 'evidence_type' => 'in_person', 'reference_hash' => hash( 'sha256', 'evidence-b' ), 'approved_at' => current_time( 'mysql', true ), 'evidence_version' => 'lost-factor-v1' ),
+if ( 'self-approve' === $mode ) {
+	$verified_actor( 'founder' );
+	$row = $current_case();
+	$assert( is_array( $row ), 'Recovery case missing before self-approval adversarial test.', 100 );
+	$_POST = array(
+		'action'             => 'smc_account_recovery_approve',
+		'case_id'            => (int) $row['id'],
+		'evidence_type'      => 'video',
+		'evidence_reference' => 'founder-self-evidence-should-fail',
+		'attest'             => '1',
+		'smc_nonce'          => wp_create_nonce( 'smc_account_recovery_approve_' . (int) $row['id'] ),
 	);
-	$updated = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status='approved',details=%s,next_attempt_at=%s,updated_at=%s WHERE id=%d", wp_json_encode( $details ), $details['ready_after'], current_time( 'mysql', true ), (int) $row['id'] ) );
-	$assert( 1 === $updated, 'Approved completion fixture could not be prepared.', 80 );
-	fwrite( STDOUT, "account-recovery-wordpress-mysql completion fixture: PASS\n" );
+	$_REQUEST = $_POST;
+	SMC_Account_Recovery::handle_approve();
+	return;
+}
+
+if ( 'assert-self-rejected' === $mode ) {
+	$row     = $current_case();
+	$details = is_array( $row ) ? json_decode( (string) $row['details'], true ) : array();
+	$approvals = is_array( $details ) && isset( $details['approvals'] ) && is_array( $details['approvals'] ) ? $details['approvals'] : array();
+	$assert( 0 === count( $approvals ), 'Recovering Founder must never be able to approve the Founder recovery case.', 101 );
+	$audit_count = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}smc_audit_log WHERE action=%s", 'account_recovery_approval_recorded' ) );
+	$assert( 0 === $audit_count, 'Rejected self-approval must not create approval audit evidence.', 102 );
+	fwrite( STDOUT, "account-recovery-wordpress-mysql self-approval rejection: PASS\n" );
+	return;
+}
+
+if ( 'approve-a' === $mode || 'approve-b' === $mode ) {
+	$login     = 'approve-a' === $mode ? 'recovery-approver-a' : 'recovery-approver-b';
+	$type      = 'approve-a' === $mode ? 'video' : 'in_person';
+	$reference = 'approve-a' === $mode ? 'recovery-evidence-reference-alpha-001' : 'recovery-evidence-reference-beta-002';
+	$verified_actor( $login );
+	$row = $current_case();
+	$assert( is_array( $row ), 'Recovery case missing before real approval handler.', 103 );
+	$_POST = array(
+		'action'             => 'smc_account_recovery_approve',
+		'case_id'            => (int) $row['id'],
+		'evidence_type'      => $type,
+		'evidence_reference' => $reference,
+		'attest'             => '1',
+		'smc_nonce'          => wp_create_nonce( 'smc_account_recovery_approve_' . (int) $row['id'] ),
+	);
+	$_REQUEST = $_POST;
+	SMC_Account_Recovery::handle_approve();
+	return;
+}
+
+if ( 'assert-approval-one' === $mode ) {
+	$row     = $current_case();
+	$details = is_array( $row ) ? json_decode( (string) $row['details'], true ) : array();
+	$approvals = is_array( $details ) && isset( $details['approvals'] ) && is_array( $details['approvals'] ) ? $details['approvals'] : array();
+	$actor = get_user_by( 'login', 'recovery-approver-a' );
+	$assert( 1 === count( $approvals ), 'First real independent approval must be recorded exactly once.', 104 );
+	$assert( $actor && (int) $actor->ID === (int) $approvals[0]['actor_id'], 'First approval must be bound to the actual independent approver.', 105 );
+	$assert( 'cooling' === (string) $row['status'], 'One approval cannot approve a Founder recovery case.', 106 );
+	$assert( 64 === strlen( (string) ( $approvals[0]['reference_hash'] ?? '' ) ), 'Evidence reference must be persisted only as a keyed hash.', 107 );
+	$assert( false === strpos( (string) $row['details'], 'recovery-evidence-reference-alpha-001' ), 'Raw evidence reference must not be persisted.', 108 );
+	$audit_count = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}smc_audit_log WHERE action=%s", 'account_recovery_approval_recorded' ) );
+	$approved_event = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}smc_event_outbox WHERE event_type=%s", 'AccountRecoveryApproved' ) );
+	$assert( 1 === $audit_count && 0 === $approved_event, 'First approval must audit but must not emit final approval before dual control and cooling complete.', 109 );
+	fwrite( STDOUT, "account-recovery-wordpress-mysql first independent approval: PASS\n" );
+	return;
+}
+
+if ( 'elapse-cooling' === $mode ) {
+	$row = $current_case();
+	$assert( is_array( $row ), 'Recovery case missing before cooling-period simulation.', 110 );
+	$details = json_decode( (string) $row['details'], true );
+	$assert( is_array( $details ), 'Recovery details missing before cooling-period simulation.', 111 );
+	$details['ready_after'] = gmdate( 'Y-m-d H:i:s', time() - 60 );
+	$updated = $wpdb->query(
+		$wpdb->prepare(
+			"UPDATE {$table} SET details=%s,next_attempt_at=%s,updated_at=%s WHERE id=%d AND status='cooling'",
+			wp_json_encode( $details ),
+			$details['ready_after'],
+			current_time( 'mysql', true ),
+			(int) $row['id']
+		)
+	);
+	$assert( 1 === $updated, 'Cooling-period simulation could not advance the test clock.', 112 );
+	fwrite( STDOUT, "account-recovery-wordpress-mysql cooling simulation: PASS\n" );
+	return;
+}
+
+if ( 'assert-approved' === $mode ) {
+	$row     = $current_case();
+	$details = is_array( $row ) ? json_decode( (string) $row['details'], true ) : array();
+	$approvals = is_array( $details ) && isset( $details['approvals'] ) && is_array( $details['approvals'] ) ? $details['approvals'] : array();
+	$actors = array_map( static function ( $approval ) { return (int) ( $approval['actor_id'] ?? 0 ); }, $approvals );
+	$assert( 'approved' === (string) $row['status'], 'Second distinct real approval after cooling must transition the case to approved.', 113 );
+	$assert( 2 === count( array_unique( $actors ) ) && 2 === count( $approvals ), 'Founder recovery must contain exactly two distinct independent approvals.', 114 );
+	$assert( false === strpos( (string) $row['details'], 'recovery-evidence-reference-alpha-001' ) && false === strpos( (string) $row['details'], 'recovery-evidence-reference-beta-002' ), 'Raw out-of-band evidence references must never be persisted.', 115 );
+	$audit_count = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}smc_audit_log WHERE action=%s", 'account_recovery_approval_recorded' ) );
+	$event_count = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}smc_event_outbox WHERE event_type=%s", 'AccountRecoveryApproved' ) );
+	$assert( 2 === $audit_count && 1 === $event_count, 'Dual approval must produce two approval audit records and one final approval event.', 116 );
+	fwrite( STDOUT, "account-recovery-wordpress-mysql dual approval: PASS\n" );
 	return;
 }
 
@@ -118,7 +269,7 @@ if ( 'complete' === $mode ) {
 }
 
 if ( 'assert-complete' === $mode ) {
-	$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE user_id=%d AND repair_type=%s ORDER BY id DESC LIMIT 1", $user_id, 'lost_factor_recovery' ), ARRAY_A );
+	$row = $current_case();
 	$assert( is_array( $row ) && 'completed' === $row['status'], 'Approved recovery case must finish exactly once.', 82 );
 	$assert( ! metadata_exists( 'user', $user_id, '_smc_2fa_enabled' ), 'Old 2FA enabled flag must be removed.', 83 );
 	$assert( ! metadata_exists( 'user', $user_id, '_smc_totp_secret_enc' ), 'Old TOTP secret must be removed.', 84 );
