@@ -1,0 +1,31 @@
+name: File 00 80-Review Exact Snapshot
+
+on:
+  push:
+    branches: [audit/80-round-review-v1.2.40]
+    paths: [.github/workflows/zz-80-review-snapshot.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: audit/80-round-review-v1.2.40
+      - name: Build exact source snapshot
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/snapshot
+          cp -R source qa /tmp/snapshot/
+          cp package.json package-lock.json /tmp/snapshot/ 2>/dev/null || true
+          printf '%s\n' "$GITHUB_SHA" > /tmp/snapshot/HEAD.txt
+          cd /tmp && zip -qr file00-80-review-snapshot.zip snapshot
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: file00-80-review-snapshot
+          path: /tmp/file00-80-review-snapshot.zip
+          if-no-files-found: error
+          retention-days: 7
