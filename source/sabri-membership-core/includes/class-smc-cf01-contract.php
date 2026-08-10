@@ -2,15 +2,19 @@
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Privacy-minimal, server-side membership and second-factor provider contract
- * for CF-01. This class exposes assertions, never File 00 storage internals.
+ * Privacy-minimal, server-side membership-assurance provider contract for CF-01.
+ *
+ * Founder change-control dated 10 August 2026 retired File 00 MFA. This
+ * contract therefore exposes membership/identity prerequisites only. It does
+ * not verify TOTP, recovery codes, passkeys, passwords, or any other
+ * authentication factor. Stronger authentication assurance belongs to File 02
+ * or another explicitly approved authentication owner and must arrive through
+ * a separate versioned contract.
  */
 final class SMC_CF01_Contract {
 	const CONTRACT_NAME    = 'smc.cf01.membership-assurance';
-	const CONTRACT_VERSION = '1.0.0';
+	const CONTRACT_VERSION = '1.1.0';
 	const ASSERTION_TTL     = 60;
-	const STEP_UP_LIMIT     = 7;
-	const STEP_UP_WINDOW    = 900;
 
 	private static $actions = array(
 		'clinical_identity_link',
@@ -23,26 +27,8 @@ final class SMC_CF01_Contract {
 		'key_recovery',
 	);
 
-	private static $step_up_purposes = array(
-		'clinical_sign_in',
-		'prescription_sign',
-		'clinical_export',
-		'clinical_transfer',
-		'break_glass',
-		'guardian_sensitive',
-		'key_recovery',
-	);
-
 	public static function init() {
 		add_action( 'user_register', array( __CLASS__, 'ensure_subject_uuid' ), 5, 1 );
-		add_action( 'smc_cf01_clear_replay_marker', array( __CLASS__, 'clear_replay_marker' ), 10, 1 );
-	}
-
-	public static function clear_replay_marker( $option_name ) {
-		$option_name = sanitize_key( $option_name );
-		if ( 0 === strpos( $option_name, 'smc_cf01_replay_' ) ) {
-			delete_option( $option_name );
-		}
 	}
 
 	/**
@@ -61,7 +47,7 @@ final class SMC_CF01_Contract {
 			return strtolower( $stored );
 		}
 		$candidate = wp_generate_uuid4();
-		$created = add_user_meta( $user_id, '_smc_platform_uuid_v1', $candidate, true );
+		$created   = add_user_meta( $user_id, '_smc_platform_uuid_v1', $candidate, true );
 		if ( ! $created ) {
 			$candidate = (string) get_user_meta( $user_id, '_smc_platform_uuid_v1', true );
 		}
@@ -76,7 +62,10 @@ final class SMC_CF01_Contract {
 	}
 
 	/**
-	 * Return a bounded, versioned membership assertion for one requested action.
+	 * Return a bounded membership-prerequisite assertion for one requested
+	 * clinical-domain action. A File 00 "allow" means only that the membership
+	 * side of the prerequisite is satisfied. It is never clinical object,
+	 * relationship, field, prescription, break-glass, export, or key authority.
 	 *
 	 * @param int   $user_id Subject WordPress user ID.
 	 * @param array $context Requested action, purpose, jurisdiction and trace ID.
@@ -92,16 +81,20 @@ final class SMC_CF01_Contract {
 		$user    = $user_id ? get_userdata( $user_id ) : false;
 
 		$envelope = array(
-			'contract'         => self::CONTRACT_NAME,
-			'contract_version' => self::CONTRACT_VERSION,
-			'producer_version' => defined( 'SMC_VERSION' ) ? SMC_VERSION : '',
-			'issued_at'        => gmdate( 'c', $now ),
-			'expires_at'       => gmdate( 'c', $now + self::ASSERTION_TTL ),
-			'trace_id'         => $trace,
-			'action'           => $action,
-			'purpose'          => $purpose,
-			'result'           => 'unknown',
-			'reason_code'      => 'subject_unavailable',
+			'contract'                    => self::CONTRACT_NAME,
+			'contract_version'            => self::CONTRACT_VERSION,
+			'producer_version'            => defined( 'SMC_VERSION' ) ? SMC_VERSION : '',
+			'issued_at'                   => gmdate( 'c', $now ),
+			'expires_at'                  => gmdate( 'c', $now + self::ASSERTION_TTL ),
+			'trace_id'                    => $trace,
+			'action'                      => $action,
+			'purpose'                     => $purpose,
+			'authorization_scope'         => 'membership_prerequisite_only',
+			'authentication_assurance'    => 'not_owned_by_file00',
+			'authentication_owner'        => 'file02_or_consumer',
+			'file00_mfa_required'         => false,
+			'result'                      => 'unknown',
+			'reason_code'                 => 'subject_unavailable',
 		);
 		if ( ! $user ) {
 			return $envelope;
@@ -113,21 +106,24 @@ final class SMC_CF01_Contract {
 			return $envelope;
 		}
 
-		$state = smc_membership_state( $user_id );
-		$app   = ! empty( $state['application_exists'] ) ? smc_application( $user_id ) : false;
-		$base  = SMC_Contracts::assertions( $user_id );
-		$age   = self::age_context( $user_id, $app );
-		$jurisdiction = self::jurisdiction_context( $user_id, $context );
+		$state          = smc_membership_state( $user_id );
+		$app            = ! empty( $state['application_exists'] ) ? smc_application( $user_id ) : false;
+		$base           = SMC_Contracts::assertions( $user_id );
+		$age            = self::age_context( $user_id, $app );
+		$jurisdiction   = self::jurisdiction_context( $user_id, $context );
 		$record_version = $app ? (int) ( $app['row_version'] ?? 0 ) : 0;
+		$eligible       = ! empty( $base['eligible'] );
+		$can_practice   = ! empty( $base['can_practice'] );
+		$guardian_ok    = empty( $app['guardian_required'] ) || ! empty( $base['guardian_verified'] );
 
 		$capabilities = array(
-			'clinical_identity_link' => ! empty( $base['eligible'] ) && ! empty( $base['session_two_factor'] ),
-			'clinical_read'          => ! empty( $base['eligible'] ) && ! empty( $base['session_two_factor'] ),
-			'clinical_write'         => ! empty( $base['eligible'] ) && ! empty( $base['session_two_factor'] ),
-			'prescription_sign'      => ! empty( $base['can_practice'] ) && ! empty( $base['session_two_factor'] ),
-			'clinical_export'        => ! empty( $base['eligible'] ) && ! empty( $base['session_two_factor'] ),
-			'break_glass'            => ! empty( $base['can_practice'] ) && ! empty( $base['session_two_factor'] ),
-			'guardian_sensitive'     => ! empty( $base['eligible'] ) && ! empty( $base['session_two_factor'] ) && ( empty( $app['guardian_required'] ) || ! empty( $base['guardian_verified'] ) ),
+			'clinical_identity_link' => $eligible,
+			'clinical_read'          => $eligible,
+			'clinical_write'         => $eligible,
+			'prescription_sign'      => $can_practice,
+			'clinical_export'        => $eligible,
+			'break_glass'            => $can_practice,
+			'guardian_sensitive'     => $eligible && $guardian_ok,
 			'key_recovery'           => false,
 		);
 
@@ -140,71 +136,80 @@ final class SMC_CF01_Contract {
 			'account_class'      => (string) ( $base['account_class'] ?? 'member' ),
 			'membership_type'    => (string) ( $base['membership_type'] ?? '' ),
 			'status'             => (string) ( $base['status'] ?? 'unknown' ),
-			'active'             => ! empty( $base['eligible'] ),
+			'active'             => $eligible,
 			'suspended'          => ! empty( $base['suspended'] ),
 			'identity_assurance' => self::identity_assurance( $base ),
-			'two_factor_ready'   => ! empty( $base['two_factor_ready'] ),
-			'session_two_factor' => ! empty( $base['session_two_factor'] ),
+			'mfa_required'       => false,
+			'mfa_owner'          => 'none',
 			'guardian_required'  => ! empty( $app['guardian_required'] ),
 			'guardian_verified'  => ! empty( $base['guardian_verified'] ),
 			'policy_version'     => (string) ( $app['policy_version'] ?? smc_policy()['version'] ),
 		);
-		$envelope['age_context'] = $age;
+		$envelope['age_context']          = $age;
 		$envelope['jurisdiction_context'] = $jurisdiction;
-		$envelope['capabilities'] = $capabilities;
+		$envelope['capabilities']         = $capabilities;
 
 		if ( ! in_array( $action, self::$actions, true ) ) {
 			$envelope['reason_code'] = 'unsupported_action';
 			return $envelope;
 		}
 		if ( ! empty( $jurisdiction['mismatch'] ) ) {
-			$envelope['result'] = 'deny';
+			$envelope['result']      = 'deny';
 			$envelope['reason_code'] = 'jurisdiction_mismatch';
 			return $envelope;
 		}
 		if ( empty( $capabilities[ $action ] ) ) {
-			$envelope['result'] = 'deny';
-			$envelope['reason_code'] = ! empty( $base['suspended'] ) ? 'membership_suspended' : 'capability_denied';
+			$envelope['result']      = 'deny';
+			$envelope['reason_code'] = ! empty( $base['suspended'] ) ? 'membership_suspended' : 'membership_prerequisite_denied';
 			return $envelope;
 		}
-		$envelope['result'] = 'allow';
-		$envelope['reason_code'] = 'capability_allowed';
+		$envelope['result']      = 'allow';
+		$envelope['reason_code'] = 'membership_prerequisite_satisfied';
 		return $envelope;
 	}
 
 	/**
-	 * Verify a File 00-owned second factor without exposing its secret or storage.
-	 * This proves authentication only. It never grants a clinical permission.
+	 * Compatibility endpoint retained only so an older CF-01 consumer receives a
+	 * deterministic, fail-safe answer instead of a fatal missing-method error.
+	 *
+	 * File 00 deliberately ignores the supplied code and does not inspect any
+	 * authenticator/recovery-factor storage. Consumers needing stronger
+	 * authentication must call File 02 (or another approved authentication
+	 * owner) through a separately versioned contract.
 	 *
 	 * @param int    $user_id Subject user ID.
-	 * @param string $code TOTP or recovery code.
-	 * @param array  $context Purpose, opaque scope and trace context.
+	 * @param string $code Retained compatibility parameter; never processed.
+	 * @param array  $context Purpose, scope and trace context.
 	 * @return array<string,mixed>
 	 */
 	public static function verify_step_up( $user_id, $code, $context = array() ) {
+		unset( $code );
 		$user_id = absint( $user_id );
 		$context = is_array( $context ) ? $context : array();
 		$purpose = sanitize_key( $context['purpose'] ?? '' );
 		$scope   = trim( (string) ( $context['scope'] ?? '' ) );
 		$trace   = self::trace_id( $context['trace_id'] ?? '' );
 		$now     = time();
-		$scope_hash = '' !== $scope ? SMC_Security::blind_index( $scope, 'cf01-step-up-scope' ) : new WP_Error( 'smc_cf01_scope' );
-		$result  = array(
-			'contract'         => self::CONTRACT_NAME . '.step-up',
-			'contract_version' => self::CONTRACT_VERSION,
-			'producer_version' => defined( 'SMC_VERSION' ) ? SMC_VERSION : '',
-			'subject_uuid'     => '',
-			'purpose'          => $purpose,
-			'scope_hash'       => is_wp_error( $scope_hash ) ? '' : $scope_hash,
-			'method'           => '',
-			'issued_at'        => gmdate( 'c', $now ),
-			'expires_at'       => gmdate( 'c', $now + self::ASSERTION_TTL ),
-			'verified_at'      => '',
-			'trace_id'         => $trace,
-			'result'           => 'unknown',
-			'reason_code'      => 'subject_unavailable',
+		$scope_hash = '' !== $scope ? SMC_Security::blind_index( $scope, 'cf01-auth-assurance-scope' ) : new WP_Error( 'smc_cf01_scope' );
+		$result = array(
+			'contract'          => self::CONTRACT_NAME . '.authentication-assurance',
+			'contract_version'  => self::CONTRACT_VERSION,
+			'producer_version'  => defined( 'SMC_VERSION' ) ? SMC_VERSION : '',
+			'subject_uuid'      => '',
+			'purpose'           => $purpose,
+			'scope_hash'        => is_wp_error( $scope_hash ) ? '' : $scope_hash,
+			'owner'             => 'file02_or_consumer',
+			'method'            => 'not_owned_by_file00',
+			'issued_at'         => gmdate( 'c', $now ),
+			'expires_at'        => gmdate( 'c', $now + self::ASSERTION_TTL ),
+			'verified_at'       => '',
+			'trace_id'          => $trace,
+			'result'            => 'unknown',
+			'reason_code'       => 'authentication_assurance_not_owned_by_file00',
+			'file00_mfa_active' => false,
 		);
 		if ( ! $user_id || ! get_userdata( $user_id ) ) {
+			$result['reason_code'] = 'subject_unavailable';
 			return $result;
 		}
 		$result['subject_uuid'] = self::ensure_subject_uuid( $user_id );
@@ -212,129 +217,20 @@ final class SMC_CF01_Contract {
 			$result['reason_code'] = 'subject_uuid_unavailable';
 			return $result;
 		}
-		if ( ! in_array( $purpose, self::$step_up_purposes, true ) || is_wp_error( $scope_hash ) ) {
+		if ( '' === $purpose || is_wp_error( $scope_hash ) ) {
 			$result['reason_code'] = 'unsupported_purpose_or_scope';
-			return $result;
 		}
-		if ( self::step_up_rate_limited( $user_id, $purpose ) ) {
-			$result['result'] = 'deny';
-			$result['reason_code'] = 'rate_limited';
-			return $result;
-		}
-		if ( ! SMC_Security::two_factor_ready( $user_id ) ) {
-			$result['result'] = 'deny';
-			$result['reason_code'] = 'second_factor_not_configured';
-			return $result;
-		}
-
-		$code = trim( (string) $code );
-		$verified = false;
-		$method = '';
-		$replay_marker = '';
-		if ( preg_match( '/^[0-9]{6}$/', $code ) ) {
-			$encrypted = get_user_meta( $user_id, '_smc_totp_secret_enc', true );
-			$secret = $encrypted ? SMC_Security::decrypt( $encrypted, 'totp-secret', array( 'user_id' => $user_id ) ) : new WP_Error( 'smc_totp_missing' );
-			$verified = ! is_wp_error( $secret ) && SMC_Security::verify_setup_code( $secret, $code );
-			$method = 'totp';
-			if ( $verified ) {
-				$replay_marker = self::claim_totp_code( $user_id, $code );
-				$verified = '' !== $replay_marker;
-			}
-		} else {
-			$verified = self::consume_recovery_code_atomic( $user_id, $code, $purpose, $result['scope_hash'], $trace );
-			$method = 'recovery_code';
-		}
-		if ( ! $verified ) {
-			SMC_Security::audit( 'cf01_step_up_failed', $user_id, array( 'purpose' => $purpose, 'scope_hash' => $result['scope_hash'], 'method' => $method, 'trace_id' => $trace ) );
-			$result['result'] = 'deny';
-			$result['reason_code'] = 'second_factor_invalid_or_replayed';
-			$result['method'] = $method;
-			return $result;
-		}
-		if ( 'totp' === $method && ! SMC_Security::audit( 'cf01_step_up_verified', $user_id, array( 'purpose' => $purpose, 'scope_hash' => $result['scope_hash'], 'method' => $method, 'trace_id' => $trace ) ) ) {
-			if ( $replay_marker ) {
-				delete_option( $replay_marker );
-			}
-			$result['result'] = 'deny';
-			$result['reason_code'] = 'audit_commit_failed';
-			$result['method'] = $method;
-			return $result;
-		}
-		$result['result'] = 'allow';
-		$result['reason_code'] = 'second_factor_verified';
-		$result['method'] = $method;
-		$result['verified_at'] = gmdate( 'c', $now );
 		return $result;
-	}
-
-	private static function consume_recovery_code_atomic( $user_id, $code, $purpose, $scope_hash, $trace ) {
-		global $wpdb;
-		$code = strtoupper( trim( (string) $code ) );
-		$lookup = SMC_Security::blind_index( $code, 'recovery-code' );
-		if ( is_wp_error( $lookup ) ) {
-			return false;
-		}
-		$wpdb->query( 'START TRANSACTION' );
-		$row = $wpdb->get_row(
-			$wpdb->prepare(
-				"SELECT * FROM {$wpdb->prefix}smc_recovery_codes WHERE user_id=%d AND code_lookup_hash=%s AND consumed_at IS NULL LIMIT 1 FOR UPDATE",
-				absint( $user_id ),
-				$lookup
-			),
-			ARRAY_A
-		);
-		if ( ! $row || ! wp_check_password( $code, $row['code_hash'] ) ) {
-			$wpdb->query( 'ROLLBACK' );
-			return false;
-		}
-		$now = current_time( 'mysql', true );
-		$updated = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_recovery_codes SET consumed_at=%s WHERE id=%d AND consumed_at IS NULL", $now, (int) $row['id'] ) );
-		$audit_ok = 1 === $updated && SMC_Security::audit( 'cf01_step_up_verified', $user_id, array( 'purpose' => $purpose, 'scope_hash' => (string) $scope_hash, 'method' => 'recovery_code', 'trace_id' => $trace ) );
-		if ( 1 !== $updated || ! $audit_ok ) {
-			$wpdb->query( 'ROLLBACK' );
-			return false;
-		}
-		if ( false === $wpdb->query( 'COMMIT' ) ) {
-			$wpdb->query( 'ROLLBACK' );
-			return false;
-		}
-		return true;
-	}
-
-	private static function claim_totp_code( $user_id, $code ) {
-		$hash = SMC_Security::blind_index( absint( $user_id ) . '|' . trim( (string) $code ), 'cf01-step-up-replay' );
-		if ( is_wp_error( $hash ) ) {
-			return '';
-		}
-		$name = 'smc_cf01_replay_' . substr( $hash, 0, 40 );
-		if ( ! add_option( $name, time() + 120, '', false ) ) {
-			$expires = (int) get_option( $name, 0 );
-			if ( $expires >= time() ) {
-				return '';
-			}
-			delete_option( $name );
-			if ( ! add_option( $name, time() + 120, '', false ) ) {
-				return '';
-			}
-		}
-		if ( ! wp_next_scheduled( 'smc_cf01_clear_replay_marker', array( $name ) ) ) {
-			wp_schedule_single_event( time() + 180, 'smc_cf01_clear_replay_marker', array( $name ) );
-		}
-		return $name;
-	}
-
-	private static function step_up_rate_limited( $user_id, $purpose ) {
-		return SMC_Security::rate_limited( 'cf01-step-up|' . absint( $user_id ) . '|' . sanitize_key( $purpose ), self::STEP_UP_LIMIT, self::STEP_UP_WINDOW );
 	}
 
 	private static function identity_assurance( $base ) {
 		if ( empty( $base['eligible'] ) ) {
 			return 'none';
 		}
-		if ( ! empty( $base['professional_verified'] ) && ! empty( $base['phone_verified'] ) && ! empty( $base['email_verified'] ) && ! empty( $base['two_factor_ready'] ) ) {
-			return 'verified';
+		if ( ! empty( $base['professional_verified'] ) && ! empty( $base['phone_verified'] ) && ! empty( $base['email_verified'] ) && ! empty( $base['identity_documents_current'] ) ) {
+			return 'verified_membership_identity';
 		}
-		return 'basic';
+		return 'basic_membership_identity';
 	}
 
 	private static function age_context( $user_id, $app ) {
@@ -345,7 +241,7 @@ final class SMC_CF01_Contract {
 		$dob = SMC_Security::decrypt( $app['date_of_birth_enc'], 'date-of-birth', array( 'user_id' => absint( $user_id ) ) );
 		$age = is_wp_error( $dob ) ? false : smc_age_from_dob( $dob );
 		if ( false !== $age ) {
-			$out['known'] = true;
+			$out['known']     = true;
 			$out['age_years'] = (int) $age;
 		}
 		return $out;
