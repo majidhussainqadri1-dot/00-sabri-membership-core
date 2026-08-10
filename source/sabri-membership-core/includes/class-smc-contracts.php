@@ -448,20 +448,38 @@ final class SMC_Contracts {
 
 	public static function replace_requested_types( $user_id, $types, $application_version ) {
 		global $wpdb;
+		$user_id = absint( $user_id );
 		$types = smc_sanitize_membership_types( $types );
-		if ( ! self::grants_table_exists() ) {
+		if ( ! $user_id || ! $types || ! self::grants_table_exists() ) {
 			return false;
 		}
 		$current = self::role_grants( $user_id );
 		foreach ( $current as $grant ) {
-			if ( ! in_array( $grant['membership_type'], $types, true ) ) {
-				$wpdb->delete( $wpdb->prefix . 'smc_role_grants', array( 'id' => (int) $grant['id'] ), array( '%d' ) );
+			if ( ! in_array( sanitize_key( $grant['membership_type'] ), $types, true ) ) {
+				$deleted = $wpdb->delete( $wpdb->prefix . 'smc_role_grants', array( 'id' => (int) $grant['id'], 'user_id' => $user_id ), array( '%d', '%d' ) );
+				if ( 1 !== $deleted ) {
+					return false;
+				}
 			}
 		}
 		foreach ( $types as $type ) {
 			if ( ! self::upsert_role_grant( $user_id, $type, 'pending', $application_version, 0 ) ) {
 				return false;
 			}
+		}
+		$stored = $wpdb->get_results( $wpdb->prepare( "SELECT membership_type,status,source_application_version FROM {$wpdb->prefix}smc_role_grants WHERE user_id=%d ORDER BY membership_type", $user_id ), ARRAY_A );
+		$stored_types = array();
+		foreach ( (array) $stored as $grant ) {
+			if ( 'pending' !== sanitize_key( $grant['status'] ?? '' ) || absint( $grant['source_application_version'] ?? 0 ) !== max( 1, absint( $application_version ) ) ) {
+				return false;
+			}
+			$stored_types[] = sanitize_key( $grant['membership_type'] ?? '' );
+		}
+		sort( $stored_types );
+		$expected = $types;
+		sort( $expected );
+		if ( $stored_types !== $expected ) {
+			return false;
 		}
 		return self::sync_wordpress_roles( $user_id );
 	}
