@@ -15,6 +15,7 @@
 - Database schema: `1.4.4`
 - MFA policy: `2026-08-10-founder-mfa-retirement-v1`
 - File 00 MFA owner: `none`
+- CF-01 membership-assurance contract: `1.1.0` — membership prerequisite only; File 00 authentication/MFA assurance retired
 - Latest-central constitution: `2026-08-07-v1.0`
 - File 26 membership projection contract: `1.0.0`
 - Advanced trust contract: `1.0.0`
@@ -27,11 +28,15 @@ File 00 no longer requires or exposes authenticator/TOTP setup, recovery codes, 
 
 The retirement migration is intentionally fail-safe: obsolete File 00 factor material is removed only after DB schema `1.4.4` and audit infrastructure are ready; cleanup is transactional and historical audit rows are preserved. A retirement audit event is appended rather than rewriting prior MFA history.
 
+CF-01 contract `1.1.0` deliberately returns membership prerequisite evidence only. Any stronger authentication assurance belongs to File 02 or another separately approved authentication owner; File 00 no longer verifies factor codes for CF-01.
+
 ## Current evidence
 
 - `qa/mfa-retirement-contract.mjs`
 - `qa/mfa-retirement-wordpress-mysql.php`
 - `.github/workflows/mfa-retirement-wordpress-mysql.yml`
+- `qa/cf01-contract.mjs`
+- `qa/cf01-contract-runtime.php`
 - `docs/FILE-00-THIRD-FRESH-TEN-ROUND-REVIEW-1.2.16.md`
 - `docs/RELEASE-1.2.16-THIRD-FRESH-TEN-REVIEW.md`
 - `qa/third-fresh-ten-review-traceability.json`
