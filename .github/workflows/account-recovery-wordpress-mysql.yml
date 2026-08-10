@@ -1,0 +1,210 @@
+name: File 00 Governed Recovery WordPress MariaDB Gate
+
+on:
+  pull_request:
+    branches: ['main']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  governed-recovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_DATABASE: wordpress
+          MARIADB_USER: wordpress
+          MARIADB_PASSWORD: wordpress
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: Checkout exact recovery candidate
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Set up PHP 8.3
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240
+        with:
+          php-version: '8.3'
+          coverage: none
+          extensions: mysqli, openssl, mbstring, json
+          tools: none
+
+      - name: Install Node QA dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Record exact recovery source digests
+        run: |
+          set -euo pipefail
+          sha256sum \
+            source/sabri-membership-core/includes/class-smc-account-recovery.php \
+            source/sabri-membership-core/includes/class-smc-account-recovery-lock.php \
+            source/sabri-membership-core/sabri-membership-core.php
+
+      - name: Run source and recovery contract gates
+        run: |
+          set -euo pipefail
+          npm test
+
+      - name: Install pinned WP-CLI and WordPress 7.0.1
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 https://github.com/wp-cli/wp-cli/releases/download/v2.12.0/wp-cli-2.12.0.phar -o /tmp/wp-cli.phar
+          php /tmp/wp-cli.phar --info
+          php /tmp/wp-cli.phar core download --version=7.0.1 --path=/tmp/wordpress --force
+          php /tmp/wp-cli.phar config create --path=/tmp/wordpress --dbname=wordpress --dbuser=wordpress --dbpass=wordpress --dbhost=127.0.0.1:3306 --skip-check
+          php /tmp/wp-cli.phar config set SMC_MASTER_KEY 'base64:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=' --type=constant --path=/tmp/wordpress
+          php /tmp/wp-cli.phar config set SMC_MASTER_KEY_ID 'account-recovery-ci-key-v1' --type=constant --path=/tmp/wordpress
+          php /tmp/wp-cli.phar config set WP_ENVIRONMENT_TYPE 'staging' --type=constant --path=/tmp/wordpress
+          php /tmp/wp-cli.phar core install --path=/tmp/wordpress --url=http://recovery.local --title='File 00 Recovery CI' --admin_user=founder --admin_password='Recovery-CI-Password!9' --admin_email=founder@example.test --skip-email
+
+      - name: Activate candidate and complete canonical schema migration
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/wordpress/wp-content/plugins/sabri-membership-core
+          cp -R source/sabri-membership-core /tmp/wordpress/wp-content/plugins/sabri-membership-core
+          php /tmp/wp-cli.phar plugin activate sabri-membership-core --path=/tmp/wordpress
+          php /tmp/wp-cli.phar eval '
+            $key = SMC_Security::ensure_key_ready();
+            if ( is_wp_error( $key ) ) { fwrite(STDERR, $key->get_error_code().": ".$key->get_error_message()."\n"); exit(40); }
+            $audit = SMC_Installer::ensure_audit_infrastructure();
+            if ( is_wp_error( $audit ) ) { fwrite(STDERR, $audit->get_error_code().": ".$audit->get_error_message()."\n"); exit(41); }
+            SMC_Installer::maybe_upgrade();
+            if ( SMC_DB_VERSION !== get_option("smc_db_version","") ) {
+              fwrite(STDERR, "schema migration incomplete: ".wp_json_encode(get_option("smc_last_migration_failure",array()))."\n");
+              exit(42);
+            }
+            $audit = SMC_Installer::audit_infrastructure_ready();
+            if ( true !== $audit ) { fwrite(STDERR, is_wp_error($audit) ? $audit->get_error_code().": ".$audit->get_error_message()."\n" : "audit infrastructure not ready\n"); exit(43); }
+            echo "PASS canonical File 00 schema and audit infrastructure ready\n";
+          ' --path=/tmp/wordpress
+
+      - name: Build realistic lost-factor and independent-approver fixtures
+        env:
+          SMC_RECOVERY_TEST_MODE: setup
+          SMC_RECOVERY_TEST_PASSWORD: Recovery-CI-Password!9
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file "$GITHUB_WORKSPACE/qa/account-recovery-wordpress-mysql.php" --path=/tmp/wordpress
+
+      - name: Race two concurrent recovery requests
+        env:
+          SMC_RECOVERY_TEST_PASSWORD: Recovery-CI-Password!9
+        run: |
+          set -euo pipefail
+          SMC_RECOVERY_TEST_MODE=request php /tmp/wp-cli.phar eval-file "$GITHUB_WORKSPACE/qa/account-recovery-wordpress-mysql.php" --path=/tmp/wordpress > /tmp/recovery-request-a.log 2>&1 &
+          PID_A=$!
+          SMC_RECOVERY_TEST_MODE=request php /tmp/wp-cli.phar eval-file "$GITHUB_WORKSPACE/qa/account-recovery-wordpress-mysql.php" --path=/tmp/wordpress > /tmp/recovery-request-b.log 2>&1 &
+          PID_B=$!
+          wait "$PID_A"
+          wait "$PID_B"
+          cat /tmp/recovery-request-a.log
+          cat /tmp/recovery-request-b.log
+          if grep -Eqi 'deadlock|WordPress database error|lock wait timeout' /tmp/recovery-request-a.log /tmp/recovery-request-b.log; then
+            echo 'Concurrent recovery requests emitted a database-lock failure.' >&2
+            exit 44
+          fi
+
+      - name: Prove serialized request state and durable evidence
+        env:
+          SMC_RECOVERY_TEST_MODE: assert-request
+          SMC_RECOVERY_TEST_PASSWORD: Recovery-CI-Password!9
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file "$GITHUB_WORKSPACE/qa/account-recovery-wordpress-mysql.php" --path=/tmp/wordpress
+
+      - name: Attempt prohibited Founder self-approval
+        env:
+          SMC_RECOVERY_TEST_MODE: self-approve
+          SMC_RECOVERY_TEST_PASSWORD: Recovery-CI-Password!9
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file "$GITHUB_WORKSPACE/qa/account-recovery-wordpress-mysql.php" --path=/tmp/wordpress > /tmp/self-approval.log 2>&1
+          cat /tmp/self-approval.log
+          if grep -Eqi 'deadlock|WordPress database error|lock wait timeout' /tmp/self-approval.log; then exit 45; fi
+
+      - name: Prove self-approval left no approval evidence
+        env:
+          SMC_RECOVERY_TEST_MODE: assert-self-rejected
+          SMC_RECOVERY_TEST_PASSWORD: Recovery-CI-Password!9
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file "$GITHUB_WORKSPACE/qa/account-recovery-wordpress-mysql.php" --path=/tmp/wordpress
+
+      - name: Execute first independent MFA-verified Administrator approval
+        env:
+          SMC_RECOVERY_TEST_MODE: approve-a
+          SMC_RECOVERY_TEST_PASSWORD: Recovery-CI-Password!9
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file "$GITHUB_WORKSPACE/qa/account-recovery-wordpress-mysql.php" --path=/tmp/wordpress > /tmp/approval-a.log 2>&1
+          cat /tmp/approval-a.log
+          if grep -Eqi 'deadlock|WordPress database error|lock wait timeout' /tmp/approval-a.log; then exit 46; fi
+
+      - name: Prove one approval cannot satisfy Founder dual control
+        env:
+          SMC_RECOVERY_TEST_MODE: assert-approval-one
+          SMC_RECOVERY_TEST_PASSWORD: Recovery-CI-Password!9
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file "$GITHUB_WORKSPACE/qa/account-recovery-wordpress-mysql.php" --path=/tmp/wordpress
+
+      - name: Advance only the test clock beyond the cooling boundary
+        env:
+          SMC_RECOVERY_TEST_MODE: elapse-cooling
+          SMC_RECOVERY_TEST_PASSWORD: Recovery-CI-Password!9
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file "$GITHUB_WORKSPACE/qa/account-recovery-wordpress-mysql.php" --path=/tmp/wordpress
+
+      - name: Execute second distinct MFA-verified Administrator approval
+        env:
+          SMC_RECOVERY_TEST_MODE: approve-b
+          SMC_RECOVERY_TEST_PASSWORD: Recovery-CI-Password!9
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file "$GITHUB_WORKSPACE/qa/account-recovery-wordpress-mysql.php" --path=/tmp/wordpress > /tmp/approval-b.log 2>&1
+          cat /tmp/approval-b.log
+          if grep -Eqi 'deadlock|WordPress database error|lock wait timeout' /tmp/approval-b.log; then exit 47; fi
+
+      - name: Prove real dual approval and hashed out-of-band evidence
+        env:
+          SMC_RECOVERY_TEST_MODE: assert-approved
+          SMC_RECOVERY_TEST_PASSWORD: Recovery-CI-Password!9
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file "$GITHUB_WORKSPACE/qa/account-recovery-wordpress-mysql.php" --path=/tmp/wordpress
+
+      - name: Execute real factor-reset completion handler
+        env:
+          SMC_RECOVERY_TEST_MODE: complete
+          SMC_RECOVERY_TEST_PASSWORD: Recovery-CI-Password!9
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file "$GITHUB_WORKSPACE/qa/account-recovery-wordpress-mysql.php" --path=/tmp/wordpress
+
+      - name: Prove reset effects and audit-chain integrity
+        env:
+          SMC_RECOVERY_TEST_MODE: assert-complete
+          SMC_RECOVERY_TEST_PASSWORD: Recovery-CI-Password!9
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file "$GITHUB_WORKSPACE/qa/account-recovery-wordpress-mysql.php" --path=/tmp/wordpress
+
+      - name: Adversarial postconditions
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar db query "SELECT repair_type,status,COUNT(*) AS cases FROM wp_smc_application_repairs GROUP BY repair_type,status ORDER BY repair_type,status" --path=/tmp/wordpress
+          php /tmp/wp-cli.phar db query "SELECT action,COUNT(*) AS records FROM wp_smc_audit_log WHERE action LIKE 'account_recovery_%' GROUP BY action ORDER BY action" --path=/tmp/wordpress
+          php /tmp/wp-cli.phar db query "SELECT event_type,status,COUNT(*) AS records FROM wp_smc_event_outbox WHERE event_type LIKE 'AccountRecovery%' GROUP BY event_type,status ORDER BY event_type,status" --path=/tmp/wordpress
+          php /tmp/wp-cli.phar eval '$u=get_user_by("login","founder"); if (!$u) {exit(50);} if (SMC_Security::two_factor_ready($u->ID)) {fwrite(STDERR,"old factor unexpectedly remains active\n");exit(51);} if (!metadata_exists("user",$u->ID,"_smc_totp_pending_enc")) {fwrite(STDERR,"new pending factor missing\n");exit(52);} echo "PASS old factor cannot authenticate after governed reset\n";' --path=/tmp/wordpress
