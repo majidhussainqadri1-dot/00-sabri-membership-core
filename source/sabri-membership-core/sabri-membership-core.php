@@ -3,7 +3,7 @@
  * Plugin Name: Sabri Membership Core
  * Plugin URI: https://github.com/majidhussainqadri1-dot/00-sabri-membership-core
  * Description: Canonical membership eligibility, identity assurance, guardian consent, security assertions, and verification governance for the Sabri Social Homeopathy Platform.
- * Version: 1.2.42
+ * Version: 1.2.43
  * Requires at least: 6.4
  * Requires PHP: 7.4
  * Author: Dr. Allamah Majid Hussain Sabri Muhaddith Mursheed
@@ -13,13 +13,15 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'SMC_VERSION', '1.2.42' );
+define( 'SMC_VERSION', '1.2.43' );
 define( 'SMC_DB_VERSION', '1.4.5' );
 define( 'SMC_CONTRACT_VERSION', '1.2.3' );
 define( 'SMC_CF01_CONTRACT_VERSION', '1.1.0' );
 define( 'SMC_ADVANCED_TRUST_CONTRACT_VERSION', '1.0.0' );
 define( 'SMC_FILE01_AUTH_CLAIM_VERSION', '1.0.0' );
 define( 'SMC_FILE01_FOUNDATION_CONTRACT_VERSION', '2.0.0' );
+define( 'SMC_AUTHENTICATION_CONTRACT_VERSION', '1.0.0' );
+define( 'SMC_AUTHENTICATION_CONTRACT_V11_VERSION', '1.1.0' );
 define( 'SMC_FILE', __FILE__ );
 define( 'SMC_PATH', plugin_dir_path( __FILE__ ) );
 define( 'SMC_URL', plugin_dir_url( __FILE__ ) );
@@ -33,6 +35,8 @@ require_once SMC_PATH . 'includes/class-smc-events.php';
 require_once SMC_PATH . 'includes/class-smc-completion.php';
 require_once SMC_PATH . 'includes/class-smc-contracts.php';
 require_once SMC_PATH . 'includes/class-smc-cf01-contract.php';
+require_once SMC_PATH . 'includes/class-smc-authentication-contract.php';
+require_once SMC_PATH . 'includes/class-smc-authentication-contract-v11.php';
 require_once SMC_PATH . 'includes/class-smc-authorization.php';
 require_once SMC_PATH . 'includes/class-smc-workflow.php';
 require_once SMC_PATH . 'includes/class-smc-mfa-retirement.php';
@@ -43,6 +47,10 @@ require_once SMC_PATH . 'includes/class-smc-lifecycle.php';
 require_once SMC_PATH . 'includes/class-smc-three-plan.php';
 require_once SMC_PATH . 'includes/class-smc-latest-central-2026.php';
 require_once SMC_PATH . 'includes/class-smc-advanced-trust-2026.php';
+
+/* The legacy v1 transaction helper is internal; preserve only its receipt privacy callbacks. */
+add_filter( 'wp_privacy_personal_data_exporters', array( 'SMC_Authentication_Contract', 'register_exporter' ), 20 );
+add_filter( 'wp_privacy_personal_data_erasers', array( 'SMC_Authentication_Contract', 'register_eraser' ), 20 );
 
 /**
  * Minimal activation entry point.
@@ -102,7 +110,8 @@ add_action(
 		load_plugin_textdomain( 'sabri-membership-core', false, dirname( plugin_basename( SMC_FILE ) ) . '/languages' );
 		$initializers = array(
 			array( 'SMC_Security', 'init' ), array( 'SMC_Events', 'init' ), array( 'SMC_Completion', 'init' ),
-			array( 'SMC_Contracts', 'init' ), array( 'SMC_CF01_Contract', 'init' ), array( 'SMC_Authorization', 'init' ),
+			array( 'SMC_Contracts', 'init' ), array( 'SMC_CF01_Contract', 'init' ),
+			array( 'SMC_Authentication_Contract_V11', 'init' ), array( 'SMC_Authorization', 'init' ),
 			array( 'SMC_Workflow', 'init' ), array( 'SMC_MFA_Retirement', 'init' ), array( 'SMC_Host_Compat', 'init' ),
 			array( 'SMC_Contact_Delivery', 'init' ), array( 'SMC_Admin', 'init' ), array( 'SMC_Privacy', 'init' ),
 			array( 'SMC_Lifecycle', 'init' ), array( 'SMC_Three_Plan', 'init' ), array( 'SMC_Latest_Central_2026', 'init' ),
