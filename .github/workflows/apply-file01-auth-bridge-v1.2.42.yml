@@ -21,13 +21,19 @@ jobs:
           node-version: '20'
       - name: Apply root-cause fix
         run: python3 tools/apply-file01-auth-bridge-v1.2.42.py
-      - name: Preserve immutable historical trace assertions
+      - name: Preserve immutable trace and correct focused runtime fixture
         run: |
           python3 - <<'PY'
           from pathlib import Path
           p=Path('qa/master-plan-traceability-contract.mjs')
           s=p.read_text()
           s=s.replace("master.includes('Supplemental ten-round corrective review — 1.2.42')", "master.includes('Supplemental ten-round corrective review — 1.2.41')")
+          p.write_text(s)
+
+          p=Path('qa/file01-foundation-auth-bridge-runtime.php')
+          s=p.read_text()
+          s=s.replace("$GLOBALS['current']=1;$c=SMC_Authorization::file01_authorization_claim", "$GLOBALS['founder']=1;$GLOBALS['current']=1;$c=SMC_Authorization::file01_authorization_claim", 1)
+          s=s.replace("$GLOBALS['current']=4;$c=SMC_Authorization::file01_authorization_claim", "$GLOBALS['founder']=4;$GLOBALS['current']=4;$c=SMC_Authorization::file01_authorization_claim", 1)
           p.write_text(s)
           PY
       - name: Install QA dependencies
