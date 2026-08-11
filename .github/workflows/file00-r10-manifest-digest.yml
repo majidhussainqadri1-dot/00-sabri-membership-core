@@ -1,0 +1,19 @@
+name: File 00 R10 Manifest Digest Diagnostic
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  digests:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - name: Print current plugin digests
+        run: |
+          set -euo pipefail
+          sha256sum source/sabri-membership-core/includes/class-smc-authorization.php
+          sha256sum source/sabri-membership-core/sabri-membership-core.php
+          sha256sum source/sabri-membership-core/README.txt
