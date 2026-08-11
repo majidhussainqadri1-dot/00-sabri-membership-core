@@ -1,4 +1,4 @@
-name: Apply File 01 authorization bridge v1.2.42
+name: Materialize exact File 00 v1.2.42 candidate
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  apply:
+  materialize:
     if: ${{ github.actor != 'github-actions[bot]' }}
     runs-on: ubuntu-latest
     steps:
@@ -19,22 +19,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Apply root-cause fix
-        run: python3 tools/apply-file01-auth-bridge-v1.2.42.py
-      - name: Preserve immutable trace and correct focused runtime fixture
+      - name: Align permanent exact-head workflows with v1.2.42
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          p=Path('qa/master-plan-traceability-contract.mjs')
-          s=p.read_text()
-          s=s.replace("master.includes('Supplemental ten-round corrective review — 1.2.42')", "master.includes('Supplemental ten-round corrective review — 1.2.41')")
-          p.write_text(s)
-
-          p=Path('qa/file01-foundation-auth-bridge-runtime.php')
-          s=p.read_text()
-          s=s.replace("$GLOBALS['current']=1;$c=SMC_Authorization::file01_authorization_claim", "$GLOBALS['founder']=1;$GLOBALS['current']=1;$c=SMC_Authorization::file01_authorization_claim", 1)
-          s=s.replace("$GLOBALS['current']=4;$c=SMC_Authorization::file01_authorization_claim", "$GLOBALS['founder']=4;$GLOBALS['current']=4;$c=SMC_Authorization::file01_authorization_claim", 1)
-          p.write_text(s)
+          for p in Path('.github/workflows').glob('*.yml'):
+              if p.name == 'apply-file01-auth-bridge-v1.2.42.yml':
+                  continue
+              s=p.read_text()
+              if '1.2.41' in s:
+                  p.write_text(s.replace('1.2.41','1.2.42'))
           PY
       - name: Install QA dependencies
         run: npm ci
@@ -42,19 +36,18 @@ jobs:
         run: python3 tools/build.py
       - name: Remove temporary write-capable workflow before exact-tree QA
         run: rm -f .github/workflows/apply-file01-auth-bridge-v1.2.42.yml
-      - name: Run permanent source/runtime QA
+      - name: Run complete source/runtime QA
         run: npm test
       - name: Verify deterministic package and PHP syntax
         run: |
           python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.42.zip
           php -l source/sabri-membership-core/includes/class-smc-authorization.php
           php -l source/sabri-membership-core/sabri-membership-core.php
-      - name: Commit and push tested non-workflow candidate
+      - name: Create exact tested final-tree commit and attempt publication
         run: |
-          git checkout HEAD -- .github/workflows
-          rm -f tools/apply-file01-auth-bridge-v1.2.42.py
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
-          git commit -m 'fix: add File 01 authorization claim bridge v1.2.42'
+          git commit -m 'ci: align File 00 v1.2.42 exact-head gates'
+          echo "EXACT_CANDIDATE_SHA=$(git rev-parse HEAD)"
           git push origin HEAD:fix/file01-auth-bridge-v1.2.42
