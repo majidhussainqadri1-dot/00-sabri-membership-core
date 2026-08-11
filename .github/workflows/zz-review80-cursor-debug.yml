@@ -1,0 +1,42 @@
+name: File 00 Review80 Cursor Diagnostic
+on:
+  push:
+    branches: [audit/80-round-review-v1.2.40]
+permissions:
+  contents: read
+jobs:
+  cursor-debug:
+    runs-on: ubuntu-24.04
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_DATABASE: wordpress
+          MARIADB_USER: wordpress
+          MARIADB_PASSWORD: wordpress
+          MARIADB_ROOT_PASSWORD: root
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mariadb-admin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240
+        with:
+          php-version: '8.3'
+          coverage: none
+          extensions: mysqli, openssl, mbstring, json
+          tools: none
+      - name: Install WordPress fixture
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 https://github.com/wp-cli/wp-cli/releases/download/v2.12.0/wp-cli-2.12.0.phar -o /tmp/wp-cli.phar
+          php /tmp/wp-cli.phar core download --version=7.0.1 --path=/tmp/wordpress --force
+          php /tmp/wp-cli.phar config create --path=/tmp/wordpress --dbname=wordpress --dbuser=wordpress --dbpass=wordpress --dbhost=127.0.0.1:3306 --skip-check
+          php /tmp/wp-cli.phar config set SMC_MASTER_KEY 'base64:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=' --type=constant --path=/tmp/wordpress
+          php /tmp/wp-cli.phar config set SMC_MASTER_KEY_ID 'review80-cursor-debug-v1' --type=constant --path=/tmp/wordpress
+          php /tmp/wp-cli.phar core install --path=/tmp/wordpress --url=http://cursor.local --title='Cursor Diagnostic' --admin_user=founder --admin_password='Cursor-Diagnostic!9' --admin_email=founder@example.test --skip-email
+          cp -R source/sabri-membership-core /tmp/wordpress/wp-content/plugins/sabri-membership-core
+          php /tmp/wp-cli.phar plugin activate sabri-membership-core --path=/tmp/wordpress
+      - name: Run cursor root-cause diagnostic
+        run: php /tmp/wp-cli.phar eval-file "$GITHUB_WORKSPACE/qa/zz-review80-cursor-debug.php" --path=/tmp/wordpress
