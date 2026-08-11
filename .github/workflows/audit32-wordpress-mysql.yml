@@ -1,4 +1,4 @@
-name: File 00 Real WordPress MySQL v1.2.40 Gate
+name: File 00 Real WordPress MySQL v1.2.41 Gate
 
 on:
   push:
@@ -81,12 +81,12 @@ jobs:
         run: |
           set -euo pipefail
           python3 tools/build.py
-          python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.40.zip
+          python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.41.zip
       - name: Upload installable File 00 ZIP
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: File-00-Sabri-Membership-Core-1.2.40-MFA-Retired
-          path: dist/00-sabri-membership-core-1.2.40.zip
+          name: File-00-Sabri-Membership-Core-1.2.41-MFA-Retired
+          path: dist/00-sabri-membership-core-1.2.41.zip
           if-no-files-found: error
           retention-days: 30
 
@@ -142,7 +142,7 @@ jobs:
           set -euo pipefail
           php /tmp/wp-cli.phar plugin activate sabri-membership-core --path=/tmp/wordpress
           php /tmp/wp-cli.phar plugin status sabri-membership-core --path=/tmp/wordpress
-          php /tmp/wp-cli.phar eval '$p=get_option("smc_activation_pending_v2",array()); if (!is_array($p) || "1.2.40" !== ($p["target_release"] ?? "")) { fwrite(STDERR,"activation pending marker missing\n"); exit(20); } if ("1.3.0" !== get_option("smc_db_version","")) { fwrite(STDERR,"activation mutated source DB version\n"); exit(21); } echo "PASS activation request stayed non-throwing and non-mutating\n";' --path=/tmp/wordpress
+          php /tmp/wp-cli.phar eval '$p=get_option("smc_activation_pending_v2",array()); if (!is_array($p) || "1.2.41" !== ($p["target_release"] ?? "")) { fwrite(STDERR,"activation pending marker missing\n"); exit(20); } if ("1.3.0" !== get_option("smc_db_version","")) { fwrite(STDERR,"activation mutated source DB version\n"); exit(21); } echo "PASS activation request stayed non-throwing and non-mutating\n";' --path=/tmp/wordpress
       - name: Deferred bootstrap must fail closed without keyring
         run: |
           set -euo pipefail
