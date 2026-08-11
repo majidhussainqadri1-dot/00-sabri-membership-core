@@ -18,10 +18,10 @@ foreach ( array( 'register_account', 'mark_email_verified', 'get_completion_stat
 	cross_assert( false !== strpos( $consumer, "'{$method}'" ), "File 02 method expectation missing: {$method}" );
 	cross_assert( false !== strpos( $v11, "function {$method}" ), "File 00 v1.1 provider method missing: {$method}" );
 }
-cross_assert( false !== strpos( $consumer, "! self::valid_uuid( $result['subject_uuid'] ?? '' )" ), 'File 02 registration subject UUID contract changed; review pin before changing File 00' );
-cross_assert( false !== strpos( $v11, "result['subject_uuid'] = $subject_uuid" ), 'File 00 v1.1 provider does not emit required subject UUID' );
+cross_assert( false !== strpos( $consumer, "! self::valid_uuid( \$result['subject_uuid'] ?? '' )" ), 'File 02 registration subject UUID contract changed; review pin before changing File 00' );
+cross_assert( false !== strpos( $v11, "\$result['subject_uuid'] = \$subject_uuid" ), 'File 00 v1.1 provider does not emit required subject UUID' );
 cross_assert( false !== strpos( $v11, 'SMC_CF01_Contract::ensure_subject_uuid' ), 'File 00 v1.1 provider does not use canonical UUID owner' );
-cross_assert( false !== strpos( $v11, "array_diff( $missing, array( 'two_factor' ) )" ), 'File 00 v1.1 provider does not strip retired MFA completion' );
+cross_assert( false !== strpos( $v11, "array_diff( \$missing, array( 'two_factor' ) )" ), 'File 00 v1.1 provider does not strip retired MFA completion' );
 cross_assert( false !== strpos( $main, "define( 'SMC_AUTHENTICATION_CONTRACT_V11_VERSION', '1.1.0' );" ), 'File 00 provider version constant missing' );
 cross_assert( false === strpos( $main, "array( 'SMC_Authentication_Contract', 'init' )" ), 'legacy v1 helper is incorrectly active' );
 echo "Exact File 02 8192c45 compatibility boundary passed.\n";
