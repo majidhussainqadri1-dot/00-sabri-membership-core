@@ -32,6 +32,7 @@ final class SMC_Authorization {
 		'smc_request_contact_otp',
 		'smc_verify_contact_otp',
 		'smc_revoke_session',
+		'smc_revoke_all_sessions',
 		'smc_resubmit',
 		'smc_appeal',
 		'smc_withdraw_guardian',
