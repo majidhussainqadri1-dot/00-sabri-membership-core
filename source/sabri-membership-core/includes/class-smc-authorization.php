@@ -53,6 +53,7 @@ final class SMC_Authorization {
 		// Cross-file consumers of the public assertion filter receive the same
 		// action-time age fail-closed semantics as File 00 authorization itself.
 		add_filter( 'smc_assertions_v1', array( __CLASS__, 'filter_current_age_assertion' ), 100, 2 );
+		add_filter( 'spf_file00_authorization_claim', array( __CLASS__, 'file01_authorization_claim' ), 10, 2 );
 	}
 
 	private static function restricted_capabilities() {
@@ -188,6 +189,110 @@ final class SMC_Authorization {
 			$message,
 			array( 'status' => absint( $status ) )
 		);
+	}
+
+
+	/**
+	 * Produce the canonical File 00 authorization claim consumed by File 01.
+	 *
+	 * The claim is in-process evidence only: it is short-lived, actor/action/
+	 * object/purpose bound, and never grants authority beyond the exact File 01
+	 * contract understood by this release. Unsupported or malformed requests
+	 * return null so the consumer remains fail-closed.
+	 */
+	public static function file01_authorization_claim( $claim, $request ) {
+		if ( null !== $claim ) {
+			return $claim;
+		}
+		if ( ! is_array( $request ) ) {
+			return null;
+		}
+
+		$user_id      = absint( $request['user_id'] ?? 0 );
+		$actor_id     = absint( $request['actor_id'] ?? 0 );
+		$action       = (string) ( $request['action'] ?? '' );
+		$capability   = (string) ( $request['capability'] ?? '' );
+		$purpose      = (string) ( $request['purpose'] ?? '' );
+		$plugin       = (string) ( $request['plugin'] ?? '' );
+		$contract     = (string) ( $request['contract'] ?? '' );
+		$object_hash  = strtolower( trim( (string) ( $request['object_hash'] ?? '' ) ) );
+		$request_time = absint( $request['current_time'] ?? 0 );
+
+		if ( ! $user_id || $user_id !== $actor_id || $user_id !== get_current_user_id() ) {
+			return null;
+		}
+		if ( '' === $action || $action !== sanitize_key( $action ) || '' === $purpose || $purpose !== sanitize_key( $purpose ) ) {
+			return null;
+		}
+		if ( 'file-01' !== $plugin || SMC_FILE01_FOUNDATION_CONTRACT_VERSION !== $contract ) {
+			return null;
+		}
+		if ( ! preg_match( '/^[a-f0-9]{64}$/', $object_hash ) ) {
+			return null;
+		}
+		if ( ! $request_time || abs( time() - $request_time ) > 120 ) {
+			return null;
+		}
+
+		$required = self::file01_required_capability( $action );
+		if ( '' === $required || $required !== $capability || $capability !== sanitize_key( $capability ) ) {
+			return null;
+		}
+
+		$assertions = self::assertions( $user_id );
+		$is_founder = smc_is_founder( $user_id );
+		$is_admin   = self::user_is_administrator( $user_id );
+		$role       = $is_founder ? 'founder' : ( $is_admin ? 'administrator' : 'member' );
+		$allowed    = ! empty( $assertions['effective_eligible'] ) && empty( $assertions['hard_blocked'] );
+		if ( $allowed ) {
+			if ( $is_founder ) {
+				$allowed = true;
+			} elseif ( $is_admin ) {
+				$allowed = in_array( $action, array( 'view', 'system_check', 'run_system_check' ), true );
+			} else {
+				$allowed = false;
+			}
+		}
+
+		$now = time();
+		return array(
+			'claim_version'      => SMC_FILE01_AUTH_CLAIM_VERSION,
+			'allowed'            => (bool) $allowed,
+			'user_id'            => (int) $user_id,
+			'actor_id'           => (int) $user_id,
+			'action'             => $action,
+			'capability'         => $required,
+			'issued_at'          => $now,
+			'expires_at'         => $now + 60,
+			'claim_id'           => 'smc-f01:' . strtolower( wp_generate_uuid4() ),
+			'object_hash'        => $object_hash,
+			'purpose'            => $purpose,
+			'institutional_role' => $role,
+			'plugin'             => 'file-01',
+			'contract'           => SMC_FILE01_FOUNDATION_CONTRACT_VERSION,
+			'suspended'          => ! empty( $assertions['hard_blocked'] ) || ! empty( $assertions['suspended'] ),
+			'revoked'            => ! empty( $assertions['revoked'] ),
+		);
+	}
+
+	private static function file01_required_capability( $action ) {
+		$action = sanitize_key( $action );
+		if ( in_array( $action, array( 'view', 'system_check' ), true ) ) {
+			return 'view_sabri_foundation';
+		}
+		if ( 'run_system_check' === $action ) {
+			return 'manage_sabri_foundation';
+		}
+		if ( in_array( $action, array( 'record_release', 'transition_release', 'run_reconciliation', 'run_schema_upgrade' ), true ) ) {
+			return 'release_sabri_foundation';
+		}
+		if ( in_array( $action, array( 'approve_release', 'deploy_release', 'approve_amendment', 'production_cutover' ), true ) ) {
+			return 'govern_sabri_foundation';
+		}
+		if ( 'purge' === $action ) {
+			return 'purge_sabri_foundation';
+		}
+		return '';
 	}
 
 	/**

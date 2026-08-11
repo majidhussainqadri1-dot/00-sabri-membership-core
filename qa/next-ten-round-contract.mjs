@@ -31,9 +31,9 @@ check(authorization.includes("new_status IN ('rejected','suspended')"), 'appeal 
 check(authorization.includes("array( 'smc_assign_review', 'smc_review_transition' )"), 'appeal guard covers both claim and decision actions');
 check(authorization.includes('self::enforce_appeal_reviewer_independence();'), 'admin authorization invokes appeal independence guard');
 
-check(main.includes('Version: 1.2.41') && main.includes("define( 'SMC_VERSION', '1.2.41' );"), 'corrected runtime identity is 1.2.41');
-check(pkg.version === '1.2.41' && pkg.scripts?.verify?.includes('00-sabri-membership-core-1.2.41.zip'), 'package and deterministic verify identity are 1.2.41');
-check(readme.includes('Stable tag: 1.2.41') && readme.includes('= 1.2.41 ='), 'WordPress release metadata is 1.2.41');
+check(main.includes('Version: 1.2.42') && main.includes("define( 'SMC_VERSION', '1.2.42' );"), 'current runtime identity is 1.2.42');
+check(pkg.version === '1.2.42' && pkg.scripts?.verify?.includes('00-sabri-membership-core-1.2.42.zip'), 'package and deterministic verify identity are 1.2.42');
+check(readme.includes('Stable tag: 1.2.42') && readme.includes('= 1.2.42 =') && readme.includes('= 1.2.41 ='), 'WordPress current metadata is 1.2.42 and 1.2.41 history is retained');
 check(fs.existsSync('RELEASE-1.2.41.md'), '1.2.41 release record exists');
 check(master.includes('Supplemental ten-round corrective review — 1.2.41'), 'master-plan index records supplemental ten-round corrective release');
 check(main.includes("define( 'SMC_DB_VERSION', '1.4.5' );"), 'supplemental release preserves DB schema 1.4.5');

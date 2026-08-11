@@ -1,6 +1,6 @@
 <?php
 error_reporting(E_ALL);
-define('ABSPATH', __DIR__.'/'); define('MINUTE_IN_SECONDS',60); define('DAY_IN_SECONDS',86400); define('YEAR_IN_SECONDS',31536000); define('ARRAY_A','ARRAY_A'); define('SMC_VERSION','1.2.41');
+define('ABSPATH', __DIR__.'/'); define('MINUTE_IN_SECONDS',60); define('DAY_IN_SECONDS',86400); define('YEAR_IN_SECONDS',31536000); define('ARRAY_A','ARRAY_A'); define('SMC_VERSION','1.2.42');
 $meta=[];$options=[];$filters=[];$actions=[];$current_user_id=1;$fail_meta_key='';$fail_audit='';$fail_revoke=false;
 class WP_Error{public $code; function __construct($c,$m=''){$this->code=$c;}}
 function is_wp_error($v){return $v instanceof WP_Error;} function __($s,$d=null){return $s;} function absint($v){return abs((int)$v);} function sanitize_key($v){return strtolower(preg_replace('/[^a-z0-9_\-]/','',(string)$v));} function sanitize_text_field($v){return trim(strip_tags((string)$v));}

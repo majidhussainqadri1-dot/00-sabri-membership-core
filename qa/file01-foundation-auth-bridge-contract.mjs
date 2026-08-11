@@ -1,0 +1,16 @@
+import fs from 'node:fs';
+const root='source/sabri-membership-core';
+const main=fs.readFileSync(`${root}/sabri-membership-core.php`,'utf8');
+const auth=fs.readFileSync(`${root}/includes/class-smc-authorization.php`,'utf8');
+const failures=[]; let passed=0; const check=(ok,label)=>ok?passed++:failures.push(label);
+check(main.includes('Version: 1.2.42') && main.includes("define( 'SMC_VERSION', '1.2.42' );"),'runtime 1.2.42');
+check(main.includes("SMC_FILE01_AUTH_CLAIM_VERSION', '1.0.0'") && main.includes("SMC_FILE01_FOUNDATION_CONTRACT_VERSION', '2.0.0'"),'File 01 bridge contract constants');
+check(auth.includes("add_filter( 'spf_file00_authorization_claim', array( __CLASS__, 'file01_authorization_claim' ), 10, 2 )"),'structured File 01 claim provider registered');
+check(!auth.includes("add_filter( 'spf_file00_capability_claim'"),'no legacy boolean bridge added');
+for (const needle of ['user_id','actor_id','action','capability','object_hash','purpose','plugin','contract','current_time']) check(auth.includes(needle),`request binding ${needle}`);
+check(auth.includes("'file-01' !== $plugin") && auth.includes('SMC_FILE01_FOUNDATION_CONTRACT_VERSION !== $contract'),'plugin and contract fail closed');
+check(auth.includes("preg_match( '/^[a-f0-9]{64}$/'") && auth.includes('abs( time() - $request_time ) > 120'),'object hash and freshness validated');
+check(auth.includes("array( 'view', 'system_check', 'run_system_check' )") && auth.includes("$is_founder ? 'founder'") && auth.includes("$is_admin ? 'administrator'"),'Founder/Admin scope explicit');
+check(auth.includes("$now + 60") && auth.includes("'claim_id'") && auth.includes("'smc-f01:'"),'short-lived unique claim');
+check(auth.includes("$assertions['effective_eligible']") && auth.includes("$assertions['hard_blocked']"),'File 00 eligibility and hard block remain authoritative');
+if(failures.length){console.error(`file01 auth bridge static: ${passed} PASS / ${failures.length} FAIL`); for(const f of failures) console.error('- '+f); process.exit(1);} console.log(`file01 auth bridge static: ${passed} PASS / 0 FAIL`);

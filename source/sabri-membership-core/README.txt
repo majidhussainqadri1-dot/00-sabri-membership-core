@@ -3,7 +3,7 @@ Contributors: sabrihomeopathy
 Tags: membership, identity, guardian consent, privacy, governance
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 1.2.41
+Stable tag: 1.2.42
 License: GPL-2.0-or-later
 
 Canonical membership eligibility, identity assurance, guardian consent, security assertions, and verification governance for the Sabri Social Homeopathy Platform.
@@ -73,6 +73,11 @@ File 19 receives membership notices through its canonical sabri_notify integrati
 Local source and GitHub checks do not authorize production. Test fresh activation, legacy upgrade, DB/audit migration, legacy factor retirement, MySQL advisory locks, concurrent reviewers, authorization matrices, filesystem denial and rollback, scanner providers, email/mobile/guardian delivery, File 02 authentication integration, CF-01 provider/consumer contracts, all named cross-file integrations, advanced trust containment/revocation/selective-disclosure workflows, privacy erasure, restore, browser accessibility, and mobile layouts on Hostinger staging.
 
 == Changelog ==
+
+= 1.2.42 =
+* Live-first File 01 authorization compatibility release: File 00 now provides the structured `spf_file00_authorization_claim` contract required by File 01 v2.0.0.
+* Claims are exact actor/action/capability/object-hash/purpose/plugin/contract bound, expire after 60 seconds, preserve File 00 hard-block/eligibility authority, allow Founder governance, and limit ordinary Administrators to File 01 view/System Check operations.
+* No legacy boolean bridge is introduced. Runtime 1.2.42; DB schema 1.4.5; public membership contract 1.2.3; File 01 authorization claim 1.0.0 for Foundation contract 2.0.0. Live resolution still requires deployment and live re-test.
 
 = 1.2.41 =
 * Supplemental ten-round corrective review: preserves revoke-all session recovery for restricted accounts, adds synchronous current-age/jurisdiction and 18+ professional authorization enforcement, and requires appeal reviewer independence at both claim and decision entry.
