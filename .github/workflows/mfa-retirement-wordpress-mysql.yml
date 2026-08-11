@@ -195,12 +195,12 @@ jobs:
         run: |
           set -euo pipefail
           python3 tools/build.py
-          python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.41.zip
+          python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.42.zip
 
-      - name: Upload installable File 00 v1.2.41 ZIP
+      - name: Upload installable File 00 v1.2.42 ZIP
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: File-00-Sabri-Membership-Core-1.2.41-Ten-Round-Reviewed
-          path: dist/00-sabri-membership-core-1.2.41.zip
+          name: File-00-Sabri-Membership-Core-1.2.42-Ten-Round-Reviewed
+          path: dist/00-sabri-membership-core-1.2.42.zip
           if-no-files-found: error
           retention-days: 30

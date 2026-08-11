@@ -8,7 +8,7 @@ const authStart = cls.indexOf('public static function authentication_assurance')
 const authEnd = cls.indexOf('/** F00-EXT-003', authStart);
 const authBlock = authStart >= 0 && authEnd > authStart ? cls.slice(authStart, authEnd) : '';
 const checks = [
-  ['runtime 1.2.41', main.includes('Version: 1.2.41') && main.includes("SMC_VERSION', '1.2.41")],
+  ['runtime 1.2.42', main.includes('Version: 1.2.42') && main.includes("SMC_VERSION', '1.2.42")],
   ['advanced contract constant', main.includes("SMC_ADVANCED_TRUST_CONTRACT_VERSION', '1.0.0")],
   ['advanced class loaded', main.includes("class-smc-advanced-trust-2026.php") && main.includes("array( 'SMC_Advanced_Trust_2026', 'init' )")],
   ['EXT-001 assurance levels', cls.includes('F00-EXT-001') && cls.includes('identity_assurance_level')],

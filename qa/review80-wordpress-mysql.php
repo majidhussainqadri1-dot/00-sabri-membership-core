@@ -13,7 +13,7 @@ $check = static function ( $ok, $label ) use ( &$failures, &$passed ) {
 	$failures[] = $label; echo "FAIL {$label}\n";
 };
 
-$check( defined( 'SMC_VERSION' ) && '1.2.41' === SMC_VERSION, 'runtime 1.2.41' );
+$check( defined( 'SMC_VERSION' ) && '1.2.42' === SMC_VERSION, 'runtime 1.2.42' );
 $check( defined( 'SMC_DB_VERSION' ) && '1.4.5' === SMC_DB_VERSION, 'DB contract 1.4.5' );
 $check( defined( 'SMC_CONTRACT_VERSION' ) && '1.2.3' === SMC_CONTRACT_VERSION, 'public contract 1.2.3' );
 $key = SMC_Security::ensure_key_ready();

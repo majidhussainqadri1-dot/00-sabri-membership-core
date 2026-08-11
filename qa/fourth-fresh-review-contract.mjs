@@ -8,7 +8,7 @@ const main=read('source/sabri-membership-core/sabri-membership-core.php');
 const readme=read('source/sabri-membership-core/README.txt');
 const qa=read('qa/advanced-trust-runtime.php');
 const checks=[
- ['runtime 1.2.41',main.includes('Version: 1.2.41')&&main.includes("SMC_VERSION', '1.2.41")],
+ ['runtime 1.2.42',main.includes('Version: 1.2.42')&&main.includes("SMC_VERSION', '1.2.42")],
  ['institutional expired hard block',fn.includes("'rejected', 'suspended', 'expired', 'appeal_review', 'erasure_pending'")],
  ['recovery baseline cannot be filtered away',auth.includes('array_merge( self::$recovery_actions, $filtered )')],
  ['administrator no longer bypasses ordinary admin gate',!auth.includes('if ( $is_admin && ! $is_file00 )')],
@@ -16,7 +16,7 @@ const checks=[
  ['assurance profile omits local user id',!/assurance_profile[\s\S]{0,1800}'user_id'\s*=>/.test(adv)],
  ['authentication provenance reads fresh File02 assertion time and not retired File00 session MFA',adv.includes("apply_filters( 'smc_file02_authentication_assurance_v1'")&&adv.includes("$verified_at = absint( $claim['verified_at'] ?? 0 )")&&!adv.includes('SMC_Security::session_verified_at')],
  ['new encryption key ID documented',readme.includes('define SMC_MASTER_KEY with at least 256 bits of entropy and SMC_MASTER_KEY_ID as a stable non-secret key identifier')],
- ['advanced runtime fixture is current and asserts File00 has no auth elevation',qa.includes("define('SMC_VERSION', '1.2.41');")&&qa.includes('File 00 supplies no authentication elevation after MFA retirement')&&!qa.includes("define('SMC_VERSION', '1.2.34');")],
+ ['advanced runtime fixture is current and asserts File00 has no auth elevation',qa.includes("define('SMC_VERSION', '1.2.42');")&&qa.includes('File 00 supplies no authentication elevation after MFA retirement')&&!qa.includes("define('SMC_VERSION', '1.2.34');")],
  ['historical release lineage retained through retirement boundary',readme.includes('= 1.2.34 =')&&readme.includes('= 1.2.33 =')&&readme.includes('superseded by the Founder-approved File 00 MFA retirement in 1.2.35')],
  ['public membership contract current',main.includes("SMC_CONTRACT_VERSION', '1.2.3")],
  ['advanced trust contract preserved',main.includes("SMC_ADVANCED_TRUST_CONTRACT_VERSION', '1.0.0")],

@@ -12,8 +12,8 @@ const workflow = fs.readFileSync(`${root}/includes/class-smc-workflow.php`, 'utf
 const has = (source, needle, label = needle) => assert.ok(source.includes(needle), `missing MFA-retirement contract: ${label}`);
 const lacks = (source, needle, label = needle) => assert.ok(!source.includes(needle), `retired MFA contract still present: ${label}`);
 
-has(bootstrap, "Version: 1.2.41", 'plugin release 1.2.41');
-has(bootstrap, "define( 'SMC_VERSION', '1.2.41' );", 'runtime release 1.2.41');
+has(bootstrap, "Version: 1.2.42", 'plugin release 1.2.42');
+has(bootstrap, "define( 'SMC_VERSION', '1.2.42' );", 'runtime release 1.2.42');
 has(bootstrap, "define( 'SMC_CONTRACT_VERSION', '1.2.3' );", 'public contract 1.2.3');
 has(bootstrap, "require_once SMC_PATH . 'includes/class-smc-mfa-retirement.php';", 'MFA retirement runtime loaded');
 has(bootstrap, "array( 'SMC_MFA_Retirement', 'init' )", 'MFA retirement runtime initialized');

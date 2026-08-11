@@ -10,7 +10,7 @@
 
 ## Current implementation identity
 
-- Runtime implementation release: `1.2.41`
+- Runtime implementation release: `1.2.42`
 - Public membership contract: `1.2.3`
 - Database schema: `1.4.5`
 - MFA policy: `2026-08-10-founder-mfa-retirement-v1`
@@ -74,7 +74,19 @@ The DB schema remains `1.4.5`; the public membership contract remains `1.2.3`; C
 
 This repository review does not establish Live deployment or operational correctness. Live remains a separate reality and requires exact deployed-build parity, live DB/migration evidence, and live workflow retesting before the incident can be called resolved.
 
+## Live-proven File 01 authorization bridge correction — 1.2.42
+
+Hostinger live evidence on 11 August 2026 froze deployed File 00 `1.2.39`, DB `1.4.4`, and deployed File 01 `2.0.0`. The complete deployed File 00 payload matched the exact `1.2.39` repository manifest, while deployed File 01 source proved that `SPF_Authorization::can()` requires a structured `spf_file00_authorization_claim` when File 00 is present and otherwise fails closed. A full search of the exact deployed File 00 package proved that no such provider existed. The resulting live symptom was File 01 Foundation Status returning `Unauthorized.` before System Check could render.
+
+Release `1.2.42` corrects the canonical owner rather than weakening File 01. File 00 now provides a versioned `1.0.0` structured authorization claim only for File 01 Foundation contract `2.0.0`. The claim is bound to the current actor, exact action/capability, File 01 object hash, purpose, plugin identity and contract, is limited to a 60-second lifetime, and carries File 00's current hard-block/effective-eligibility result. Founder authority may satisfy all recognized File 01 governance actions; ordinary WordPress Administrators may receive only `view`, `system_check`, and `run_system_check`. Unsupported identities/actions/contracts remain fail-closed. No legacy boolean authorization bridge is introduced.
+
+The DB schema remains `1.4.5`; the public membership contract remains `1.2.3`; CF-01 remains `1.1.0`; Advanced Trust remains `1.0.0`. Repository tests/package/CI are not live resolution. After merge, the exact `1.2.42` package must be deployed and the live File 01 Foundation Status/System Check must be re-tested before the incident can be marked Resolved.
+
 ## Current evidence
+
+- `RELEASE-1.2.42.md`
+- `qa/file01-foundation-auth-bridge-contract.mjs`
+- `qa/file01-foundation-auth-bridge-runtime.php`
 
 - `RELEASE-1.2.41.md`
 - `REVIEW-NEXT-10-ROUNDS.md`

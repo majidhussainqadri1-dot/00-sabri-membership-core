@@ -21,7 +21,7 @@ const check = (ok, label) => { if (ok) { passed++; } else { failures.push(label)
 const has = (s, n, l=n) => check(s.includes(n), l);
 const lacks = (s, n, l=n) => check(!s.includes(n), l);
 
-has(main, 'Version: 1.2.41', 'runtime 1.2.41');
+has(main, 'Version: 1.2.42', 'runtime 1.2.42');
 has(main, "define( 'SMC_DB_VERSION', '1.4.5' );", 'DB contract 1.4.5');
 has(main, "define( 'SMC_CONTRACT_VERSION', '1.2.3' );", 'public contract 1.2.3');
 
