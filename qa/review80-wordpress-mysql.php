@@ -167,6 +167,7 @@ if ( $target ) {
 	$previous_cursor = 0;
 	$progress_ok = true;
 	$repaired = false;
+	$premature_complete = false;
 	$max_batches = max( 3, (int) ceil( $eligible_suspended / 500 ) + 2 );
 	for ( $attempt = 1; $attempt <= $max_batches; $attempt++ ) {
 		SMC_Lifecycle::repair_institutional_accounts();
@@ -175,6 +176,9 @@ if ( $target ) {
 			$repaired = true;
 			break;
 		}
+		if ( SMC_Lifecycle::institutional_repair_complete() ) {
+			$premature_complete = true;
+		}
 		$cursor = (int) get_option( $cursor_option, 0 );
 		if ( 0 === $cursor || $cursor <= $previous_cursor ) {
 			$progress_ok = false;
@@ -182,8 +186,10 @@ if ( $target ) {
 		}
 		$previous_cursor = $cursor;
 	}
+	$check( ! $premature_complete, 'institutional repair is not marked complete before cursor exhaustion' );
 	$check( $progress_ok, 'institutional repair cursor advances monotonically while additional batches remain' );
 	$check( $repaired, 'institutional repair cursor reaches and repairs later eligible institutional row without starvation' );
+	$check( $repaired && SMC_Lifecycle::institutional_repair_complete(), 'institutional repair becomes complete only after the terminal batch' );
 } else {
 	$check( false, 'institutional starvation target application exists' );
 	$check( false, 'institutional repair cursor advances monotonically while additional batches remain' );
