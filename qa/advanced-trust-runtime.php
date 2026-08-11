@@ -4,7 +4,7 @@ define('ABSPATH', __DIR__ . '/');
 define('MINUTE_IN_SECONDS', 60);
 define('DAY_IN_SECONDS', 86400);
 define('YEAR_IN_SECONDS', 31536000);
-define('SMC_VERSION', '1.2.34');
+define('SMC_VERSION', '1.2.40');
 $meta=[]; $options=[]; $actions=[]; $filters=[]; $current_user_id=1;
 class WP_Error { public $code; public function __construct($c,$m=''){ $this->code=$c; } }
 function is_wp_error($v){ return $v instanceof WP_Error; }
@@ -36,9 +36,7 @@ function smc_is_institutional_ai($id){ return (int)$id===99; }
 class WPDBRevocationStub { public $prefix='wp_'; public $users='wp_users'; public $approved_at; public function __construct(){ $this->approved_at=gmdate('Y-m-d H:i:s'); } public function prepare($q,...$a){ return $q; } public function get_var($q){ if(strpos($q,'GET_LOCK')!==false||strpos($q,'RELEASE_LOCK')!==false) return 1; if(strpos($q,'smc_role_grants')!==false||strpos($q,'smc_applications')!==false) return $this->approved_at; return 1; } public function get_col($q){ return []; } }
 $wpdb=new WPDBRevocationStub();
 class SMC_Security {
-  public static $verified=true; public static $audits=[]; public static $verifiedAt=0;
-  public static function session_is_verified($id){ return self::$verified; }
-  public static function session_verified_at($id){ return self::$verified ? (self::$verifiedAt ?: time()-120) : 0; }
+  public static $audits=[];
   public static function revoke_all_sessions($id,$reason=''){ return true; }
   public static function audit($action,$id=0,$details=[]){ self::$audits[]=$action; return true; }
   public static function subject_hash($id){ return hash('sha256','subject|'.$id); }
@@ -58,12 +56,15 @@ $n=SMC_Advanced_Trust_2026::negotiate_contract('1.0.0');
 t('contract 1.0.0 compatible', !empty($n['compatible']) && empty($n['downgrade_allowed']));
 $n2=SMC_Advanced_Trust_2026::negotiate_contract('2.0.0');
 t('future major fails closed', empty($n2['compatible']));
-SMC_Security::$verifiedAt=time()-120; $a=SMC_Advanced_Trust_2026::authentication_assurance(7); t('local File00 MFA provenance is explicit', $a['owner']==='file00' && $a['level']===2 && $a['verified_at']===SMC_Security::$verifiedAt);
+$a=SMC_Advanced_Trust_2026::authentication_assurance(7);
+t('File 00 supplies no authentication elevation after MFA retirement', $a['owner']==='none' && $a['level']===0 && $a['verified_at']===0);
 $filters['smc_file02_authentication_assurance_v1']=fn($base,$uid)=>['owner'=>'evil','contract_version'=>'1.0.0','level'=>4,'method'=>'passkey','passkey_asserted'=>true,'hardware_backed'=>true,'verified_at'=>time()];
-$a=SMC_Advanced_Trust_2026::authentication_assurance(7); t('spoofed File02 elevation rejected', $a['level']===2 && empty($a['passkey_asserted']) && $a['owner']==='file00');
-$filters['smc_file02_authentication_assurance_v1']=fn($base,$uid)=>['owner'=>'file02','contract_version'=>'1.0.0','level'=>3,'method'=>'passkey','passkey_asserted'=>true,'hardware_backed'=>true,'verified_at'=>time()];
-$a=SMC_Advanced_Trust_2026::authentication_assurance(7); t('fresh File02 passkey claim accepted', $a['level']===3 && !empty($a['passkey_asserted']) && !empty($a['hardware_backed']) && $a['owner']==='file02');
-unset($filters['smc_file02_authentication_assurance_v1']);
+$a=SMC_Advanced_Trust_2026::authentication_assurance(7);
+t('spoofed File02 elevation rejected', $a['level']===0 && empty($a['passkey_asserted']) && $a['owner']==='none');
+$filters['smc_file02_authentication_assurance_v1']=fn($base,$uid)=>['owner'=>'file02','contract_version'=>'1.0.0','level'=>3,'method'=>'passkey','passkey_asserted'=>true,'hardware_backed'=>true,'verified_at'=>time()+2];
+$a=SMC_Advanced_Trust_2026::authentication_assurance(7);
+t('fresh File02 passkey claim accepted', $a['level']===3 && !empty($a['passkey_asserted']) && !empty($a['hardware_backed']) && $a['owner']==='file02');
+
 $p=SMC_Advanced_Trust_2026::minimal_assertions(7,'file26');
 t('minimal assertion uses opaque subject', $p['subject']==='uuid-7' && !array_key_exists('user_id',$p));
 t('minimal assertion has revocation epoch', array_key_exists('revocation_epoch',$p));
@@ -88,7 +89,6 @@ $kind=SMC_Advanced_Trust_2026::subject_kind(99);
 t('institutional AI never human/doctor', $kind['kind']==='institutional_ai' && !$kind['human'] && !$kind['doctor']);
 $cont=SMC_Advanced_Trust_2026::set_continuity_state(8,'deceased',1,'verified notice');
 t('deceased preserves authorship and blocks protected actions', is_array($cont) && !empty($cont['authorship_preserved']) && !SMC_Advanced_Trust_2026::protected_actions_allowed(8));
-$filters['smc_file02_authentication_assurance_v1']=fn($base,$uid)=>['owner'=>'file02','contract_version'=>'1.0.0','level'=>3,'method'=>'passkey','passkey_asserted'=>true,'hardware_backed'=>true,'verified_at'=>time()];
 $bg=SMC_Advanced_Trust_2026::open_break_glass(7,1,'founder recovery');
 t('break glass opens bounded', is_array($bg) && ($bg['expires_at']-$bg['opened_at'])===900);
 $current_user_id=2; SMC_Advanced_Trust_2026::approve_break_glass($bg['id'],2);
@@ -97,10 +97,9 @@ t('break glass requires/uses two approvals', is_array($token) && !empty($token['
 t('break glass authority is subject and purpose bound', is_array($token) && $token['subject']==='uuid-7' && $token['purpose']==='founder recovery');
 t('blank break glass purpose is rejected', is_wp_error(SMC_Advanced_Trust_2026::open_break_glass(7,1,'   ')));
 t('break glass cannot be replayed', SMC_Advanced_Trust_2026::consume_break_glass($bg['id'],1)===false);
-unset($filters['smc_file02_authentication_assurance_v1']);
 $profile=SMC_Advanced_Trust_2026::assurance_profile(7);
 t('assurance profile exposes opaque subject only', isset($profile['subject']) && $profile['subject']==='uuid-7' && !array_key_exists('user_id',$profile));
-t('assurance profile reaches verified level', $profile['identity_assurance_level']>=3 && $profile['authentication_assurance_level']>=2 && $profile['authentication_owner']==='file00');
+t('assurance profile reaches verified level through File02 auth', $profile['identity_assurance_level']>=3 && $profile['authentication_assurance_level']>=2 && $profile['authentication_owner']==='file02');
 
 $fail=0; foreach($tests as [$name,$ok]){ echo ($ok?'PASS ':'FAIL ').$name."\n"; if(!$ok)$fail++; }
 echo 'Advanced trust runtime: '.(count($tests)-$fail).' PASS / '.$fail." FAIL\n";
