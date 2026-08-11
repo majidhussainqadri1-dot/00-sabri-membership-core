@@ -97,7 +97,8 @@ final class SMC_Lifecycle {
 	}
 
 	public static function institutional_repair_complete() {
-		return 0 === self::$repair_failures;
+		return 0 === self::$repair_failures
+			&& 0 === absint( get_option( self::INSTITUTIONAL_REPAIR_CURSOR_OPTION, 0 ) );
 	}
 
 	private static function recheck_ages() {
