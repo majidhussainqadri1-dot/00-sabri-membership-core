@@ -169,7 +169,6 @@ for (const symbol of [
   'appeal_review',
   'resubmitted',
   'wp_check_password',
-  'verify_two_factor_challenge',
   'smc_revoke_session',
   'noscript',
 ]) {
