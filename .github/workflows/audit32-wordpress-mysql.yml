@@ -1,4 +1,4 @@
-name: File 00 Real WordPress MySQL v1.2.42 Gate
+name: File 00 Real WordPress MySQL v1.2.43 Gate
 
 on:
   push:
@@ -29,8 +29,12 @@ jobs:
           --health-timeout=5s
           --health-retries=10
     steps:
-      - name: Checkout corrected File 00
+      - name: Checkout corrected File 00 exact head
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
       - name: Set up PHP 8.3
         uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240
         with:
@@ -59,7 +63,7 @@ jobs:
           cp -R source/sabri-membership-core /tmp/wordpress/wp-content/plugins/sabri-membership-core
           php /tmp/wp-cli.phar plugin activate sabri-membership-core --path=/tmp/wordpress
           php /tmp/wp-cli.phar plugin status sabri-membership-core --path=/tmp/wordpress
-          php /tmp/wp-cli.phar eval 'SMC_Schema_Compat::reconcile_verification_queue_index(); SMC_Installer::maybe_upgrade(); if (SMC_DB_VERSION !== get_option("smc_db_version","")) { $failure=get_option("smc_last_migration_failure",array()); fwrite(STDERR,"bootstrap incomplete: ".wp_json_encode($failure)."\n"); exit(10); } SMC_Schema_Compat::assert_current_queue_indexes();' --path=/tmp/wordpress
+          php /tmp/wp-cli.phar eval 'SMC_Schema_Compat::reconcile_verification_queue_index(); SMC_Installer::maybe_upgrade(); if (SMC_DB_VERSION !== get_option("smc_db_version","")) { $failure=get_option("smc_last_migration_failure",array()); fwrite(STDERR,"bootstrap incomplete: ".wp_json_encode($failure)."\n"); exit(10); } SMC_Schema_Compat::assert_current_queue_indexes(); if (!defined("SMC_AUTHENTICATION_CONTRACT_V11_VERSION") || "1.1.0" !== SMC_AUTHENTICATION_CONTRACT_V11_VERSION) { fwrite(STDERR,"File02 account provider missing\n"); exit(13); }' --path=/tmp/wordpress
       - name: Concurrent audit append smoke
         run: |
           set -euo pipefail
@@ -75,18 +79,18 @@ jobs:
       - name: Runtime/package identity evidence
         run: |
           set -euo pipefail
-          php /tmp/wp-cli.phar eval 'echo SMC_VERSION," / ",SMC_DB_VERSION," / ",SMC_CONTRACT_VERSION,"\n";' --path=/tmp/wordpress
+          php /tmp/wp-cli.phar eval 'echo SMC_VERSION," / ",SMC_DB_VERSION," / ",SMC_CONTRACT_VERSION," / auth-contract ",SMC_AUTHENTICATION_CONTRACT_V11_VERSION,"\n";' --path=/tmp/wordpress
           php /tmp/wp-cli.phar db query "SELECT TABLE_NAME,ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME LIKE 'wp_smc_%' ORDER BY TABLE_NAME" --path=/tmp/wordpress
       - name: Build installable File 00 ZIP
         run: |
           set -euo pipefail
           python3 tools/build.py
-          python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.42.zip
+          python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.43.zip
       - name: Upload installable File 00 ZIP
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: File-00-Sabri-Membership-Core-1.2.42-MFA-Retired
-          path: dist/00-sabri-membership-core-1.2.42.zip
+          name: File-00-Sabri-Membership-Core-1.2.43-File02-Compatible
+          path: dist/00-sabri-membership-core-1.2.43.zip
           if-no-files-found: error
           retention-days: 30
 
@@ -109,8 +113,12 @@ jobs:
           --health-timeout=5s
           --health-retries=10
     steps:
-      - name: Checkout activation hotfix
+      - name: Checkout activation hotfix exact head
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
       - name: Set up PHP 8.3
         uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240
         with:
@@ -142,7 +150,7 @@ jobs:
           set -euo pipefail
           php /tmp/wp-cli.phar plugin activate sabri-membership-core --path=/tmp/wordpress
           php /tmp/wp-cli.phar plugin status sabri-membership-core --path=/tmp/wordpress
-          php /tmp/wp-cli.phar eval '$p=get_option("smc_activation_pending_v2",array()); if (!is_array($p) || "1.2.42" !== ($p["target_release"] ?? "")) { fwrite(STDERR,"activation pending marker missing\n"); exit(20); } if ("1.3.0" !== get_option("smc_db_version","")) { fwrite(STDERR,"activation mutated source DB version\n"); exit(21); } echo "PASS activation request stayed non-throwing and non-mutating\n";' --path=/tmp/wordpress
+          php /tmp/wp-cli.phar eval '$p=get_option("smc_activation_pending_v2",array()); if (!is_array($p) || "1.2.43" !== ($p["target_release"] ?? "")) { fwrite(STDERR,"activation pending marker missing\n"); exit(20); } if ("1.3.0" !== get_option("smc_db_version","")) { fwrite(STDERR,"activation mutated source DB version\n"); exit(21); } echo "PASS activation request stayed non-throwing and non-mutating\n";' --path=/tmp/wordpress
       - name: Deferred bootstrap must fail closed without keyring
         run: |
           set -euo pipefail
@@ -176,6 +184,8 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
           persist-credentials: false
       - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240
         with:
