@@ -1,4 +1,5 @@
 <?php
+// Temporary exact-head diagnostic; remove before release acceptance.
 if ( ! defined( 'ABSPATH' ) ) { exit(2); }
 global $wpdb;
 SMC_Schema_Compat::reconcile_verification_queue_index();
