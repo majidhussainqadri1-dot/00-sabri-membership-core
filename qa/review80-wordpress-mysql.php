@@ -130,7 +130,7 @@ $manifest = SMC_Completion::backup_manifest();
 $check( '0.0.0-review80' === ( $manifest['database_version'] ?? '' ) && '1.4.5' === ( $manifest['target_database_version'] ?? '' ), 'backup manifest reports actual and target DB separately' );
 update_option( 'smc_db_version', $previous_db, false );
 
-// Starvation regression: 500 earlier non-institutional suspended rows must not hide a later institutional repair forever.
+// Starvation regression: a later institutional repair must be reached through cursorized batches even when 500+ earlier suspended rows are irrelevant.
 $cursor_option = 'smc_institutional_repair_cursor';
 update_option( $cursor_option, 0, false );
 $template_user = wp_insert_user( array(
@@ -150,6 +150,7 @@ if ( $template ) {
 		if ( 1 === $wpdb->insert( $wpdb->prefix . 'smc_applications', $clone ) ) { $dummy_ids[] = (int) $wpdb->insert_id; }
 	}
 }
+$check( 500 === count( $dummy_ids ), 'institutional starvation fixture contains exactly 500 irrelevant suspended rows' );
 $admin_user = wp_insert_user( array(
 	'user_login' => 'review80_admin_' . wp_generate_password( 6, false, false ),
 	'user_email' => 'review80-admin-' . wp_generate_password( 6, false, false ) . '@example.test',
@@ -158,15 +159,35 @@ $admin_user = wp_insert_user( array(
 ) );
 $target = ! is_wp_error( $admin_user ) ? smc_application( $admin_user ) : false;
 if ( $target ) {
-	$wpdb->update( $wpdb->prefix . 'smc_applications', array( 'status'=>'suspended','updated_at'=>current_time('mysql',true) ), array( 'id'=>(int)$target['id'] ) );
+	$target_id = (int) $target['id'];
+	$wpdb->update( $wpdb->prefix . 'smc_applications', array( 'status'=>'suspended','updated_at'=>current_time('mysql',true) ), array( 'id'=>$target_id ) );
 	SMC_Security::audit( 'membership_restricted', $admin_user, array( 'reason_code'=>'age_eligibility_failed' ) );
-	SMC_Lifecycle::repair_institutional_accounts();
-	$after_first = smc_application( $admin_user );
-	SMC_Lifecycle::repair_institutional_accounts();
-	$after_second = smc_application( $admin_user );
-	$check( count( $dummy_ids ) === 500 && 'suspended' === ( $after_first['status'] ?? '' ) && 'suspended' !== ( $after_second['status'] ?? 'suspended' ), 'institutional repair cursor reaches row beyond first 500 without starvation' );
+	$eligible_suspended = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}smc_applications WHERE status='suspended' AND id<=%d", $target_id ) );
+	$check( $eligible_suspended >= 501, 'institutional starvation target is positioned after at least one full 500-row batch' );
+	$previous_cursor = 0;
+	$progress_ok = true;
+	$repaired = false;
+	$max_batches = max( 3, (int) ceil( $eligible_suspended / 500 ) + 2 );
+	for ( $attempt = 1; $attempt <= $max_batches; $attempt++ ) {
+		SMC_Lifecycle::repair_institutional_accounts();
+		$current = smc_application( $admin_user );
+		if ( $current && 'suspended' !== ( $current['status'] ?? '' ) ) {
+			$repaired = true;
+			break;
+		}
+		$cursor = (int) get_option( $cursor_option, 0 );
+		if ( 0 === $cursor || $cursor <= $previous_cursor ) {
+			$progress_ok = false;
+			break;
+		}
+		$previous_cursor = $cursor;
+	}
+	$check( $progress_ok, 'institutional repair cursor advances monotonically while additional batches remain' );
+	$check( $repaired, 'institutional repair cursor reaches and repairs later eligible institutional row without starvation' );
 } else {
-	$check( false, 'institutional repair cursor reaches row beyond first 500 without starvation' );
+	$check( false, 'institutional starvation target application exists' );
+	$check( false, 'institutional repair cursor advances monotonically while additional batches remain' );
+	$check( false, 'institutional repair cursor reaches and repairs later eligible institutional row without starvation' );
 }
 if ( $dummy_ids ) {
 	$wpdb->query( "DELETE FROM {$wpdb->prefix}smc_applications WHERE user_id BETWEEN 900000 AND 900499" );
