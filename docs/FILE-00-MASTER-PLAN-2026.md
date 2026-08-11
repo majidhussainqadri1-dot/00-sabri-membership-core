@@ -12,7 +12,7 @@
 
 - Runtime implementation release: `1.2.40`
 - Public membership contract: `1.2.3`
-- Database schema: `1.4.4`
+- Database schema: `1.4.5`
 - MFA policy: `2026-08-10-founder-mfa-retirement-v1`
 - File 00 MFA owner: `none`
 - CF-01 membership-assurance contract: `1.1.0` — membership prerequisite only; File 00 authentication/MFA assurance retired
@@ -26,7 +26,7 @@
 
 File 00 no longer requires or exposes authenticator/TOTP setup, recovery codes, a user-entered MFA session challenge, authenticator replacement, or governed lost-factor recovery. File 02 remains the canonical normal sign-in/password/account-recovery owner. File 00 continues to enforce membership eligibility, identity assurance, verified guardian consent, professional verification assertions, contact ownership, institutional authority, containment/continuity, privacy/retention, session revocation and tamper-evident audit evidence.
 
-The retirement migration is intentionally fail-safe: obsolete File 00 factor material is removed only after DB schema `1.4.4` and audit infrastructure are ready; cleanup is transactional and historical audit rows are preserved. A retirement audit event is appended rather than rewriting prior MFA history.
+For the 1.2.35–1.2.39 retirement bridge, obsolete File 00 factor material was removed only after DB schema `1.4.4` and audit infrastructure were ready; cleanup was transactional and historical audit rows were preserved. A retirement audit event is appended rather than rewriting prior MFA history. Release 1.2.40 advances the current schema to `1.4.5` for non-MFA session lifecycle indexes without changing that historical retirement evidence.
 
 CF-01 contract `1.1.0` deliberately returns membership prerequisite evidence only. Any stronger authentication assurance belongs to File 02 or another separately approved authentication owner; File 00 no longer verifies factor codes for CF-01.
 
@@ -58,8 +58,20 @@ Release `1.2.39` adds a narrowly gated compatibility bridge in `SMC_Schema_Compa
 
 A post-bootstrap compatibility finalizer retries the normal installer only after this orphan-safe checkpoint reaches `complete`. It clears only the exact stale role-backfill/deferred-key markers after DB promotion actually reaches `1.4.4`; unrelated migration failures are preserved. The DB schema target remains `1.4.4` because this is historical data-state reconciliation, not a new canonical schema contract.
 
+## 80-round review hardening — 1.2.40
+
+Release `1.2.40` is the repository-side closure of the requested 80-round fresh review. Rounds `1`, `2`, `3`, and `80` produced defects that were corrected immediately; rounds `4–79` produced no newly recorded defect after the preceding fixes. The Founder-approved File 00 MFA retirement is now enforced across active fallback authorization, reviewer/admin decision gates, Advanced Trust transitions, Institutional AI configuration, Host Compatibility fallback registration, current security UI/action registration, and permanent regression contracts. Historical crypto/audit compatibility remains available only for migration, verification, containment, and provenance; it is not restored as an active authentication owner.
+
+The schema advances from `1.4.4` to `1.4.5` because `smc_auth_sessions` now has explicit `expires_at` and `revoked_at` secondary indexes for session lifecycle cleanup/revocation queries. Release identity, deterministic source manifest, package verification, active CI workflows, QA contracts, and release documentation are required to agree on runtime `1.2.40`, DB `1.4.5`, and public contract `1.2.3`. A permanent exact-head gate runs inherited QA plus WordPress 7.0.1 + MariaDB 11.4 migration/regression coverage before an installable package may be accepted.
+
+This repository review does not establish Live deployment or operational correctness. Live remains a separate reality and requires exact deployed-build parity, live DB/migration evidence, and live workflow retesting before the incident can be called resolved.
+
 ## Current evidence
 
+- `RELEASE-1.2.40.md`
+- `qa/review80-regression-contract.mjs`
+- `qa/review80-wordpress-mysql.php`
+- `.github/workflows/file00-review80-wordpress-mysql.yml`
 - `source/sabri-membership-core/includes/class-smc-schema-compat.php`
 - `qa/mfa-retirement-contract.mjs`
 - `qa/mfa-retirement-wordpress-mysql.php`
