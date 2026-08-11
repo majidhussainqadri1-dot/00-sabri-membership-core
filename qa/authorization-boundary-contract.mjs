@@ -36,13 +36,14 @@ for (const symbol of [
   'email_verified',
   'phone_verified',
   'institutional_account',
-  'session_two_factor',
   'smc_membership_hard_block',
   'Founder reassignment is locked',
 ]) {
   assert(auth.includes(symbol), `Authorization control: ${symbol}`);
 }
 
+assert(!auth.includes('session_two_factor'), 'Retired File 00 session_two_factor is absent from active authorization');
+assert(!auth.includes('session_is_verified'), 'Retired File 00 MFA session verification is absent from active authorization');
 assert(!auth.includes("0 === strpos( $action, 'sa_' )"), 'No broad sa_ recovery bypass exists');
 assert(!auth.includes("0 === strpos( $action, 'smc_' ) ||"), 'No broad smc_ recovery bypass exists');
 assert(auth.includes("in_array( $action, self::recovery_actions(), true )"), 'Legacy recovery actions use exact allowlist matching before runtime retirement overrides them');
