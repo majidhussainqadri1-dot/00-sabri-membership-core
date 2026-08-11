@@ -3,7 +3,7 @@ Contributors: sabrihomeopathy
 Tags: membership, identity, guardian consent, privacy, governance
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 1.2.42
+Stable tag: 1.2.43
 License: GPL-2.0-or-later
 
 Canonical membership eligibility, identity assurance, guardian consent, security assertions, and verification governance for the Sabri Social Homeopathy Platform.
@@ -73,6 +73,12 @@ File 19 receives membership notices through its canonical sabri_notify integrati
 Local source and GitHub checks do not authorize production. Test fresh activation, legacy upgrade, DB/audit migration, legacy factor retirement, MySQL advisory locks, concurrent reviewers, authorization matrices, filesystem denial and rollback, scanner providers, email/mobile/guardian delivery, File 02 authentication integration, CF-01 provider/consumer contracts, all named cross-file integrations, advanced trust containment/revocation/selective-disclosure workflows, privacy erasure, restore, browser accessibility, and mobile layouts on Hostinger staging.
 
 == Changelog ==
+
+= 1.2.43 =
+* Restores the versioned File 00 `smc.authentication-account` 1.1.0 provider required by File 02 1.2.0 after the live activation gate proved the contract was absent from exact deployed File 00 1.2.42.
+* Preserves Founder-approved File 00 MFA retirement: no TOTP/recovery-code completion step is reintroduced.
+* Successful registration now includes File 00's canonical opaque platform `subject_uuid`, satisfying the exact merged File 02 registration consumer contract.
+* V1.1 registration containment uses File 00's canonical bounded session revocation helper. Runtime 1.2.43; DB schema remains 1.4.5; public membership contract remains 1.2.3. Live resolution still requires deployment and live re-test.
 
 = 1.2.42 =
 * Live-first File 01 authorization compatibility release: File 00 now provides the structured `spf_file00_authorization_claim` contract required by File 01 v2.0.0.
