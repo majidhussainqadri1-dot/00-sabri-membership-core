@@ -8,7 +8,7 @@ const ai = load('source/sabri-membership-core/includes/class-smc-three-plan.php'
 const css = load('source/sabri-membership-core/assets/membership.css');
 const trace = JSON.parse(load('qa/requirements-traceability.json'));
 const checks = [
-  ['runtime 1.2.40', plugin.includes("define( 'SMC_VERSION', '1.2.40' );")],
+  ['runtime 1.2.41', plugin.includes("define( 'SMC_VERSION', '1.2.41' );")],
   ['contract 1.2.3', plugin.includes("define( 'SMC_CONTRACT_VERSION', '1.2.3' );")],
   ['CF-01 membership-only contract 1.1.0', plugin.includes("define( 'SMC_CF01_CONTRACT_VERSION', '1.1.0' );")],
   ['three-plan class loaded', plugin.includes('class-smc-three-plan.php') && plugin.includes("array( 'SMC_Three_Plan', 'init' )")],
@@ -31,4 +31,4 @@ const checks = [
 let failed=0;
 for (const [name,ok] of checks){console.log(`${ok?'PASS':'FAIL'}: ${name}`); if(!ok) failed++;}
 if(failed) process.exit(1);
-console.log(`${checks.length}/${checks.length} three-plan completion assertions passed for current runtime 1.2.40 while historical traceability remains immutable.`);
+console.log(`${checks.length}/${checks.length} three-plan completion assertions passed for current runtime 1.2.41 while historical traceability remains immutable.`);
