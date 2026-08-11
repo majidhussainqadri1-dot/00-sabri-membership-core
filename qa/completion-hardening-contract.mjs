@@ -17,11 +17,11 @@ const failures = [];
 let passed = 0;
 function check(c, n) { if (c) passed++; else failures.push(n); }
 
-check(main.includes('Version: 1.2.40'), 'plugin header 1.2.40');
-check(main.includes("define( 'SMC_VERSION', '1.2.40' )"), 'runtime version 1.2.40');
+check(main.includes('Version: 1.2.41'), 'plugin header 1.2.41');
+check(main.includes("define( 'SMC_VERSION', '1.2.41' )"), 'runtime version 1.2.41');
 check(main.includes("define( 'SMC_DB_VERSION', '1.4.5' )"), 'schema is 1.4.5');
 check(main.includes("define( 'SMC_CONTRACT_VERSION', '1.2.3' )"), 'contract is 1.2.3 after Founder-approved MFA retirement');
-check(readme.includes('Stable tag: 1.2.40'), 'readme stable tag');
+check(readme.includes('Stable tag: 1.2.41'), 'readme stable tag');
 
 check(admin.includes('private static function approval_gate'), 'approval gate helper exists');
 check(admin.includes("'pending_senior'"), 'senior pending state exists');

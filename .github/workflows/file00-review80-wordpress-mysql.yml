@@ -1,4 +1,4 @@
-name: File 00 v1.2.40 80-Round Exact-Head Release Gate
+name: File 00 v1.2.41 Exact-Head Release Gate
 
 on:
   pull_request:
@@ -71,21 +71,21 @@ jobs:
             SMC_Schema_Compat::assert_current_queue_indexes();
             echo "PASS canonical migration ".SMC_VERSION." / ".SMC_DB_VERSION."\n";
           ' --path=/tmp/wordpress
-      - name: Real WordPress MariaDB 80-round regressions
+      - name: Real WordPress MariaDB regressions
         run: php /tmp/wp-cli.phar eval-file "$GITHUB_WORKSPACE/qa/review80-wordpress-mysql.php" --path=/tmp/wordpress
       - name: Build and verify deterministic package
         run: |
           set -euo pipefail
           python3 tools/build.py
-          python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.40.zip
-          sha256sum dist/00-sabri-membership-core-1.2.40.zip > dist/00-sabri-membership-core-1.2.40.zip.sha256
-          unzip -t dist/00-sabri-membership-core-1.2.40.zip
-      - name: Upload installable File 00 v1.2.40
+          python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.41.zip
+          sha256sum dist/00-sabri-membership-core-1.2.41.zip > dist/00-sabri-membership-core-1.2.41.zip.sha256
+          unzip -t dist/00-sabri-membership-core-1.2.41.zip
+      - name: Upload installable File 00 v1.2.41
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: File-00-Sabri-Membership-Core-1.2.40-80-Round-Reviewed
+          name: File-00-Sabri-Membership-Core-1.2.41-Ten-Round-Reviewed
           path: |
-            dist/00-sabri-membership-core-1.2.40.zip
-            dist/00-sabri-membership-core-1.2.40.zip.sha256
+            dist/00-sabri-membership-core-1.2.41.zip
+            dist/00-sabri-membership-core-1.2.41.zip.sha256
           if-no-files-found: error
           retention-days: 30

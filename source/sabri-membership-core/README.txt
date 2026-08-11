@@ -3,7 +3,7 @@ Contributors: sabrihomeopathy
 Tags: membership, identity, guardian consent, privacy, governance
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 1.2.40
+Stable tag: 1.2.41
 License: GPL-2.0-or-later
 
 Canonical membership eligibility, identity assurance, guardian consent, security assertions, and verification governance for the Sabri Social Homeopathy Platform.
@@ -44,6 +44,9 @@ File 00 no longer provides a second-factor verification result. Any future stron
 
 * Institutional identity never defeats an explicit membership hard block.
 * File 00/platform capabilities and protected mutations require effective membership eligibility and verified ordinary-account contact ownership; they no longer require a File 00 MFA challenge.
+* Current age/jurisdiction eligibility and the 18+ professional minimum are re-evaluated synchronously at protected authorization boundaries; the daily lifecycle sweep remains the durable state-reconciliation path.
+* Appeals cannot be claimed or decided by the actor responsible for the latest rejection or suspension.
+* Security recovery retains both single-session and revoke-all-session self-service actions even while membership is hard-blocked or otherwise ineligible.
 * Advanced containment or non-active continuity states remove protected capabilities and are propagated with a monotonic revocation epoch.
 * File 02 remains the canonical authentication owner; File 00 does not perform password, passkey, TOTP or authenticator ceremonies.
 * A CF-01 assertion is derivative evidence and must be rechecked at action time; it is not a reusable bearer credential.
@@ -70,6 +73,11 @@ File 19 receives membership notices through its canonical sabri_notify integrati
 Local source and GitHub checks do not authorize production. Test fresh activation, legacy upgrade, DB/audit migration, legacy factor retirement, MySQL advisory locks, concurrent reviewers, authorization matrices, filesystem denial and rollback, scanner providers, email/mobile/guardian delivery, File 02 authentication integration, CF-01 provider/consumer contracts, all named cross-file integrations, advanced trust containment/revocation/selective-disclosure workflows, privacy erasure, restore, browser accessibility, and mobile layouts on Hostinger staging.
 
 == Changelog ==
+
+= 1.2.41 =
+* Supplemental ten-round corrective review: preserves revoke-all session recovery for restricted accounts, adds synchronous current-age/jurisdiction and 18+ professional authorization enforcement, and requires appeal reviewer independence at both claim and decision entry.
+* Advances release identity so corrected source, committed manifest, package metadata, CI gates and deterministic ZIP are not conflated with the already-reviewed 1.2.40 artifact.
+* Runtime 1.2.41; DB schema 1.4.5; public membership contract 1.2.3; CF-01 1.1.0; Advanced Trust 1.0.0. Repository/CI completion does not itself claim live deployment.
 
 = 1.2.40 =
 * 80-round exact-head corrective candidate: removes residual retired File 00 MFA dependencies, strengthens role replacement, minor/clinical-commerce privacy contracts, durable event/repair recovery, session cleanup indexes, and backup/restore truth.

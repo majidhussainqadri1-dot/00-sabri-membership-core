@@ -10,7 +10,7 @@
 
 ## Current implementation identity
 
-- Runtime implementation release: `1.2.40`
+- Runtime implementation release: `1.2.41`
 - Public membership contract: `1.2.3`
 - Database schema: `1.4.5`
 - MFA policy: `2026-08-10-founder-mfa-retirement-v1`
@@ -26,7 +26,7 @@
 
 File 00 no longer requires or exposes authenticator/TOTP setup, recovery codes, a user-entered MFA session challenge, authenticator replacement, or governed lost-factor recovery. File 02 remains the canonical normal sign-in/password/account-recovery owner. File 00 continues to enforce membership eligibility, identity assurance, verified guardian consent, professional verification assertions, contact ownership, institutional authority, containment/continuity, privacy/retention, session revocation and tamper-evident audit evidence.
 
-For the 1.2.35–1.2.39 retirement bridge, obsolete File 00 factor material was removed only after DB schema `1.4.4` and audit infrastructure were ready; cleanup was transactional and historical audit rows were preserved. A retirement audit event is appended rather than rewriting prior MFA history. Release 1.2.40 advances the current schema to `1.4.5` for non-MFA session lifecycle indexes without changing that historical retirement evidence.
+For the 1.2.35–1.2.39 retirement bridge, obsolete File 00 factor material was removed only after DB schema `1.4.4` and audit infrastructure were ready; cleanup was transactional and historical audit rows were preserved. A retirement audit event is appended rather than rewriting prior MFA history. Release 1.2.40 advanced the schema to `1.4.5` for non-MFA session lifecycle indexes; release 1.2.41 retains that schema contract while tightening authorization and review governance.
 
 CF-01 contract `1.1.0` deliberately returns membership prerequisite evidence only. Any stronger authentication assurance belongs to File 02 or another separately approved authentication owner; File 00 no longer verifies factor codes for CF-01.
 
@@ -62,12 +62,24 @@ A post-bootstrap compatibility finalizer retries the normal installer only after
 
 Release `1.2.40` is the repository-side closure of the requested 80-round fresh review. Rounds `1`, `2`, `3`, and `80` produced defects that were corrected immediately; rounds `4–79` produced no newly recorded defect after the preceding fixes. The Founder-approved File 00 MFA retirement is now enforced across active fallback authorization, reviewer/admin decision gates, Advanced Trust transitions, Institutional AI configuration, Host Compatibility fallback registration, current security UI/action registration, and permanent regression contracts. Historical crypto/audit compatibility remains available only for migration, verification, containment, and provenance; it is not restored as an active authentication owner.
 
-The schema advances from `1.4.4` to `1.4.5` because `smc_auth_sessions` now has explicit `expires_at` and `revoked_at` secondary indexes for session lifecycle cleanup/revocation queries. Release identity, deterministic source manifest, package verification, active CI workflows, QA contracts, and release documentation are required to agree on runtime `1.2.40`, DB `1.4.5`, and public contract `1.2.3`. A permanent exact-head gate runs inherited QA plus WordPress 7.0.1 + MariaDB 11.4 migration/regression coverage before an installable package may be accepted.
+The schema advances from `1.4.4` to `1.4.5` because `smc_auth_sessions` now has explicit `expires_at` and `revoked_at` secondary indexes for session lifecycle cleanup/revocation queries. Release identity, deterministic source manifest, package verification, active CI workflows, QA contracts, and release documentation were aligned on runtime `1.2.40`, DB `1.4.5`, and public contract `1.2.3`. The permanent exact-head gate runs inherited QA plus WordPress 7.0.1 + MariaDB 11.4 migration/regression coverage before an installable package may be accepted.
+
+## Supplemental ten-round corrective review — 1.2.41
+
+The supplemental ten-round review starts from exact merged main `2a596b9b342a448a994be8a7452d113ee8f50825` and applies each proven correction before the next review lens. Rounds `1`, `4`, `5`, and `10` produced defects or release-closure inconsistencies requiring correction; rounds `2`, `3`, `6`, `7`, `8`, and `9` produced no new proven repository defect.
+
+Round 1 restores `smc_revoke_all_sessions` to the exact security-recovery allowlist so a hard-blocked or ineligible member can still terminate all authenticated sessions. Round 4 synchronously recomputes current age/jurisdiction eligibility and the 18+ professional minimum at protected authorization and on the versioned public assertion surface, eliminating the gap between a current eligibility change and the daily lifecycle reconciliation sweep. Round 5 enforces appeal reviewer independence at both claim and decision entry by preventing the actor responsible for the latest rejection/suspension from reclaiming the appeal. Round 10 advances the corrected build to runtime/package identity `1.2.41`, refreshes the deterministic manifest, aligns active QA/workflows/release documentation, and requires the same exact-head WordPress 7.0.1 + MariaDB 11.4 and deterministic-package closure before merge.
+
+The DB schema remains `1.4.5`; the public membership contract remains `1.2.3`; CF-01 remains `1.1.0`; Advanced Trust remains `1.0.0`. These corrections are authorization/release-governance changes and do not introduce a new schema shape or a new cross-file contract version.
 
 This repository review does not establish Live deployment or operational correctness. Live remains a separate reality and requires exact deployed-build parity, live DB/migration evidence, and live workflow retesting before the incident can be called resolved.
 
 ## Current evidence
 
+- `RELEASE-1.2.41.md`
+- `REVIEW-NEXT-10-ROUNDS.md`
+- `qa/next-ten-round-contract.mjs`
+- `qa/authorization-boundary-runtime.php`
 - `RELEASE-1.2.40.md`
 - `qa/review80-regression-contract.mjs`
 - `qa/review80-wordpress-mysql.php`

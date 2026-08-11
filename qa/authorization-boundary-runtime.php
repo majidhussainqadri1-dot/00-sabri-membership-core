@@ -1,11 +1,12 @@
 <?php
 /**
- * Runtime regression for File 00 authorization boundary 1.2.4.
+ * Runtime regression for File 00 authorization boundary 1.2.4+.
  */
 
 declare(strict_types=1);
 
 define( 'ABSPATH', __DIR__ . '/' );
+define( 'ARRAY_A', 'ARRAY_A' );
 
 final class WP_Error {
 	private $code;
@@ -20,6 +21,7 @@ final class WP_Error {
 	public function get_error_message() { return $this->message; }
 	public function get_error_data() { return $this->data; }
 }
+function is_wp_error( $value ) { return $value instanceof WP_Error; }
 
 class WP_User {
 	public $ID;
@@ -30,9 +32,16 @@ class WP_User {
 	}
 }
 
+final class SMC_Security {
+	public static function decrypt( $value, $purpose, $context = array() ) { unset( $purpose, $context ); return $value; }
+}
+
 final class SMC_Contracts {
 	public static function assertions( $user_id ) {
 		return $GLOBALS['smc_test_assertions'][ (int) $user_id ];
+	}
+	public static function requested_types( $user_id ) {
+		return (array) ( $GLOBALS['smc_test_assertions'][ (int) $user_id ]['requested_membership_types'] ?? array( 'member' ) );
 	}
 }
 
@@ -44,6 +53,14 @@ final class SMC_Test_Stop extends RuntimeException {
 	}
 }
 
+final class SMC_Test_WPDB {
+	public $prefix = 'wp_';
+	public function prepare( $query, ...$args ) { unset( $args ); return $query; }
+	public function get_row( $query, $format = null ) { unset( $query, $format ); return $GLOBALS['smc_test_review_request']; }
+	public function get_var( $query ) { unset( $query ); return $GLOBALS['smc_test_previous_actor']; }
+}
+
+$GLOBALS['wpdb'] = new SMC_Test_WPDB();
 $GLOBALS['smc_test_current_user'] = 1;
 $GLOBALS['smc_test_logged_in'] = true;
 $GLOBALS['smc_test_admin'] = false;
@@ -52,6 +69,9 @@ $GLOBALS['smc_test_redirect'] = '';
 $GLOBALS['smc_test_states'] = array();
 $GLOBALS['smc_test_assertions'] = array();
 $GLOBALS['smc_test_users'] = array();
+$GLOBALS['smc_test_apps'] = array();
+$GLOBALS['smc_test_review_request'] = false;
+$GLOBALS['smc_test_previous_actor'] = 0;
 
 function add_action( ...$args ) { unset( $args ); }
 function remove_action( ...$args ) { unset( $args ); }
@@ -78,6 +98,11 @@ function __( $text, $domain = '' ) { unset( $domain ); return $text; }
 function esc_html__( $text, $domain = '' ) { unset( $domain ); return $text; }
 function wp_die( $message, $title = '', $args = array() ) { unset( $title ); throw new SMC_Test_Stop( (string) $message, (int) ( $args['response'] ?? 500 ) ); }
 function smc_founder_user_id() { return (int) $GLOBALS['smc_test_founder']; }
+function smc_is_institutional_account( $user_id ) { return ! empty( $GLOBALS['smc_test_assertions'][ (int) $user_id ]['institutional_account'] ); }
+function smc_application( $user_id ) { return $GLOBALS['smc_test_apps'][ (int) $user_id ] ?? false; }
+function smc_age_from_dob( $dob ) { return preg_match( '/^age:(\d+)$/', (string) $dob, $m ) ? (int) $m[1] : false; }
+function smc_effective_minimum_age( $gender, $country = '' ) { unset( $country ); return 'female' === $gender ? 12 : 15; }
+function smc_professional_types() { return array( 'doctor', 'teacher', 'researcher', 'pharmacy', 'clinic', 'publisher' ); }
 
 require dirname( __DIR__ ) . '/source/sabri-membership-core/includes/class-smc-authorization.php';
 
@@ -88,7 +113,7 @@ function expect_true( $condition, $name ) {
 	if ( $condition ) { ++$passed; } else { $failures[] = $name; }
 }
 
-function set_user_case( $id, $status, $approved, $eligible, $session, $guardian, $admin = false, $institutional = false, $email = true, $phone = true ) {
+function set_user_case( $id, $status, $approved, $eligible, $session, $guardian, $admin = false, $institutional = false, $email = true, $phone = true, $age = 30, $types = array( 'member' ) ) {
 	$GLOBALS['smc_test_current_user'] = $id;
 	$GLOBALS['smc_test_states'][ $id ] = array( 'status' => $status );
 	$GLOBALS['smc_test_assertions'][ $id ] = array(
@@ -100,8 +125,10 @@ function set_user_case( $id, $status, $approved, $eligible, $session, $guardian,
 		'institutional_account' => $institutional,
 		'email_verified' => $email,
 		'phone_verified' => $phone,
+		'requested_membership_types' => $types,
 	);
 	$GLOBALS['smc_test_users'][ $id ] = new WP_User( $id, $admin ? array( 'manage_options' => true ) : array() );
+	$GLOBALS['smc_test_apps'][ $id ] = array( 'date_of_birth_enc' => 'age:' . (int) $age, 'gender' => 'male', 'residence_country' => 'PK' );
 }
 
 set_user_case( 1, 'approved', true, true, true, true, false );
@@ -111,6 +138,8 @@ set_user_case( 4, 'verified', true, true, true, true, true, true, false, false )
 set_user_case( 5, 'draft', false, false, false, true, false );
 set_user_case( 6, 'invalid_application', false, false, false, true, true, true );
 set_user_case( 7, 'approved', true, true, true, true, false, false, false, true );
+set_user_case( 8, 'approved', true, true, true, true, false, false, true, true, 14, array( 'member' ) );
+set_user_case( 9, 'approved', true, true, true, true, false, false, true, true, 17, array( 'doctor' ) );
 
 expect_true( SMC_Authorization::is_hard_blocked( 2 ), 'Suspended institutional account is hard-blocked' );
 expect_true( SMC_Authorization::is_hard_blocked( 6 ), 'Invalid institutional application is fail-closed' );
@@ -118,37 +147,29 @@ expect_true( ! SMC_Authorization::is_hard_blocked( 4 ), 'Verified institutional 
 
 $caps = SMC_Authorization::filter_capabilities(
 	array( 'manage_options' => true, 'publish_posts' => true, 'smc_manage_membership' => true ),
-	array( 'publish_posts' ),
-	array(),
-	$GLOBALS['smc_test_users'][2]
+	array( 'publish_posts' ), array(), $GLOBALS['smc_test_users'][2]
 );
 expect_true( false === $caps['publish_posts'], 'Hard-blocked administrator loses publishing capability' );
 expect_true( false === $caps['smc_manage_membership'], 'Hard-blocked administrator loses File 00 management capability' );
 expect_true( true === $caps['manage_options'], 'File 00 does not rewrite core WordPress manage_options' );
 
-$caps = SMC_Authorization::filter_capabilities(
-	array( 'publish_posts' => true ),
-	array( 'publish_posts' ),
-	array(),
-	$GLOBALS['smc_test_users'][3]
-);
+$caps = SMC_Authorization::filter_capabilities( array( 'publish_posts' => true ), array( 'publish_posts' ), array(), $GLOBALS['smc_test_users'][3] );
 expect_true( false === $caps['publish_posts'], 'Unverified guardian blocks protected capability' );
 
-$caps = SMC_Authorization::filter_capabilities(
-	array( 'publish_posts' => true ),
-	array( 'publish_posts' ),
-	array(),
-	$GLOBALS['smc_test_users'][7]
-);
+$caps = SMC_Authorization::filter_capabilities( array( 'publish_posts' => true ), array( 'publish_posts' ), array(), $GLOBALS['smc_test_users'][7] );
 expect_true( false === $caps['publish_posts'], 'Unverified ordinary contact ownership blocks protected capability' );
 
-$caps = SMC_Authorization::filter_capabilities(
-	array( 'manage_options' => true, 'publish_posts' => true ),
-	array( 'publish_posts' ),
-	array(),
-	$GLOBALS['smc_test_users'][4]
-);
+$caps = SMC_Authorization::filter_capabilities( array( 'manage_options' => true, 'publish_posts' => true ), array( 'publish_posts' ), array(), $GLOBALS['smc_test_users'][4] );
 expect_true( true === $caps['publish_posts'], 'Verified administrator with current challenge keeps protected capability' );
+
+$caps = SMC_Authorization::filter_capabilities( array( 'publish_posts' => true ), array( 'publish_posts' ), array(), $GLOBALS['smc_test_users'][8] );
+expect_true( false === $caps['publish_posts'], 'Current jurisdictional age failure blocks protected capability synchronously' );
+
+$caps = SMC_Authorization::filter_capabilities( array( 'publish_posts' => true ), array( 'publish_posts' ), array(), $GLOBALS['smc_test_users'][9] );
+expect_true( false === $caps['publish_posts'], 'Under-18 professional role is blocked synchronously even if stored membership is approved' );
+
+$filtered = SMC_Authorization::filter_current_age_assertion( array_merge( $GLOBALS['smc_test_assertions'][8], array( 'can_message'=>true, 'can_publish'=>true, 'publishing'=>array('can_open_composer'=>true,'can_direct_publish'=>true), 'transfer'=>array('can_initiate'=>true) ) ), 8 );
+expect_true( empty( $filtered['eligible'] ) && empty( $filtered['can_message'] ) && empty( $filtered['publishing']['can_open_composer'] ) && empty( $filtered['transfer']['can_initiate'] ), 'Public assertion surface fails closed on current age ineligibility' );
 
 $_SERVER['REQUEST_URI'] = '/wp-json/sabri/v1/write';
 $_SERVER['REQUEST_METHOD'] = 'GET';
@@ -166,19 +187,21 @@ expect_true( $error instanceof WP_Error && 'smc_membership_hard_block' === $erro
 $GLOBALS['smc_test_current_user'] = 4;
 expect_true( null === SMC_Authorization::enforce_rest_state( null ), 'Verified institutional REST mutation is allowed' );
 
-// Exact recovery allowlist: a self-service recovery action remains reachable.
 $GLOBALS['smc_test_current_user'] = 2;
 $GLOBALS['smc_test_admin'] = true;
-$_REQUEST = array( 'action' => 'smc_submit_application' );
-try {
-	SMC_Authorization::enforce_admin_state();
-	expect_true( true, 'Exact recovery action remains reachable' );
-} catch ( SMC_Test_Stop $error ) {
-	expect_true( false, 'Exact recovery action remains reachable' );
+foreach ( array( 'smc_submit_application', 'smc_revoke_session', 'smc_revoke_all_sessions' ) as $recovery_action ) {
+	$_REQUEST = array( 'action' => $recovery_action );
+	$_POST = array();
+	try {
+		SMC_Authorization::enforce_admin_state();
+		expect_true( true, 'Exact recovery action remains reachable: ' . $recovery_action );
+	} catch ( SMC_Test_Stop $error ) {
+		expect_true( false, 'Exact recovery action remains reachable: ' . $recovery_action );
+	}
 }
 
-// A non-recovery smc_* action no longer inherits a broad prefix bypass.
 $_REQUEST = array( 'action' => 'smc_review_transition' );
+$_POST = array();
 try {
 	SMC_Authorization::enforce_admin_state();
 	expect_true( false, 'Non-recovery smc action is denied for a hard-blocked administrator' );
@@ -186,9 +209,28 @@ try {
 	expect_true( 302 === $error->status, 'Non-recovery smc action is denied for a hard-blocked administrator' );
 }
 
-// Founder reassignment is immutable through the ordinary settings form.
 $GLOBALS['smc_test_current_user'] = 4;
+$GLOBALS['smc_test_review_request'] = array( 'id'=>77, 'user_id'=>20, 'status'=>'appeal_review', 'queue_type'=>'appeal' );
+$GLOBALS['smc_test_previous_actor'] = 4;
+$_REQUEST = array( 'action' => 'smc_assign_review' );
+$_POST = array( 'request_id' => 77 );
+try {
+	SMC_Authorization::enforce_admin_state();
+	expect_true( false, 'Original adverse reviewer cannot reclaim the appeal' );
+} catch ( SMC_Test_Stop $error ) {
+	expect_true( 403 === $error->status, 'Original adverse reviewer cannot reclaim the appeal' );
+}
+
+$GLOBALS['smc_test_previous_actor'] = 99;
+try {
+	SMC_Authorization::enforce_admin_state();
+	expect_true( true, 'Independent reviewer may proceed to the appeal handler' );
+} catch ( SMC_Test_Stop $error ) {
+	expect_true( false, 'Independent reviewer may proceed to the appeal handler' );
+}
+
 $GLOBALS['smc_test_founder'] = 10;
+$GLOBALS['smc_test_review_request'] = false;
 $_REQUEST = array( 'action' => 'smc_save_founder' );
 $_POST = array( 'founder_user_id' => 11 );
 try {
@@ -198,8 +240,6 @@ try {
 	expect_true( 409 === $error->status, 'Ordinary Founder reassignment is locked' );
 }
 
-
-// Clearing an existing Founder is also a reassignment and must be blocked.
 $_POST = array( 'founder_user_id' => 0 );
 try {
 	SMC_Authorization::enforce_admin_state();

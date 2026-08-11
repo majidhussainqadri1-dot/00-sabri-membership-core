@@ -9,8 +9,8 @@ const failures = [];
 let passed = 0;
 function assert(condition, name) { if (condition) passed += 1; else failures.push(name); }
 
-assert(main.includes('Version: 1.2.40'), 'Plugin header is 1.2.40');
-assert(main.includes("define( 'SMC_VERSION', '1.2.40' )"), 'Runtime version is 1.2.40');
+assert(main.includes('Version: 1.2.41'), 'Plugin header is 1.2.41');
+assert(main.includes("define( 'SMC_VERSION', '1.2.41' )"), 'Runtime version is 1.2.41');
 assert(main.includes("define( 'SMC_DB_VERSION', '1.4.5' )"), 'Database version is 1.4.5');
 assert(main.includes("define( 'SMC_CF01_CONTRACT_VERSION', '1.1.0' )"), 'CF-01 membership-only contract version is declared');
 assert(main.includes("require_once SMC_PATH . 'includes/class-smc-cf01-contract.php'"), 'CF-01 provider is loaded');

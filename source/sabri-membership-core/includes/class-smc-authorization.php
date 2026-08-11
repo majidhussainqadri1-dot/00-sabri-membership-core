@@ -32,6 +32,7 @@ final class SMC_Authorization {
 		'smc_request_contact_otp',
 		'smc_verify_contact_otp',
 		'smc_revoke_session',
+		'smc_revoke_all_sessions',
 		'smc_resubmit',
 		'smc_appeal',
 		'smc_withdraw_guardian',
@@ -49,6 +50,9 @@ final class SMC_Authorization {
 		add_action( 'admin_init', array( __CLASS__, 'enforce_admin_state' ), 1 );
 		add_filter( 'rest_authentication_errors', array( __CLASS__, 'enforce_rest_state' ), 90 );
 		add_filter( 'user_has_cap', array( __CLASS__, 'filter_capabilities' ), 90, 4 );
+		// Cross-file consumers of the public assertion filter receive the same
+		// action-time age fail-closed semantics as File 00 authorization itself.
+		add_filter( 'smc_assertions_v1', array( __CLASS__, 'filter_current_age_assertion' ), 100, 2 );
 	}
 
 	private static function restricted_capabilities() {
@@ -68,6 +72,39 @@ final class SMC_Authorization {
 		return in_array( sanitize_key( $state['status'] ?? '' ), self::hard_block_statuses(), true );
 	}
 
+	/**
+	 * Recompute current age/jurisdiction eligibility synchronously.
+	 *
+	 * The daily lifecycle sweep persists durable state changes, but an approved
+	 * account must not retain protected authority between a birthday/policy
+	 * boundary and the next cron run. Institutional accounts keep their separate
+	 * evidence-attention governance and are not blanket-suspended here.
+	 */
+	private static function current_age_eligible( $user_id, $assertions = array() ) {
+		$user_id = absint( $user_id );
+		$assertions = is_array( $assertions ) ? $assertions : array();
+		if ( ! empty( $assertions['institutional_account'] ) || smc_is_institutional_account( $user_id ) ) {
+			return true;
+		}
+		$app = smc_application( $user_id );
+		if ( ! is_array( $app ) || empty( $app['date_of_birth_enc'] ) ) {
+			return false;
+		}
+		$dob = SMC_Security::decrypt( $app['date_of_birth_enc'], 'date-of-birth', array( 'user_id' => $user_id ) );
+		$age = is_wp_error( $dob ) ? false : smc_age_from_dob( $dob );
+		$minimum = smc_effective_minimum_age( $app['gender'] ?? '', $app['residence_country'] ?? '' );
+		if ( false === $age || false === $minimum || $age < $minimum ) {
+			return false;
+		}
+		$types = isset( $assertions['requested_membership_types'] )
+			? (array) $assertions['requested_membership_types']
+			: SMC_Contracts::requested_types( $user_id );
+		if ( $age < 18 && array_intersect( array_map( 'sanitize_key', $types ), smc_professional_types() ) ) {
+			return false;
+		}
+		return true;
+	}
+
 	private static function assertions( $user_id ) {
 		$assertions = SMC_Contracts::assertions( absint( $user_id ) );
 		$hard_blocked = in_array( sanitize_key( $assertions['status'] ?? '' ), self::hard_block_statuses(), true );
@@ -77,8 +114,39 @@ final class SMC_Authorization {
 			! empty( $assertions['email_verified'] ) &&
 			! empty( $assertions['phone_verified'] )
 		);
+		$age_ok = self::current_age_eligible( $user_id, $assertions );
 		$assertions['hard_blocked'] = $hard_blocked;
-		$assertions['effective_eligible'] = ! $hard_blocked && ! empty( $assertions['eligible'] ) && $guardian_ok && $contact_ok;
+		$assertions['age_eligible'] = $age_ok;
+		$assertions['effective_eligible'] = ! $hard_blocked && ! empty( $assertions['eligible'] ) && $guardian_ok && $contact_ok && $age_ok;
+		return $assertions;
+	}
+
+	/** Keep the versioned public assertion surface fail-closed at action time. */
+	public static function filter_current_age_assertion( $assertions, $user_id ) {
+		$assertions = is_array( $assertions ) ? $assertions : array();
+		$age_ok = self::current_age_eligible( $user_id, $assertions );
+		$assertions['age_eligible'] = $age_ok;
+		if ( $age_ok ) {
+			return $assertions;
+		}
+		$assertions['eligible'] = false;
+		foreach ( array( 'can_message', 'can_comment', 'can_book_appointment', 'can_practice', 'can_publish', 'can_direct_publish', 'can_transfer_files' ) as $key ) {
+			if ( array_key_exists( $key, $assertions ) ) { $assertions[ $key ] = false; }
+		}
+		if ( isset( $assertions['publishing'] ) && is_array( $assertions['publishing'] ) ) {
+			$assertions['publishing']['can_open_composer'] = false;
+			$assertions['publishing']['can_direct_publish'] = false;
+		}
+		if ( isset( $assertions['transfer'] ) && is_array( $assertions['transfer'] ) ) {
+			$assertions['transfer']['can_initiate'] = false;
+		}
+		if ( isset( $assertions['clinical_commerce'] ) && is_array( $assertions['clinical_commerce'] ) ) {
+			$assertions['clinical_commerce']['eligible'] = false;
+			$assertions['clinical_commerce']['appointment_allowed'] = false;
+			$assertions['clinical_commerce']['doctor_practice_allowed'] = false;
+			$assertions['clinical_commerce']['marketplace_direct_deal_allowed'] = false;
+			$assertions['clinical_commerce']['marketplace_seller_actions_allowed'] = false;
+		}
 		return $assertions;
 	}
 
@@ -120,6 +188,47 @@ final class SMC_Authorization {
 			$message,
 			array( 'status' => absint( $status ) )
 		);
+	}
+
+	/**
+	 * Appeals must never return to the actor who imposed the latest rejection or
+	 * suspension. Enforce this before both claim and decision handlers so a
+	 * losing appellant receives an actually independent reviewer on either path.
+	 */
+	private static function enforce_appeal_reviewer_independence() {
+		$action = self::request_action();
+		if ( ! in_array( $action, array( 'smc_assign_review', 'smc_review_transition' ), true ) ) {
+			return;
+		}
+		global $wpdb;
+		$request = false;
+		if ( 'smc_assign_review' === $action ) {
+			$request_id = isset( $_POST['request_id'] ) ? absint( $_POST['request_id'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			if ( $request_id ) {
+				$request = $wpdb->get_row( $wpdb->prepare( "SELECT id,user_id,status,queue_type FROM {$wpdb->prefix}smc_verification_requests WHERE id=%d LIMIT 1", $request_id ), ARRAY_A );
+			}
+		} else {
+			$user_id = isset( $_POST['user_id'] ) ? absint( $_POST['user_id'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			if ( $user_id ) {
+				$request = $wpdb->get_row( $wpdb->prepare( "SELECT id,user_id,status,queue_type FROM {$wpdb->prefix}smc_verification_requests WHERE user_id=%d LIMIT 1", $user_id ), ARRAY_A );
+			}
+		}
+		if ( ! is_array( $request ) || ( 'appeal_review' !== sanitize_key( $request['status'] ?? '' ) && 'appeal' !== sanitize_key( $request['queue_type'] ?? '' ) ) ) {
+			return;
+		}
+		$previous_actor = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT actor_id FROM {$wpdb->prefix}smc_verification_events WHERE request_id=%d AND new_status IN ('rejected','suspended') ORDER BY id DESC LIMIT 1",
+				(int) $request['id']
+			)
+		);
+		if ( $previous_actor && $previous_actor === get_current_user_id() ) {
+			wp_die(
+				esc_html__( 'An appeal must be claimed and decided by a reviewer independent of the latest rejection or suspension actor.', 'sabri-membership-core' ),
+				'',
+				array( 'response' => 403 )
+			);
+		}
 	}
 
 	public static function filter_capabilities( $allcaps, $caps, $args, $user ) {
@@ -171,6 +280,8 @@ final class SMC_Authorization {
 			wp_safe_redirect( smc_page_url( 'status', '/membership-status/' ) );
 			exit;
 		}
+
+		self::enforce_appeal_reviewer_independence();
 
 		// Founder identity is immutable through the ordinary settings form once
 		// configured. Recovery/reassignment must use an explicit audited process

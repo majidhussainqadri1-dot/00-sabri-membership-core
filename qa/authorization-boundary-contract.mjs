@@ -13,8 +13,8 @@ function assert(condition, name) {
   else failures.push(name);
 }
 
-assert(main.includes('Version: 1.2.40'), 'Plugin header is 1.2.40');
-assert(main.includes("define( 'SMC_VERSION', '1.2.40' )"), 'Runtime version is 1.2.40');
+assert(main.includes('Version: 1.2.41'), 'Plugin header is 1.2.41');
+assert(main.includes("define( 'SMC_VERSION', '1.2.41' )"), 'Runtime version is 1.2.41');
 assert(main.includes("define( 'SMC_DB_VERSION', '1.4.5' )"), 'Database version is 1.4.5');
 assert(main.includes("define( 'SMC_CONTRACT_VERSION', '1.2.3' )"), 'Contract version is 1.2.3 after Founder-approved MFA retirement');
 assert(main.includes("require_once SMC_PATH . 'includes/class-smc-authorization.php'"), 'Authorization boundary is loaded');
@@ -38,6 +38,10 @@ for (const symbol of [
   'institutional_account',
   'smc_membership_hard_block',
   'Founder reassignment is locked',
+  'smc_revoke_all_sessions',
+  'current_age_eligible',
+  'filter_current_age_assertion',
+  'enforce_appeal_reviewer_independence',
 ]) {
   assert(auth.includes(symbol), `Authorization control: ${symbol}`);
 }
@@ -53,6 +57,9 @@ assert(auth.includes("array( 'GET', 'HEAD', 'OPTIONS' )"), 'Safe REST methods re
 assert(auth.includes("isset( $GLOBALS['wp'] ) && is_object( $GLOBALS['wp'] )"), 'REST route discovery guards the global WordPress object');
 assert(auth.includes("array( 'rejected', 'suspended', 'expired', 'appeal_review', 'erasure_pending', 'invalid_application' )"), 'Hard-block census is explicit and fail-closed');
 assert(auth.includes("$allcaps[ $cap ] = false"), 'Restricted capabilities are explicitly denied');
+assert(auth.includes("$age < $minimum"), 'Current jurisdictional age minimum is enforced synchronously');
+assert(auth.includes("$age < 18 && array_intersect"), 'Current under-18 professional eligibility fails closed');
+assert(auth.includes("new_status IN ('rejected','suspended')"), 'Appeal reviewer independence binds to latest adverse decision actor');
 
 if (failures.length) {
   console.error(`authorization boundary contract: ${passed} PASS, ${failures.length} FAIL`);
