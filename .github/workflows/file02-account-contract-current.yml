@@ -1,0 +1,77 @@
+name: File 00 Current File 02 Account Contract
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  exact-head-contract:
+    name: Exact-head File 02 1.2.0 account-contract compatibility
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['7.4', '8.3']
+    steps:
+      - name: Checkout exact immutable File 00 head
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Prove exact File 00 checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected='${{ github.event.pull_request.head.sha || github.sha }}'
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$expected"
+          echo "Exact File 00 head: $actual"
+
+      - name: Set up PHP ${{ matrix.php }}
+        uses: shivammathur/setup-php@0bc29164ea0ab4e4f6d800ae401420bad1a991f2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+
+      - name: File 00 provider lint and local compatibility QA
+        shell: bash
+        run: |
+          set -euo pipefail
+          find source/sabri-membership-core -name '*.php' -print0 | xargs -0 -n1 php -l
+          node qa/file02-account-contract-v1243.mjs
+          php qa/file02-account-contract-runtime-v1243.php
+
+      - name: Checkout exact merged File 02 consumer
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: majidhussainqadri1-dot/02-sabri-authentication
+          ref: 8192c45b595b34e13e09934e3b2d554aa2d8553f
+          path: file02-exact
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Prove exact File 02 pin and cross-contract shape
+        shell: bash
+        env:
+          FILE02_ROOT: ${{ github.workspace }}/file02-exact
+        run: |
+          set -euo pipefail
+          test "$(git -C file02-exact rev-parse HEAD)" = '8192c45b595b34e13e09934e3b2d554aa2d8553f'
+          php qa/file02-exact-consumer-compat.php
+
+      - name: Package identity and repository hygiene
+        if: matrix.php == '8.3'
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts
+          npm run verify
+          git diff --check
+          test -f dist/00-sabri-membership-core-1.2.43.zip
