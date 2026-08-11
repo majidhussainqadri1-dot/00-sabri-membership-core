@@ -1,4 +1,4 @@
-name: File 00 R10 Manifest Digest Diagnostic
+name: File 00 R10 Release Identity Diagnostic
 
 on:
   pull_request:
@@ -7,13 +7,15 @@ permissions:
   contents: read
 
 jobs:
-  digests:
+  diagnostics:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-      - name: Print current plugin digests
+      - name: Print current plugin digests and release references
         run: |
           set -euo pipefail
           sha256sum source/sabri-membership-core/includes/class-smc-authorization.php
           sha256sum source/sabri-membership-core/sabri-membership-core.php
           sha256sum source/sabri-membership-core/README.txt
+          echo '--- current 1.2.40 references ---'
+          grep -RIn --exclude-dir=.git '1\.2\.40' . || true
