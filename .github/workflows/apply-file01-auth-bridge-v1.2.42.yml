@@ -25,6 +25,8 @@ jobs:
         run: npm ci
       - name: Refresh deterministic source manifest
         run: python3 tools/build.py
+      - name: Remove temporary write-capable workflow before exact-tree QA
+        run: rm -f .github/workflows/apply-file01-auth-bridge-v1.2.42.yml
       - name: Run permanent source/runtime QA
         run: npm test
       - name: Verify deterministic package and PHP syntax
@@ -32,9 +34,8 @@ jobs:
           python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.42.zip
           php -l source/sabri-membership-core/includes/class-smc-authorization.php
           php -l source/sabri-membership-core/sabri-membership-core.php
-      - name: Commit corrected candidate and remove temporary automation
+      - name: Commit corrected candidate and remove apply helper
         run: |
-          rm -f .github/workflows/apply-file01-auth-bridge-v1.2.42.yml
           rm -f tools/apply-file01-auth-bridge-v1.2.42.py
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
