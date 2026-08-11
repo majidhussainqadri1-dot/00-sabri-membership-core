@@ -57,8 +57,9 @@ jobs:
           grep -Fq 'Founder change-control' docs/FILE-00-MASTER-PLAN-2026.md
           grep -Fq 'Live-proven orphaned application role-backfill correction — 1.2.39' docs/FILE-00-MASTER-PLAN-2026.md
           grep -Fq '80-round review hardening — 1.2.40' docs/FILE-00-MASTER-PLAN-2026.md
-          grep -Fq 'Supplemental ten-round corrective review — 1.2.42' docs/FILE-00-MASTER-PLAN-2026.md
+          grep -Fq 'Supplemental ten-round corrective review — 1.2.41' docs/FILE-00-MASTER-PLAN-2026.md
           test -f RELEASE-1.2.42.md
+          test -f RELEASE-1.2.41.md
           test -f RELEASE-1.2.40.md
           test -f RELEASE-1.2.39.md
           test -f RELEASE-1.2.38.md
@@ -101,6 +102,7 @@ jobs:
             dist/00-sabri-membership-core-1.2.42.zip
             dist/CHECKSUMS.sha256
             RELEASE-1.2.42.md
+            RELEASE-1.2.41.md
             RELEASE-1.2.40.md
             RELEASE-1.2.39.md
             RELEASE-1.2.38.md
