@@ -26,6 +26,18 @@ Defects were identified and corrected during rounds **1, 2, 3, and 80**. Rounds 
 
 This record describes repository review evidence only. It is not evidence that the candidate has been deployed to Live.
 
+## Supplemental requested ten-round corrective review — 11 August 2026
+
+A further ten-round review was started from the then-current PR #44 exact head, with every newly proven defect corrected before the next review lens proceeded.
+
+- **Round 1 — defect found and corrected:** the institutional lifecycle recovery reader expected plaintext `reason_code`/`reason`, while the canonical audit privacy sanitizer deliberately stores those sensitive keys as SHA-256 digest fields. The repair path now recognizes only the exact allowlisted `age_eligibility_failed` digest (while retaining legacy plaintext compatibility) and does not expose or reverse arbitrary audit detail.
+- **Round 2 — defect found and corrected:** temporary cursor root-cause diagnostic workflow/script residue was removed after it had produced the required evidence.
+- **Round 3 — defect found and corrected:** the permanent release gate only rejected one narrow temporary filename pattern. It now rejects any `zz-*` temporary file in the workflow or top-level QA diagnostic surfaces.
+- **Round 4 — defect found and corrected:** institutional repair completion previously meant only “no write failures in the current batch.” Completion now also requires exhaustion of the persistent repair cursor, preventing a 500-row batch from prematurely stamping the release repair as complete while later eligible rows remain.
+- **Round 5 — QA defect found and corrected:** the real WordPress/MariaDB starvation regression did not explicitly fail on premature completion. It now asserts both that completion remains false while more cursorized batches remain and that completion becomes true only after the terminal batch.
+- **Rounds 6–9 — no new defect found:** release identity, migration/schema compatibility, authentication/MFA ownership and authorization boundaries, and package/manifest/reproducibility were re-reviewed after the corrections above.
+- **Round 10 — exact-head closure gate:** repository acceptance is determined only by the final PR-head CI result and deterministic package artifact. A green earlier SHA is not sufficient evidence for a later head.
+
 ## Historical live incident boundary
 
 The 1.2.36–1.2.39 compatibility work remains historical evidence for the live migration sequence: legacy `queue` index reconciliation, legacy `decision` index reconciliation, protected Administrator role-backfill semantics, and missing-principal/orphan application reconciliation. Release 1.2.40 retains those corrections while adding the review hardening above.
