@@ -23,11 +23,12 @@ jobs:
         run: python3 tools/apply-file01-auth-bridge-v1.2.42.py
       - name: Install QA dependencies
         run: npm ci
+      - name: Refresh deterministic source manifest
+        run: python3 tools/build.py
       - name: Run permanent source/runtime QA
         run: npm test
-      - name: Build and verify deterministic package
+      - name: Verify deterministic package and PHP syntax
         run: |
-          python3 tools/build.py
           python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.42.zip
           php -l source/sabri-membership-core/includes/class-smc-authorization.php
           php -l source/sabri-membership-core/sabri-membership-core.php
