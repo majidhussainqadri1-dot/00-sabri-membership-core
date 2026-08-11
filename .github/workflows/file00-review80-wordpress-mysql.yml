@@ -45,7 +45,7 @@ jobs:
           php -l qa/review80-wordpress-mysql.php
           npm test
           git diff --check
-          test -z "$(find .github/workflows -maxdepth 1 -name 'zz-80-review-*' -print -quit)"
+          test -z "$(find .github/workflows qa -maxdepth 1 -type f -name 'zz-*' -print -quit)"
       - name: Install pinned WP-CLI and WordPress 7.0.1
         run: |
           set -euo pipefail
