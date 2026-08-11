@@ -3,7 +3,7 @@ Contributors: sabrihomeopathy
 Tags: membership, identity, guardian consent, privacy, governance
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 1.2.39
+Stable tag: 1.2.40
 License: GPL-2.0-or-later
 
 Canonical membership eligibility, identity assurance, guardian consent, security assertions, and verification governance for the Sabri Social Homeopathy Platform.
@@ -27,7 +27,7 @@ File 00 does not own authentication UI, password recovery, passkey ceremony, pub
 
 == CF-01 Provider Contract ==
 
-Contract `smc.cf01.membership-assurance` version `1.0.0` returns a short-lived, purpose-bound, server-side assertion containing an opaque platform UUID, membership state, age/guardian context, jurisdiction context, source record version and explicit allow/deny/unknown result. It returns no clinical data or identity-document content.
+Contract `smc.cf01.membership-assurance` version `1.1.0` returns a short-lived, purpose-bound, server-side assertion containing an opaque platform UUID, membership state, age/guardian context, jurisdiction context, source record version and explicit allow/deny/unknown result. It returns no clinical data or identity-document content.
 
 File 00 no longer provides a second-factor verification result. Any future stronger authentication assurance must come from the canonical authentication owner through a separately approved, versioned contract; membership evidence by itself never grants clinical object, field, relationship, prescription, export, break-glass or key authority.
 
@@ -70,6 +70,10 @@ File 19 receives membership notices through its canonical sabri_notify integrati
 Local source and GitHub checks do not authorize production. Test fresh activation, legacy upgrade, DB/audit migration, legacy factor retirement, MySQL advisory locks, concurrent reviewers, authorization matrices, filesystem denial and rollback, scanner providers, email/mobile/guardian delivery, File 02 authentication integration, CF-01 provider/consumer contracts, all named cross-file integrations, advanced trust containment/revocation/selective-disclosure workflows, privacy erasure, restore, browser accessibility, and mobile layouts on Hostinger staging.
 
 == Changelog ==
+
+= 1.2.40 =
+* 80-round exact-head corrective candidate: removes residual retired File 00 MFA dependencies, strengthens role replacement, minor/clinical-commerce privacy contracts, durable event/repair recovery, session cleanup indexes, and backup/restore truth.
+* Runtime 1.2.40; DB schema 1.4.5; public membership contract 1.2.3; CF-01 1.1.0; Advanced Trust 1.0.0. Repository/CI completion does not itself claim live deployment.
 
 = 1.2.39 =
 * Repairs the live-proven role-grant migration failure caused by historical File 00 applications whose WordPress principals no longer exist.

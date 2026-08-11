@@ -6,6 +6,7 @@ const plugin = path.join(root, 'source', 'sabri-membership-core');
 const security = fs.readFileSync(path.join(plugin, 'includes/class-smc-security.php'), 'utf8');
 const installer = fs.readFileSync(path.join(plugin, 'includes/class-smc-installer.php'), 'utf8');
 const workflow = fs.readFileSync(path.join(plugin, 'includes/class-smc-workflow.php'), 'utf8');
+const admin = fs.readFileSync(path.join(plugin, 'includes/class-smc-admin.php'), 'utf8');
 const main = fs.readFileSync(path.join(plugin, 'sabri-membership-core.php'), 'utf8');
 const readme = fs.readFileSync(path.join(plugin, 'README.txt'), 'utf8');
 const row16Fixture = fs.readFileSync(path.join(root, 'qa/audit-historical-transition-wordpress.php'), 'utf8');
@@ -13,9 +14,9 @@ const workflowDir = path.join(root, '.github/workflows');
 const workflowText = fs.readdirSync(workflowDir).filter((name) => name.endsWith('.yml')).map((name) => fs.readFileSync(path.join(workflowDir, name), 'utf8')).join('\n');
 
 const checks = [
-  ['runtime 1.2.39', main.includes('Version: 1.2.39') && main.includes("SMC_VERSION', '1.2.39")],
-  ['schema 1.4.4', main.includes("SMC_DB_VERSION', '1.4.4")],
-  ['stable tag 1.2.39', readme.includes('Stable tag: 1.2.39') && readme.includes('= 1.2.39 =')],
+  ['runtime 1.2.40', main.includes('Version: 1.2.40') && main.includes("SMC_VERSION', '1.2.40")],
+  ['schema 1.4.5', main.includes("SMC_DB_VERSION', '1.4.5")],
+  ['stable tag 1.2.40', readme.includes('Stable tag: 1.2.40') && readme.includes('= 1.2.40 =')],
   ['exact legacy schema signature', security.includes("array( 'subject_user_id', 'object_type', 'object_id' )") && security.includes("CHARACTER_MAXIMUM_LENGTH") && security.includes("auto_increment") && security.includes("allowed_bridge_columns")],
   ['legacy rows remain lower assurance', security.includes("'assurance'                  => 'legacy_snapshot_only'")],
   ['versioned domain-separated anchors', security.includes("smc:audit-legacy-anchor:v1|") && security.includes("smc:audit-legacy-anchor:v2|") && security.includes('hash_hmac')],
@@ -29,9 +30,9 @@ const checks = [
   ['recovery rechecks rows and key epochs', installer.includes("'audit_key_epoch_digest'") && installer.includes('smc_audit_partial_rows_changed')],
   ['transaction-owned audit never performs DDL', installer.includes('audit_infrastructure_ready') && security.includes('$outer_transaction ? SMC_Installer::audit_infrastructure_ready() : SMC_Installer::ensure_audit_infrastructure()')],
   ['real row-16 WordPress fixture', row16Fixture.includes('historical row-16 transition') && row16Fixture.includes("'smc-audit-legacy-v1-bridge-columns'") && row16Fixture.includes('historical_transition_forward_append')],
-  ['active CI is immutable and v1.2.39-aligned', !workflowText.includes('contents: write') && workflowText.includes('00-sabri-membership-core-1.2.39.zip')],
+  ['active CI is immutable and v1.2.40-aligned', !workflowText.includes('contents: write') && workflowText.includes('00-sabri-membership-core-1.2.40.zip')],
   ['tail binds only to modern last hash', installer.includes("$last = (string) ( $normalized['last_hash'] ?? '' )")],
-  ['administrator receives real legacy state', workflow.includes('smc_legacy_state') && workflow.includes('Legacy audit snapshot: %s.')],
+  ['administrator receives audit-integrity state independent of retired MFA', admin.includes('function audit_page') && admin.includes('SMC_Security::verify_audit_chain()') && admin.includes("$integrity['reason']") && workflow.includes('smc_membership_status') && !workflow.includes('smc_legacy_state')],
 ];
 
 const failed = checks.filter(([, pass]) => !pass);

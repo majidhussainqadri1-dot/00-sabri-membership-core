@@ -6,13 +6,15 @@ const bootstrap = fs.readFileSync(`${root}/sabri-membership-core.php`, 'utf8');
 const retirement = fs.readFileSync(`${root}/includes/class-smc-mfa-retirement.php`, 'utf8');
 const contracts = fs.readFileSync(`${root}/includes/class-smc-contracts.php`, 'utf8');
 const schemaCompat = fs.readFileSync(`${root}/includes/class-smc-schema-compat.php`, 'utf8');
+const hostCompat = fs.readFileSync(`${root}/includes/class-smc-host-compat.php`, 'utf8');
+const workflow = fs.readFileSync(`${root}/includes/class-smc-workflow.php`, 'utf8');
 
 const has = (source, needle, label = needle) => assert.ok(source.includes(needle), `missing MFA-retirement contract: ${label}`);
 const lacks = (source, needle, label = needle) => assert.ok(!source.includes(needle), `retired MFA contract still present: ${label}`);
 
-has(bootstrap, "Version: 1.2.39", 'plugin release 1.2.39');
-has(bootstrap, "define( 'SMC_VERSION', '1.2.39' );", 'runtime release 1.2.39');
-has(bootstrap, "define( 'SMC_CONTRACT_VERSION', '1.2.2' );", 'public contract 1.2.2');
+has(bootstrap, "Version: 1.2.40", 'plugin release 1.2.40');
+has(bootstrap, "define( 'SMC_VERSION', '1.2.40' );", 'runtime release 1.2.40');
+has(bootstrap, "define( 'SMC_CONTRACT_VERSION', '1.2.3' );", 'public contract 1.2.3');
 has(bootstrap, "require_once SMC_PATH . 'includes/class-smc-mfa-retirement.php';", 'MFA retirement runtime loaded');
 has(bootstrap, "array( 'SMC_MFA_Retirement', 'init' )", 'MFA retirement runtime initialized');
 has(bootstrap, "require_once SMC_PATH . 'includes/class-smc-schema-compat.php';", 'live schema compatibility runtime loaded');
@@ -48,6 +50,12 @@ has(schemaCompat, "self::role_grant_checkpoint( 'running', $cursor )", 'orphan-s
 for (const action of ['start_2fa', 'finish_2fa', 'challenge_2fa', 'rotate_recovery', 'ack_recovery_receipt']) {
   has(retirement, `remove_action( 'admin_post_smc_' . $action`, `runtime removal for ${action}`);
 }
+for (const action of ['start_2fa', 'finish_2fa', 'challenge_2fa', 'rotate_recovery', 'ack_recovery_receipt']) {
+  lacks(hostCompat, `'${action}'`, `host fallback registry excludes retired ${action}`);
+}
+for (const handler of ['handle_start_2fa', 'handle_finish_2fa', 'handle_challenge_2fa', 'handle_rotate_recovery', 'handle_ack_recovery_receipt']) {
+  lacks(workflow, `function ${handler}`, `dead retired handler removed: ${handler}`);
+}
 has(retirement, "remove_shortcode( 'smc_membership_recovery' );", 'recovery shortcode retired');
 has(retirement, "File 00 no longer uses two-factor authentication", 'user-facing MFA retirement notice');
 has(retirement, "'mfa_required'] = false", 'public contract declares MFA not required');
@@ -76,3 +84,7 @@ has(contracts, "if ( user_can( $user, 'manage_options' ) ) {\n\t\t\treturn true;
 lacks(contracts, "smc_privacy_erasure_lock( $user_id ) || user_can( $user, 'manage_options' )", 'Administrator protection is not conflated with role-sync failure');
 
 console.log('mfa-retirement-contract: PASS');
+
+lacks(workflow, 'Enable two-factor authentication in Membership Security.', 'status UI must not require retired File 00 MFA');
+lacks(workflow, "'Two-factor security'", 'status UI must not present retired MFA as required');
+has(workflow, 'File 00 MFA retired', 'status UI names File 02 authentication ownership');

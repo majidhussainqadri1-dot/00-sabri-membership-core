@@ -117,19 +117,14 @@ final class SMC_Advanced_Trust_2026 {
 	/** F00-EXT-002 — File 02 Passkey/WebAuthn assurance adapter. */
 	public static function authentication_assurance( $user_id ) {
 		$user_id = absint( $user_id );
-		$session_mfa = class_exists( 'SMC_Security' ) && SMC_Security::session_is_verified( $user_id );
-		$session_verified_at = $session_mfa && method_exists( 'SMC_Security', 'session_verified_at' ) ? absint( SMC_Security::session_verified_at( $user_id ) ) : 0;
-		if ( $session_mfa && $session_verified_at <= 0 ) {
-			$session_mfa = false;
-		}
 		$baseline = array(
 			'contract_version' => '1.0.0',
-			'owner' => 'file00',
-			'level' => $session_mfa ? 2 : 1,
-			'method' => $session_mfa ? 'file00_totp_or_recovery' : 'primary_authentication_unasserted',
+			'owner' => 'none',
+			'level' => 0,
+			'method' => 'authentication_assurance_unavailable',
 			'passkey_asserted' => false,
 			'hardware_backed' => false,
-			'verified_at' => $session_verified_at,
+			'verified_at' => 0,
 		);
 		$claim = apply_filters( 'smc_file02_authentication_assurance_v1', $baseline, $user_id );
 		if ( ! is_array( $claim ) ) {
@@ -269,7 +264,7 @@ final class SMC_Advanced_Trust_2026 {
 		if ( $user_id <= 0 || ! get_userdata( $user_id ) ) {
 			return new WP_Error( 'smc_reverify_subject', __( 'A valid membership subject is required.', 'sabri-membership-core' ) );
 		}
-		$authorized = $actor_id > 0 ? self::actor_is_current( $actor_id, 'smc_finalize_verification' ) && SMC_Security::session_is_verified( $actor_id ) : (bool) apply_filters( 'smc_system_reverification_authorized', false, $user_id, sanitize_key( $source ) );
+		$authorized = $actor_id > 0 ? self::actor_meets_step_up( $actor_id, 'identity_change', 'smc_finalize_verification' ) : (bool) apply_filters( 'smc_system_reverification_authorized', false, $user_id, sanitize_key( $source ) );
 		if ( ! $authorized ) {
 			return new WP_Error( 'smc_reverify_authorization', __( 'Reverification requires an authorized reviewer or explicitly authorized system adapter.', 'sabri-membership-core' ) );
 		}
@@ -388,7 +383,7 @@ final class SMC_Advanced_Trust_2026 {
 				'identity' => array( 'owner' => 'file00', 'current' => ! empty( $profile['identity_current'] ), 'issued_at' => $now, 'expires_at' => $now + 120 ),
 				'guardian' => array( 'owner' => 'file00', 'current' => ! empty( $profile['guardian_current'] ), 'issued_at' => $now, 'expires_at' => $now + 120 ),
 				'professional' => array( 'owner' => 'file09', 'current' => ! empty( $profile['professional_current'] ), 'issued_at' => $now, 'expires_at' => $now + 120 ),
-				'authentication' => array( 'owner' => sanitize_key( $auth['owner'] ?? 'file00' ), 'level' => (int) $profile['authentication_assurance_level'], 'method' => sanitize_key( $auth['method'] ?? '' ), 'issued_at' => $now, 'expires_at' => $now + 120 ),
+				'authentication' => array( 'owner' => sanitize_key( $auth['owner'] ?? 'none' ), 'level' => (int) $profile['authentication_assurance_level'], 'method' => sanitize_key( $auth['method'] ?? '' ), 'issued_at' => $now, 'expires_at' => $now + 120 ),
 			),
 			'revocation_epoch' => self::revocation_epoch( $user_id ),
 			'issued_at' => $now,
@@ -603,7 +598,7 @@ final class SMC_Advanced_Trust_2026 {
 			return new WP_Error( 'smc_containment_state', __( 'Unsupported security containment state.', 'sabri-membership-core' ) );
 		}
 		$actor_id = absint( $actor_id );
-		$authorized = $actor_id > 0 ? self::actor_is_current( $actor_id, 'smc_manage_membership' ) && SMC_Security::session_is_verified( $actor_id ) : self::file24_containment_authorized( $user_id, $state, $reason );
+		$authorized = $actor_id > 0 ? self::actor_meets_step_up( $actor_id, 'default', 'smc_manage_membership' ) : self::file24_containment_authorized( $user_id, $state, $reason );
 		if ( ! $authorized ) { return new WP_Error( 'smc_containment_authorization', __( 'Security containment requires authorized membership/security governance.', 'sabri-membership-core' ) ); }
 		if ( ! self::begin_transition_hold( $user_id, 'containment', $state, $actor_id ) ) { return new WP_Error( 'smc_containment_hold', __( 'Security containment could not enter a fail-closed transition hold.', 'sabri-membership-core' ) ); }
 		$record = array( 'state' => $state, 'updated_at' => time(), 'actor_id' => $actor_id, 'reason' => sanitize_text_field( $reason ) );
@@ -844,7 +839,7 @@ final class SMC_Advanced_Trust_2026 {
 	public static function revoke_delegated_authority( $principal_user_id, $grant_id, $actor_id ) {
 		$principal_user_id = absint( $principal_user_id );
 		$actor_id = absint( $actor_id );
-		if ( ! self::actor_is_current( $actor_id, 'smc_manage_membership' ) || ! SMC_Security::session_is_verified( $actor_id ) ) {
+		if ( ! self::actor_meets_step_up( $actor_id, 'delegation_grant', 'smc_manage_membership' ) ) {
 			return false;
 		}
 		$old = self::meta_snapshot( $principal_user_id, self::DELEGATION_META );
@@ -974,7 +969,7 @@ final class SMC_Advanced_Trust_2026 {
 
 	public static function set_service_identity( $user_id, $actor_id, $purpose, $approved = true ) {
 		$user_id = absint( $user_id ); $actor_id = absint( $actor_id ); $purpose = sanitize_key( $purpose );
-		if ( ! $user_id || ! get_userdata( $user_id ) || '' === $purpose || ! self::actor_is_current( $actor_id, 'manage_options', true ) || ! SMC_Security::session_is_verified( $actor_id ) ) { return false; }
+		if ( ! $user_id || ! get_userdata( $user_id ) || '' === $purpose || ! self::actor_meets_step_up( $actor_id, 'default', 'manage_options', true ) ) { return false; }
 		if ( function_exists( 'smc_is_founder' ) && smc_is_founder( $user_id ) ) { return false; }
 		if ( function_exists( 'smc_is_institutional_ai' ) && smc_is_institutional_ai( $user_id ) ) { return false; }
 		$existing = get_user_meta( $user_id, self::SERVICE_IDENTITY_META, true );
@@ -1006,7 +1001,7 @@ final class SMC_Advanced_Trust_2026 {
 		$user_id = absint( $user_id ); $state = sanitize_key( $state );
 		if ( ! in_array( $state, array( 'active', 'dormant', 'deceased', 'permanently_inactive' ), true ) ) { return new WP_Error( 'smc_continuity_state', __( 'Unsupported continuity state.', 'sabri-membership-core' ) ); }
 		$actor_id = absint( $actor_id );
-		if ( ! self::actor_is_current( $actor_id, 'smc_manage_membership' ) || ! SMC_Security::session_is_verified( $actor_id ) ) { return new WP_Error( 'smc_continuity_authorization', __( 'Continuity-state changes require authorized membership governance and fresh security challenge.', 'sabri-membership-core' ) ); }
+		if ( ! self::actor_meets_step_up( $actor_id, 'default', 'smc_manage_membership' ) ) { return new WP_Error( 'smc_continuity_authorization', __( 'Continuity-state changes require authorized membership governance and fresh security challenge.', 'sabri-membership-core' ) ); }
 		if ( ! self::begin_transition_hold( $user_id, 'continuity', $state, $actor_id ) ) { return new WP_Error( 'smc_continuity_hold', __( 'Continuity change could not enter a fail-closed transition hold.', 'sabri-membership-core' ) ); }
 		$record = array( 'state' => $state, 'updated_at' => time(), 'actor_id' => $actor_id, 'reason' => sanitize_text_field( $reason ), 'authorship_preserved' => true );
 		if ( ! self::write_user_meta_verified( $user_id, self::CONTINUITY_META, $record ) ) { return self::transition_failure( $user_id, 'smc_continuity_store' ); }
@@ -1105,7 +1100,7 @@ final class SMC_Advanced_Trust_2026 {
 
 	private static function actor_meets_step_up( $actor_id, $action, $capability = '', $founder_or_admin = false ) {
 		$actor_id = absint( $actor_id );
-		if ( ! self::actor_is_current( $actor_id, $capability, $founder_or_admin ) || ! class_exists( 'SMC_Security' ) || ! SMC_Security::session_is_verified( $actor_id ) ) { return false; }
+		if ( ! self::actor_is_current( $actor_id, $capability, $founder_or_admin ) ) { return false; }
 		$requirement = self::step_up_requirement( $actor_id, sanitize_key( $action ) );
 		return is_array( $requirement ) && ! empty( $requirement['satisfied'] );
 	}

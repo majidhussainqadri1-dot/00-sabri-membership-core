@@ -7,7 +7,7 @@ defined( 'ABSPATH' ) || exit;
  * This class replaces the broad legacy request exemptions with explicit
  * recovery allowlists, keeps public/safe reading available, and ensures that
  * Founder/Administrator institutional precedence never becomes a bypass for
- * an explicit hard block or a current two-factor challenge.
+ * an explicit hard block or a current membership/trust restriction.
  */
 final class SMC_Authorization {
 	private static $restricted_caps = array(
@@ -31,10 +31,6 @@ final class SMC_Authorization {
 		'smc_submit_application',
 		'smc_request_contact_otp',
 		'smc_verify_contact_otp',
-		'smc_start_2fa',
-		'smc_finish_2fa',
-		'smc_challenge_2fa',
-		'smc_rotate_recovery',
 		'smc_revoke_session',
 		'smc_resubmit',
 		'smc_appeal',
@@ -133,7 +129,7 @@ final class SMC_Authorization {
 			return $allcaps;
 		}
 		$assertions = self::assertions( $user->ID );
-		if ( empty( $assertions['effective_eligible'] ) || empty( $assertions['session_two_factor'] ) ) {
+		if ( empty( $assertions['effective_eligible'] ) ) {
 			foreach ( $restricted as $cap ) {
 				$allcaps[ $cap ] = false;
 			}
@@ -154,8 +150,8 @@ final class SMC_Authorization {
 			wp_safe_redirect( smc_page_url( 'status', '/membership-status/' ) );
 			exit;
 		}
-		if ( empty( $assertions['effective_eligible'] ) || empty( $assertions['session_two_factor'] ) ) {
-			wp_safe_redirect( smc_page_url( 'security', '/membership-security/' ) );
+		if ( empty( $assertions['effective_eligible'] ) ) {
+			wp_safe_redirect( smc_page_url( 'status', '/membership-status/' ) );
 			exit;
 		}
 	}
@@ -169,9 +165,9 @@ final class SMC_Authorization {
 
 		// Privileged WordPress administration is a sensitive surface. Founder or
 		// Administrator identity never bypasses an explicit membership hard block,
-		// stale eligibility, containment/reverification hold, or current MFA gate.
-		// Explicit recovery actions remain available through the exact allowlist above.
-		if ( ! empty( $assertions['hard_blocked'] ) || empty( $assertions['effective_eligible'] ) || empty( $assertions['session_two_factor'] ) ) {
+		// stale eligibility or containment/reverification hold. File 00 MFA is retired.
+		// Explicit membership recovery actions remain available through the exact allowlist above.
+		if ( ! empty( $assertions['hard_blocked'] ) || empty( $assertions['effective_eligible'] ) ) {
 			wp_safe_redirect( smc_page_url( 'status', '/membership-status/' ) );
 			exit;
 		}
@@ -247,8 +243,8 @@ final class SMC_Authorization {
 		if ( ! empty( $assertions['hard_blocked'] ) ) {
 			return self::deny( 'smc_membership_hard_block', __( 'This membership is under an explicit hard block.', 'sabri-membership-core' ) );
 		}
-		if ( empty( $assertions['effective_eligible'] ) || empty( $assertions['session_two_factor'] ) ) {
-			return self::deny( 'smc_membership_restricted', __( 'Membership approval, current eligibility, and a current two-factor challenge are required.', 'sabri-membership-core' ) );
+		if ( empty( $assertions['effective_eligible'] ) ) {
+			return self::deny( 'smc_membership_restricted', __( 'Membership approval and current eligibility are required.', 'sabri-membership-core' ) );
 		}
 		return $result;
 	}

@@ -1,0 +1,91 @@
+name: File 00 v1.2.40 80-Round Exact-Head Release Gate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  review80-release:
+    runs-on: ubuntu-24.04
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_DATABASE: wordpress
+          MARIADB_USER: wordpress
+          MARIADB_PASSWORD: wordpress
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - name: Set up PHP 8.3
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240
+        with:
+          php-version: '8.3'
+          coverage: none
+          extensions: mysqli, openssl, mbstring, json
+          tools: none
+      - name: Install Node QA dependencies
+        run: npm ci --ignore-scripts
+      - name: Static exact-head release gate
+        run: |
+          set -euo pipefail
+          find source/sabri-membership-core -name '*.php' -print0 | xargs -0 -n1 php -l
+          php -l qa/review80-wordpress-mysql.php
+          npm test
+          git diff --check
+          test -z "$(find .github/workflows qa -maxdepth 1 -type f -name 'zz-*' -print -quit)"
+      - name: Install pinned WP-CLI and WordPress 7.0.1
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 https://github.com/wp-cli/wp-cli/releases/download/v2.12.0/wp-cli-2.12.0.phar -o /tmp/wp-cli.phar
+          php /tmp/wp-cli.phar core download --version=7.0.1 --path=/tmp/wordpress --force
+          php /tmp/wp-cli.phar config create --path=/tmp/wordpress --dbname=wordpress --dbuser=wordpress --dbpass=wordpress --dbhost=127.0.0.1:3306 --skip-check
+          php /tmp/wp-cli.phar config set SMC_MASTER_KEY 'base64:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=' --type=constant --path=/tmp/wordpress
+          php /tmp/wp-cli.phar config set SMC_MASTER_KEY_ID 'review80-ci-key-v1' --type=constant --path=/tmp/wordpress
+          php /tmp/wp-cli.phar config set WP_ENVIRONMENT_TYPE 'staging' --type=constant --path=/tmp/wordpress
+          php /tmp/wp-cli.phar core install --path=/tmp/wordpress --url=http://review80.local --title='File 00 Review80 CI' --admin_user=founder --admin_password='Review80-CI-Password!9' --admin_email=founder@example.test --skip-email
+      - name: Activate exact candidate and migrate
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/wordpress/wp-content/plugins/sabri-membership-core
+          cp -R source/sabri-membership-core /tmp/wordpress/wp-content/plugins/sabri-membership-core
+          php /tmp/wp-cli.phar plugin activate sabri-membership-core --path=/tmp/wordpress
+          php /tmp/wp-cli.phar eval '
+            $key=SMC_Security::ensure_key_ready(); if(is_wp_error($key)){fwrite(STDERR,$key->get_error_message()."\n");exit(40);}
+            $audit=SMC_Installer::ensure_audit_infrastructure(); if(is_wp_error($audit)){fwrite(STDERR,$audit->get_error_message()."\n");exit(41);}
+            SMC_Schema_Compat::reconcile_verification_queue_index(); SMC_Installer::maybe_upgrade();
+            if(SMC_DB_VERSION!==(string)get_option("smc_db_version","")){fwrite(STDERR,"migration incomplete\n");exit(42);}
+            if(SMC_VERSION!==(string)get_option("smc_release_version","")){fwrite(STDERR,"release marker incomplete\n");exit(43);}
+            SMC_Schema_Compat::assert_current_queue_indexes();
+            echo "PASS canonical migration ".SMC_VERSION." / ".SMC_DB_VERSION."\n";
+          ' --path=/tmp/wordpress
+      - name: Real WordPress MariaDB 80-round regressions
+        run: php /tmp/wp-cli.phar eval-file "$GITHUB_WORKSPACE/qa/review80-wordpress-mysql.php" --path=/tmp/wordpress
+      - name: Build and verify deterministic package
+        run: |
+          set -euo pipefail
+          python3 tools/build.py
+          python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.40.zip
+          sha256sum dist/00-sabri-membership-core-1.2.40.zip > dist/00-sabri-membership-core-1.2.40.zip.sha256
+          unzip -t dist/00-sabri-membership-core-1.2.40.zip
+      - name: Upload installable File 00 v1.2.40
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: File-00-Sabri-Membership-Core-1.2.40-80-Round-Reviewed
+          path: |
+            dist/00-sabri-membership-core-1.2.40.zip
+            dist/00-sabri-membership-core-1.2.40.zip.sha256
+          if-no-files-found: error
+          retention-days: 30

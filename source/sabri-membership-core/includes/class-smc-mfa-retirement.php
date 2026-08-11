@@ -88,6 +88,14 @@ final class SMC_MFA_Retirement {
 			&& ! $reverification_required && ! $reverification_stale && ! $critical_pending && ! $merge_finalizing;
 	}
 
+	public static function sensitive_action_authorized( $user_id, $action = 'default' ) {
+		$user_id = absint( $user_id );
+		$action = sanitize_key( $action );
+		if ( ! $user_id || ! self::advanced_trust_allows_without_mfa( $user_id ) || ! class_exists( 'SMC_Advanced_Trust_2026' ) || ! is_callable( array( 'SMC_Advanced_Trust_2026', 'step_up_requirement' ) ) ) { return false; }
+		$requirement = SMC_Advanced_Trust_2026::step_up_requirement( $user_id, $action ?: 'default' );
+		return is_array( $requirement ) && ! empty( $requirement['satisfied'] );
+	}
+
 	private static function assertions_without_mfa( $user_id ) {
 		$a = class_exists( 'SMC_Contracts' ) ? SMC_Contracts::assertions( absint( $user_id ) ) : array();
 		$a = is_array( $a ) ? $a : array();
@@ -176,8 +184,9 @@ final class SMC_MFA_Retirement {
 
 	public static function security_shortcode() {
 		if ( ! is_user_logged_in() ) { return smc_notice( __( 'Please sign in through Sabri Authentication to continue.', 'sabri-membership-core' ), 'warning' ); }
+		$user_id = get_current_user_id();
 		ob_start(); ?>
-		<main class="smc-panel" aria-labelledby="smc-security-title"><h1 id="smc-security-title"><?php esc_html_e( 'Membership Security', 'sabri-membership-core' ); ?></h1><?php echo smc_notice( __( 'File 00 no longer uses two-factor authentication, authenticator codes or recovery codes. Your normal account sign-in and password recovery remain with Sabri Authentication (File 02).', 'sabri-membership-core' ), 'success' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?><p><?php esc_html_e( 'Membership eligibility, identity assurance, guardian consent, verification state, audit evidence, session revocation and access restrictions remain active.', 'sabri-membership-core' ); ?></p></main><?php return ob_get_clean();
+		<main class="smc-panel" aria-labelledby="smc-security-title"><h1 id="smc-security-title"><?php esc_html_e( 'Membership Security', 'sabri-membership-core' ); ?></h1><?php echo smc_notice( __( 'File 00 no longer uses two-factor authentication, authenticator codes or recovery codes. Your normal account sign-in and password recovery remain with Sabri Authentication (File 02).', 'sabri-membership-core' ), 'success' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?><p><?php esc_html_e( 'Membership eligibility, identity assurance, guardian consent, verification state, audit evidence, session revocation and access restrictions remain active.', 'sabri-membership-core' ); ?></p><?php if ( class_exists( 'SMC_Workflow' ) && is_callable( array( 'SMC_Workflow', 'session_list' ) ) ) { SMC_Workflow::session_list( $user_id ); } ?><form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="smc-form"><input type="hidden" name="action" value="smc_revoke_all_sessions"><?php wp_nonce_field( 'smc_revoke_all_sessions', 'smc_nonce' ); ?><label class="smc-check"><input type="checkbox" name="confirm_revoke_all" value="1" required> <?php esc_html_e( 'I understand this signs out every device, including this one.', 'sabri-membership-core' ); ?></label><button class="smc-button smc-button--danger"><?php esc_html_e( 'Revoke All Sessions', 'sabri-membership-core' ); ?></button></form></main><?php return ob_get_clean();
 	}
 	public static function retire_mfa_wording( $translated, $text, $domain ) {
 		if ( 'sabri-membership-core' !== $domain ) { return $translated; }

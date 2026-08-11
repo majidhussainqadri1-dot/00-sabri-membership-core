@@ -83,7 +83,7 @@ final class SMC_Three_Plan {
 	}
 
 	public static function save_institutional_ai() {
-		if ( ! current_user_can( 'manage_options' ) || ! SMC_Security::session_is_verified( get_current_user_id() ) || defined( 'SMC_INSTITUTIONAL_AI_USER_ID' ) ) { wp_die( esc_html__( 'Not authorized.', 'sabri-membership-core' ), '', array( 'response'=>403 ) ); }
+		if ( ! current_user_can( 'manage_options' ) || ! class_exists( 'SMC_MFA_Retirement' ) || ! SMC_MFA_Retirement::sensitive_action_authorized( get_current_user_id(), 'default' ) || defined( 'SMC_INSTITUTIONAL_AI_USER_ID' ) ) { wp_die( esc_html__( 'Not authorized.', 'sabri-membership-core' ), '', array( 'response'=>403 ) ); }
 		check_admin_referer( 'smc_save_institutional_ai', 'smc_nonce' );
 		$id = absint( $_POST['ai_user_id'] ?? 0 );
 		$user = get_userdata( $id );

@@ -41,4 +41,4 @@ jobs:
         run: |
           set -euo pipefail
           python3 tools/build.py
-          python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.39.zip
+          python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.40.zip

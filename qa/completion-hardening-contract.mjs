@@ -9,17 +9,19 @@ const functions = read('includes/functions.php');
 const contracts = read('includes/class-smc-contracts.php');
 const workflow = read('includes/class-smc-workflow.php');
 const security = read('includes/class-smc-security.php');
+const mfaRetirement = read('includes/class-smc-mfa-retirement.php');
+const events = read('includes/class-smc-events.php');
 const main = read('sabri-membership-core.php');
 const readme = read('README.txt');
 const failures = [];
 let passed = 0;
 function check(c, n) { if (c) passed++; else failures.push(n); }
 
-check(main.includes('Version: 1.2.39'), 'plugin header 1.2.39');
-check(main.includes("define( 'SMC_VERSION', '1.2.39' )"), 'runtime version 1.2.39');
-check(main.includes("define( 'SMC_DB_VERSION', '1.4.4' )"), 'schema is 1.4.4');
-check(main.includes("define( 'SMC_CONTRACT_VERSION', '1.2.2' )"), 'contract is 1.2.2 after Founder-approved MFA retirement');
-check(readme.includes('Stable tag: 1.2.39'), 'readme stable tag');
+check(main.includes('Version: 1.2.40'), 'plugin header 1.2.40');
+check(main.includes("define( 'SMC_VERSION', '1.2.40' )"), 'runtime version 1.2.40');
+check(main.includes("define( 'SMC_DB_VERSION', '1.4.5' )"), 'schema is 1.4.5');
+check(main.includes("define( 'SMC_CONTRACT_VERSION', '1.2.3' )"), 'contract is 1.2.3 after Founder-approved MFA retirement');
+check(readme.includes('Stable tag: 1.2.40'), 'readme stable tag');
 
 check(admin.includes('private static function approval_gate'), 'approval gate helper exists');
 check(admin.includes("'pending_senior'"), 'senior pending state exists');
@@ -50,15 +52,23 @@ check(workflow.includes("'applicant_version' => $next_applicant_version"), 'resu
 check(privacy.includes("'pending'        => true"), 'private-storage failure keeps erasure retryable');
 check(privacy.includes('Erasure completed, but completion audit evidence requires retry.') && privacy.includes("'done'=>false"), 'audit-evidence failure keeps erasure incomplete');
 
-/* Historical MFA helpers remain covered as dormant migration/regression code; v1.2.39 removes their active routes and public requirement. */
-const decryptPosition = workflow.indexOf("SMC_Security::decrypt( $receipt['envelope'], 'recovery-receipt'");
-const deletePosition = workflow.indexOf("self::delete_user_meta_verified( $user_id, '_smc_recovery_receipt_v2' )", decryptPosition);
-check(decryptPosition >= 0 && deletePosition > decryptPosition, 'historical v2 recovery receipt code remains internally safe while dormant');
-check(security.includes("if ($old_enabled) {update_user_meta($user_id,'_smc_2fa_enabled',$old_enabled);} else {delete_user_meta($user_id,'_smc_2fa_enabled');}"), 'historical incomplete 2FA helper restores the prior enabled flag');
-check(security.includes("if ( $old_secret ) { update_user_meta($user_id,'_smc_totp_secret_enc',$old_secret); } else { delete_user_meta($user_id,'_smc_totp_secret_enc'); }"), 'historical incomplete 2FA helper restores or removes the encrypted TOTP secret');
-check(security.includes("revoke_all_sessions( $user_id, 'two_factor_changed' )") && security.indexOf("$wpdb->query( 'COMMIT' )") < security.indexOf("revoke_all_sessions( $user_id, 'two_factor_changed' )"), 'historical committed 2FA helper revokes sessions after atomic write');
-check(workflow.includes("$challenge = $user ? SMC_Security::verify_two_factor_challenge") && workflow.includes('true !== $challenge'), 'historical 2FA challenge helper checks result exactly while its active handler is retired');
+/*
+ * Founder change-control dated 10 August 2026 retired File 00 MFA. Completion
+ * hardening must therefore prove that obsolete recovery/challenge behavior is
+ * absent from the active workflow, rather than requiring dormant MFA helpers
+ * to survive merely to satisfy historical tests. Historical audit/crypto
+ * compatibility remains governed elsewhere by migration-specific regressions.
+ */
+check(main.includes("includes/class-smc-mfa-retirement.php"), 'Founder-approved MFA retirement runtime is loaded');
+check(mfaRetirement.includes("remove_mfa_runtime_hooks"), 'retirement runtime removes legacy MFA action hooks');
+check(mfaRetirement.includes("remove_shortcode( 'smc_membership_recovery' )"), 'retirement runtime removes the legacy recovery surface');
+check(mfaRetirement.includes("$merged['mfa_required'] = false") && mfaRetirement.includes("$merged['mfa_owner'] = 'none'"), 'public assertions cannot claim File 00 MFA');
+check(!workflow.includes("SMC_Security::decrypt( $receipt['envelope'], 'recovery-receipt'"), 'retired v2 recovery receipt workflow is absent');
+check(!workflow.includes('verify_two_factor_challenge'), 'retired two-factor challenge is absent from the active workflow');
 check(workflow.includes('$subject_hash = SMC_Security::subject_hash( $user_id );') && !workflow.includes("blind_index( (string) absint( $user_id ), 'audit-subject'"), 'security-event history queries the canonical audit subject hash');
+
+check(!events.includes("'age', 'type'"), 'cross-file event payload does not allow exact age');
+check(events.includes("'age_band', 'type'"), 'cross-file event payload allows privacy-minimal age_band');
 
 if (failures.length) {
   console.error(`completion hardening contract: ${passed} PASS, ${failures.length} FAIL`);

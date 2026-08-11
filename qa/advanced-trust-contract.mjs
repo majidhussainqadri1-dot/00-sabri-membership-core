@@ -4,12 +4,16 @@ const main = fs.readFileSync('source/sabri-membership-core/sabri-membership-core
 const contracts = fs.readFileSync('source/sabri-membership-core/includes/class-smc-contracts.php','utf8');
 const retirement = fs.readFileSync('source/sabri-membership-core/includes/class-smc-mfa-retirement.php','utf8');
 const trace = JSON.parse(fs.readFileSync('qa/advanced-trust-traceability.json','utf8'));
+const authStart = cls.indexOf('public static function authentication_assurance');
+const authEnd = cls.indexOf('/** F00-EXT-003', authStart);
+const authBlock = authStart >= 0 && authEnd > authStart ? cls.slice(authStart, authEnd) : '';
 const checks = [
-  ['runtime 1.2.39', main.includes('Version: 1.2.39') && main.includes("SMC_VERSION', '1.2.39")],
+  ['runtime 1.2.40', main.includes('Version: 1.2.40') && main.includes("SMC_VERSION', '1.2.40")],
   ['advanced contract constant', main.includes("SMC_ADVANCED_TRUST_CONTRACT_VERSION', '1.0.0")],
   ['advanced class loaded', main.includes("class-smc-advanced-trust-2026.php") && main.includes("array( 'SMC_Advanced_Trust_2026', 'init' )")],
   ['EXT-001 assurance levels', cls.includes('F00-EXT-001') && cls.includes('identity_assurance_level')],
-  ['EXT-002 passkey/WebAuthn adapter has owner/freshness provenance', cls.includes('F00-EXT-002') && cls.includes('smc_file02_authentication_assurance_v1') && cls.includes("'owner' => 'file00'") && cls.includes("'file02' === $owner") && cls.includes('passkey_asserted')],
+  ['EXT-002 File02 adapter baseline has no File00 authentication owner', cls.includes('F00-EXT-002') && authBlock.includes('smc_file02_authentication_assurance_v1') && authBlock.includes("'owner' => 'none'") && authBlock.includes("'file02' === $owner") && authBlock.includes("'owner' => 'file02'") && !authBlock.includes("'owner' => 'file00'")],
+  ['EXT-002 File02 claim is contract/freshness/revalidation bound', authBlock.includes("$contract_ok = '1.0.0'") && authBlock.includes('$fresh =') && authBlock.includes('$fresh_after_revalidation') && authBlock.includes('return $baseline')],
   ['EXT-003 adaptive step-up', cls.includes('F00-EXT-003') && cls.includes('step_up_requirement') && cls.includes('hardware_backed_required')],
   ['EXT-004 keyset reverification sweep', cls.includes('F00-EXT-004') && cls.includes('reverification_status') && cls.includes('REVERIFY_CURSOR_OPTION') && cls.includes('WHERE ID > %d ORDER BY ID ASC LIMIT %d')],
   ['EXT-005 critical identity workflow verifies all state writes', cls.includes('F00-EXT-005') && cls.includes('mark_critical_identity_change') && cls.includes('resolve_critical_identity_change') && cls.includes("write_user_meta_verified( $user_id, self::CRITICAL_IDENTITY_META") && cls.includes('revoke_all_sessions')],

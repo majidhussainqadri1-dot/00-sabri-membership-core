@@ -48,7 +48,7 @@ final class SMC_Events {
 	private static function minimal_payload( $details ) {
 		$details = is_array( $details ) ? $details : array();
 		$allowed = array(
-			'age', 'type', 'guardian_required', 'applicant_version', 'status', 'old_status', 'new_status',
+			'age_band', 'type', 'guardian_required', 'applicant_version', 'status', 'old_status', 'new_status',
 			'document_key', 'version', 'channel', 'reason_code', 'scope', 'source_version', 'policy_version',
 			'contract_version', 'queue_type', 'trace_id', 'role_types',
 		);
@@ -103,7 +103,7 @@ final class SMC_Events {
 			return false;
 		}
 		$event_type = preg_replace( '/[^A-Za-z0-9_.-]/', '', (string) $event_type );
-		if ( '' === $event_type ) {
+		if ( '' === $event_type || strlen( $event_type ) > 80 ) {
 			return false;
 		}
 		$event_id = wp_generate_uuid4();
@@ -226,8 +226,8 @@ final class SMC_Events {
 			return false;
 		}
 		$consumer = sanitize_key( $consumer );
-		$event_id = sanitize_text_field( (string) $event['event_id'] );
-		if ( '' === $consumer || '' === $event_id ) { return false; }
+		$event_id = strtolower( sanitize_text_field( (string) $event['event_id'] ) );
+		if ( '' === $consumer || strlen( $consumer ) > 80 || ! preg_match( '/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/', $event_id ) ) { return false; }
 		$now = current_time( 'mysql', true );
 		$inserted = $wpdb->query(
 			$wpdb->prepare(

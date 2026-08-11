@@ -76,6 +76,15 @@ final class SMC_Test_DB {
 		if ( is_string( $query ) && false !== strpos( $query, "status='suspended'" ) ) {
 			return array_values( array_filter( $this->apps, static fn( $app ) => 'suspended' === $app['status'] ) );
 		}
+		if ( is_array( $query ) && false !== strpos( $query['query'], "status='suspended'" ) && false !== strpos( $query['query'], 'id>%d' ) ) {
+			$cursor = (int) ( $query['args'][0] ?? 0 );
+			return array_values(
+				array_filter(
+					$this->apps,
+					static fn( $app ) => 'suspended' === $app['status'] && (int) $app['id'] > $cursor
+				)
+			);
+		}
 		if ( is_array( $query ) && false !== strpos( $query['query'], 'WHERE id>%d' ) ) {
 			return array();
 		}
@@ -185,6 +194,7 @@ $assert( 'approved' === $wpdb->apps[5]['status'], 'A manual block explicitly cle
 $repairs = array_values( array_filter( $GLOBALS['smc_test_audits'], static fn( $audit ) => 'institutional_lifecycle_suspension_repaired' === $audit[0] ) );
 $assert( 3 === count( $repairs ), 'Each repair must produce an audit event.' );
 $assert( in_array( 1, $GLOBALS['smc_test_cleaned'], true ) && in_array( 2, $GLOBALS['smc_test_cleaned'], true ) && in_array( 6, $GLOBALS['smc_test_cleaned'], true ), 'Repaired users must have caches cleared.' );
+$assert( 0 === (int) get_option( 'smc_institutional_repair_cursor', -1 ), 'Short repair batches must reset the institutional repair cursor after completion.' );
 
 if ( $failures ) {
 	fwrite( STDERR, "institutional lifecycle runtime: {$passed} PASS, " . count( $failures ) . " FAIL\n- " . implode( "\n- ", $failures ) . "\n" );

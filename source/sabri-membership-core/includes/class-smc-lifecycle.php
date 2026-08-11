@@ -5,6 +5,7 @@ final class SMC_Lifecycle {
 	private static $repair_failures = 0;
 	private const AUTOMATED_AGE_REASON = 'age_eligibility_failed';
 	private const INSTITUTIONAL_AGE_META = '_smc_institutional_age_evidence_attention';
+	private const INSTITUTIONAL_REPAIR_CURSOR_OPTION = 'smc_institutional_repair_cursor';
 
 	public static function init() {
 		add_filter( 'cron_schedules', array( __CLASS__, 'schedules' ) );
@@ -65,12 +66,17 @@ final class SMC_Lifecycle {
 	public static function repair_institutional_accounts() {
 		global $wpdb;
 		self::$repair_failures = 0;
+		$cursor = absint( get_option( self::INSTITUTIONAL_REPAIR_CURSOR_OPTION, 0 ) );
 		$rows = $wpdb->get_results(
-			"SELECT * FROM {$wpdb->prefix}smc_applications WHERE status='suspended' ORDER BY id ASC LIMIT 500",
+			$wpdb->prepare(
+				"SELECT * FROM {$wpdb->prefix}smc_applications WHERE status='suspended' AND id>%d ORDER BY id ASC LIMIT 500",
+				$cursor
+			),
 			ARRAY_A
 		);
 		$repaired = 0;
 		foreach ( $rows as $app ) {
+			$cursor = (int) $app['id'];
 			$user_id = (int) $app['user_id'];
 			if ( ! self::is_institutional_user( $user_id ) || self::has_unresolved_manual_hard_block( $user_id ) ) {
 				continue;
@@ -85,11 +91,14 @@ final class SMC_Lifecycle {
 				++self::$repair_failures;
 			}
 		}
+		$next_cursor = count( $rows ) < 500 ? 0 : $cursor;
+		update_option( self::INSTITUTIONAL_REPAIR_CURSOR_OPTION, $next_cursor, false );
 		return $repaired;
 	}
 
 	public static function institutional_repair_complete() {
-		return 0 === self::$repair_failures;
+		return 0 === self::$repair_failures
+			&& 0 === absint( get_option( self::INSTITUTIONAL_REPAIR_CURSOR_OPTION, 0 ) );
 	}
 
 	private static function recheck_ages() {
@@ -198,9 +207,23 @@ final class SMC_Lifecycle {
 			return $empty;
 		}
 		$decoded = isset( $row['details'] ) && is_string( $row['details'] ) ? json_decode( $row['details'], true ) : null;
+		$reason = is_array( $decoded ) ? sanitize_key( $decoded['reason_code'] ?? $decoded['reason'] ?? '' ) : '';
+		if ( '' === $reason && is_array( $decoded ) ) {
+			// Audit privacy intentionally digests keys containing `reason`/`code`.
+			// Recognize only the one allowlisted automated lifecycle reason without
+			// recovering or exposing arbitrary sensitive audit detail.
+			$age_reason_digest = hash( 'sha256', self::AUTOMATED_AGE_REASON );
+			foreach ( array( 'reason_code_digest', 'reason_digest' ) as $digest_key ) {
+				$digest = strtolower( trim( (string) ( $decoded[ $digest_key ] ?? '' ) ) );
+				if ( preg_match( '/^[a-f0-9]{64}$/', $digest ) && hash_equals( $age_reason_digest, $digest ) ) {
+					$reason = self::AUTOMATED_AGE_REASON;
+					break;
+				}
+			}
+		}
 		return array(
 			'action' => isset( $row['action'] ) ? sanitize_key( $row['action'] ) : '',
-			'reason' => is_array( $decoded ) ? sanitize_key( $decoded['reason_code'] ?? $decoded['reason'] ?? '' ) : '',
+			'reason' => $reason,
 		);
 	}
 

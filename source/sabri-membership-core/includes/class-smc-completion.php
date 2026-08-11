@@ -38,11 +38,11 @@ final class SMC_Completion {
 		}
 		$action = sanitize_key( wp_unslash( $_REQUEST['action'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$allowed = array(
-			'smc_challenge_2fa', 'smc_revoke_session', 'smc_revoke_all_sessions', 'smc_retry_repair', 'smc_retry_outbox',
+			'smc_revoke_session', 'smc_revoke_all_sessions', 'smc_retry_repair', 'smc_retry_outbox',
 			'smc_post_restore_reconcile', 'smc_download_backup_manifest',
 		);
 		if ( 0 === strpos( $action, 'smc_' ) && ! in_array( $action, $allowed, true ) ) {
-			wp_die( esc_html__( 'Sabri Membership Safe Mode is active. Risky writes are temporarily blocked while status, recovery and scoped repair remain available.', 'sabri-membership-core' ), '', array( 'response' => 503 ) );
+			wp_die( esc_html__( 'Sabri Membership Safe Mode is active. Risky writes are temporarily blocked while status, session revocation and scoped repair remain available.', 'sabri-membership-core' ), '', array( 'response' => 503 ) );
 		}
 	}
 
@@ -242,16 +242,24 @@ final class SMC_Completion {
 				continue;
 			}
 			$details = json_decode( (string) $row['details'], true );
-			$resolved = (bool) apply_filters( 'smc_repair_application_item', false, $row, is_array( $details ) ? $details : array() );
-			if ( ! $resolved && 'application_document_incomplete' === $row['repair_type'] ) { $resolved = self::application_documents_complete( (int) $row['user_id'] ); }
-			if ( ! $resolved && 'membership_effects_reconciliation' === $row['repair_type'] ) { $resolved = self::reconcile_membership_effects( (int) $row['user_id'] ); }
-			if ( ! $resolved && 'advanced_trust_transition' === $row['repair_type'] && class_exists( 'SMC_Advanced_Trust_2026' ) ) { $resolved = SMC_Advanced_Trust_2026::repair_transition_hold( (int) $row['user_id'] ); }
+			$resolved = false;
+			$repair_error = '';
+			try {
+				$resolved = (bool) apply_filters( 'smc_repair_application_item', false, $row, is_array( $details ) ? $details : array() );
+				if ( ! $resolved && 'application_document_incomplete' === $row['repair_type'] ) { $resolved = self::application_documents_complete( (int) $row['user_id'] ); }
+				if ( ! $resolved && 'membership_effects_reconciliation' === $row['repair_type'] ) { $resolved = self::reconcile_membership_effects( (int) $row['user_id'] ); }
+				if ( ! $resolved && 'advanced_trust_transition' === $row['repair_type'] && class_exists( 'SMC_Advanced_Trust_2026' ) ) { $resolved = SMC_Advanced_Trust_2026::repair_transition_hold( (int) $row['user_id'] ); }
+			} catch ( Throwable $error ) {
+				$resolved = false;
+				$repair_error = 'Repair adapter raised an exception; retry is required.';
+			}
 			if ( $resolved ) {
 				$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_application_repairs SET status='complete',last_error=NULL,resolved_at=%s,updated_at=%s WHERE id=%d AND status='processing'", current_time( 'mysql', true ), current_time( 'mysql', true ), (int) $row['id'] ) );
 			} else {
 				$attempts = (int) $row['attempts'] + 1;
 				$status = $attempts >= 10 ? 'dead_letter' : 'retry';
-				$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_application_repairs SET status=%s,next_attempt_at=%s,last_error=%s,updated_at=%s WHERE id=%d AND status='processing'", $status, gmdate( 'Y-m-d H:i:s', time() + min( DAY_IN_SECONDS, (int) pow( 2, min( 10, $attempts ) ) * MINUTE_IN_SECONDS ) ), 'The repair condition is still unresolved.', current_time( 'mysql', true ), (int) $row['id'] ) );
+				$last_error = '' !== $repair_error ? $repair_error : 'The repair condition is still unresolved.';
+				$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_application_repairs SET status=%s,next_attempt_at=%s,last_error=%s,updated_at=%s WHERE id=%d AND status='processing'", $status, gmdate( 'Y-m-d H:i:s', time() + min( DAY_IN_SECONDS, (int) pow( 2, min( 10, $attempts ) ) * MINUTE_IN_SECONDS ) ), $last_error, current_time( 'mysql', true ), (int) $row['id'] ) );
 			}
 		}
 	}
@@ -338,15 +346,22 @@ final class SMC_Completion {
 		add_submenu_page( 'smc-membership', __( 'Health and Repair', 'sabri-membership-core' ), __( 'Health and Repair', 'sabri-membership-core' ), 'smc_manage_membership', 'smc-health-repair', array( __CLASS__, 'health_page' ) );
 	}
 
+	private static function current_trust_allows_high_risk_action() {
+		if ( ! is_user_logged_in() || ! class_exists( 'SMC_MFA_Retirement' ) ) {
+			return false;
+		}
+		return SMC_MFA_Retirement::sensitive_action_authorized( get_current_user_id(), 'default' );
+	}
+
 	private static function require_high_risk_authority() {
-		if ( ! current_user_can( 'smc_manage_membership' ) || ! SMC_Security::session_is_verified( get_current_user_id() ) ) {
-			wp_die( esc_html__( 'A current two-factor session and membership-management capability are required.', 'sabri-membership-core' ), '', array( 'response' => 403 ) );
+		if ( ! current_user_can( 'smc_manage_membership' ) || ! self::current_trust_allows_high_risk_action() ) {
+			wp_die( esc_html__( 'A current authenticated membership-management session with an active trust state is required.', 'sabri-membership-core' ), '', array( 'response' => 403 ) );
 		}
 	}
 
 	private static function require_retention_authority() {
-		if ( ! current_user_can( 'smc_manage_retention_holds' ) || ! SMC_Security::session_is_verified( get_current_user_id() ) ) {
-			wp_die( esc_html__( 'A current two-factor session and retention-hold capability are required.', 'sabri-membership-core' ), '', array( 'response' => 403 ) );
+		if ( ! current_user_can( 'smc_manage_retention_holds' ) || ! self::current_trust_allows_high_risk_action() ) {
+			wp_die( esc_html__( 'A current authenticated retention-hold session with an active trust state is required.', 'sabri-membership-core' ), '', array( 'response' => 403 ) );
 		}
 	}
 
@@ -471,7 +486,8 @@ final class SMC_Completion {
 		}
 		return array(
 			'manifest_version' => '1.0.0', 'generated_at' => gmdate( 'c' ), 'plugin_version' => SMC_VERSION,
-			'database_version' => SMC_DB_VERSION, 'contract_version' => SMC_CONTRACT_VERSION,
+			'database_version' => (string) get_option( 'smc_db_version', '' ), 'target_database_version' => SMC_DB_VERSION,
+			'release_version' => (string) get_option( 'smc_release_version', '' ), 'contract_version' => SMC_CONTRACT_VERSION,
 			'table_counts' => $counts, 'private_file_count' => $files,
 			'audit_tail_hash' => (string) $wpdb->get_var( "SELECT row_hash FROM {$wpdb->prefix}smc_audit_tail WHERE id=1" ),
 			'audit_log_last_hash' => (string) $wpdb->get_var( "SELECT row_hash FROM {$wpdb->prefix}smc_audit_log ORDER BY id DESC LIMIT 1" ),
@@ -496,10 +512,20 @@ final class SMC_Completion {
 		foreach ( $required as $key ) { if ( ! $ok || empty( $proof[ $key ] ) ) { $ok = false; break; } }
 		$health = self::health_snapshot(); $ok = $ok && $health['key_ready'] && $health['private_storage'] && $health['audit_valid'] && SMC_DB_VERSION === $health['database_version'] && 0 === (int) $health['file_job_failed'] && 0 === (int) ( $health['indefinite_hold_blockers'] ?? 0 );
 		$result = $ok ? 'passed' : 'failed';
-		if ( ! SMC_Security::audit( 'post_restore_reconciliation_' . $result, 0, array( 'evidence_reference'=>$reference,'restore_run_id'=>is_array($proof)?sanitize_text_field($proof['restore_run_id']??''):'' ) ) ) { wp_die( esc_html__( 'Restore reconciliation evidence could not be appended to the audit chain.', 'sabri-membership-core' ), '', array( 'response'=>503 ) ); }
-		$record = array( 'evidence_reference'=>$reference,'restore_run_id'=>is_array($proof)?sanitize_text_field($proof['restore_run_id']??''):'','checked_at'=>current_time('mysql',true),'result'=>$result,'health'=>$health );
+		$restore_run_id = is_array( $proof ) ? sanitize_text_field( $proof['restore_run_id'] ?? '' ) : '';
+		$record = array( 'evidence_reference'=>$reference,'restore_run_id'=>$restore_run_id,'checked_at'=>current_time('mysql',true),'result'=>$result,'health'=>$health );
+		$had_previous = false !== get_option( 'smc_last_restore_test', false );
+		$previous = $had_previous ? get_option( 'smc_last_restore_test', array() ) : null;
 		update_option( 'smc_last_restore_test', $record, false );
-		if ( get_option( 'smc_last_restore_test', null ) !== $record ) { wp_die( esc_html__( 'Restore reconciliation finished, but its evidence record could not be persisted.', 'sabri-membership-core' ), '', array( 'response'=>503 ) ); }
+		if ( get_option( 'smc_last_restore_test', null ) !== $record ) {
+			SMC_Security::audit( 'post_restore_reconciliation_persistence_failed', 0, array( 'restore_run_id'=>$restore_run_id ) );
+			wp_die( esc_html__( 'Restore reconciliation finished, but its evidence record could not be persisted.', 'sabri-membership-core' ), '', array( 'response'=>503 ) );
+		}
+		$audit_ok = SMC_Security::audit( 'post_restore_reconciliation_' . $result, 0, array( 'evidence_reference_digest'=>hash( 'sha256', $reference ),'restore_run_id'=>$restore_run_id ) );
+		if ( ! $audit_ok ) {
+			if ( $had_previous ) { update_option( 'smc_last_restore_test', $previous, false ); } else { delete_option( 'smc_last_restore_test' ); }
+			wp_die( esc_html__( 'Restore reconciliation evidence could not be appended to the audit chain; the status record was rolled back.', 'sabri-membership-core' ), '', array( 'response'=>503 ) );
+		}
 		if ( ! $ok ) { wp_die( esc_html__( 'Restore proof did not satisfy the isolated-restore acceptance contract.', 'sabri-membership-core' ), '', array( 'response'=>409 ) ); }
 		wp_safe_redirect( admin_url( 'admin.php?page=smc-health-repair' ) ); exit;
 	}

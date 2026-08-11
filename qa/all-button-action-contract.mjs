@@ -6,10 +6,13 @@ const plugin = process.env.SMC_PLUGIN_DIR
   ? path.resolve(process.env.SMC_PLUGIN_DIR)
   : path.join(root, 'source', 'sabri-membership-core');
 
-const compat = fs.readFileSync(path.join(plugin, 'includes', 'class-smc-host-compat.php'), 'utf8');
-const workflow = fs.readFileSync(path.join(plugin, 'includes', 'class-smc-workflow.php'), 'utf8');
-const admin = fs.readFileSync(path.join(plugin, 'includes', 'class-smc-admin.php'), 'utf8');
-const security = fs.readFileSync(path.join(plugin, 'includes', 'class-smc-security.php'), 'utf8');
+const read = (name) => fs.readFileSync(path.join(plugin, 'includes', name), 'utf8');
+const compat = read('class-smc-host-compat.php');
+const workflow = read('class-smc-workflow.php');
+const admin = read('class-smc-admin.php');
+const completion = read('class-smc-completion.php');
+const threePlan = read('class-smc-three-plan.php');
+const security = read('class-smc-security.php');
 const js = fs.readFileSync(path.join(plugin, 'assets', 'membership.js'), 'utf8');
 
 const failures = [];
@@ -23,12 +26,8 @@ const workflowActions = [
   'submit_application',
   'request_contact_otp',
   'verify_contact_otp',
-  'start_2fa',
-  'finish_2fa',
-  'challenge_2fa',
-  'rotate_recovery',
-  'ack_recovery_receipt',
   'revoke_session',
+  'revoke_all_sessions',
   'resubmit',
   'appeal',
   'withdraw_guardian',
@@ -41,11 +40,38 @@ const adminActions = [
   'declare_conflict',
   'save_founder',
 ];
+const completionActions = [
+  'retry_repair',
+  'retry_outbox',
+  'post_restore_reconcile',
+  'download_backup_manifest',
+  'create_retention_hold',
+  'release_retention_hold',
+];
+const threePlanActions = ['save_institutional_ai'];
 const streamingActions = ['private_document'];
-const allActions = [...workflowActions, ...adminActions, ...streamingActions];
+const currentActions = [
+  ...workflowActions,
+  ...adminActions,
+  ...completionActions,
+  ...threePlanActions,
+  ...streamingActions,
+];
+const retiredMfaActions = [
+  'start_2fa',
+  'finish_2fa',
+  'challenge_2fa',
+  'rotate_recovery',
+  'ack_recovery_receipt',
+];
 
-for (const action of allActions) {
+for (const action of currentActions) {
   check(compat.includes(`'${action}'`), `Host compatibility registry covers ${action}`);
+}
+for (const action of retiredMfaActions) {
+  check(!compat.includes(`'${action}'`), `Host compatibility registry excludes retired MFA action ${action}`);
+  check(!workflow.includes(`'${action}'`), `Workflow registration excludes retired MFA action ${action}`);
+  check(!workflow.includes(`function handle_${action}`), `Dead retired MFA handler is absent: ${action}`);
 }
 
 check(compat.includes("add_action( 'init', array( __CLASS__, 'protect_actions' ), PHP_INT_MAX )"), 'Protection is installed after component registration');
@@ -59,18 +85,29 @@ check(compat.includes("'smc_message' => 'provider'"), 'User-facing failures retu
 
 for (const action of workflowActions.filter((name) => name !== 'verify_guardian')) {
   check(workflow.includes(`'${action}'`), `Workflow registers ${action}`);
-  const method = `handle_${action}`;
-  check(workflow.includes(`function ${method}`), `Workflow implements ${method}`);
+  check(workflow.includes(`function handle_${action}`), `Workflow implements handle_${action}`);
 }
 check(workflow.includes("admin_post_nopriv_smc_verify_guardian"), 'Guardian verification has a public WordPress action');
 check(workflow.includes('function handle_verify_guardian'), 'Guardian verification handler exists');
 
-check(admin.includes("admin_post_smc_review_transition"), 'Reviewer transition action exists');
-check(admin.includes("admin_post_smc_review_document"), 'Document review action exists');
-check(admin.includes("admin_post_smc_assign_review"), 'Reviewer assignment action exists');
-check(admin.includes("admin_post_smc_declare_conflict"), 'Conflict declaration action exists');
-check(admin.includes("admin_post_smc_save_founder"), 'Founder settings action exists');
-check(security.includes("admin_post_smc_private_document"), 'Private document action exists');
+for (const [action, method] of [
+  ['review_transition', 'handle_transition'],
+  ['review_document', 'handle_document'],
+  ['assign_review', 'handle_assignment'],
+  ['declare_conflict', 'handle_conflict'],
+  ['save_founder', 'save_founder'],
+]) {
+  check(admin.includes(`admin_post_smc_${action}`), `Admin action exists: ${action}`);
+  check(admin.includes(`function ${method}`), `Admin handler exists: ${method}`);
+}
+for (const action of completionActions) {
+  check(completion.includes(`admin_post_smc_${action}`), `Completion action exists: ${action}`);
+  check(completion.includes(`function ${action}`), `Completion handler exists: ${action}`);
+}
+check(threePlan.includes('admin_post_smc_save_institutional_ai'), 'Institutional AI settings action exists');
+check(threePlan.includes('function save_institutional_ai'), 'Institutional AI settings handler exists');
+check(security.includes('admin_post_smc_private_document'), 'Private document action exists');
+check(security.includes('function serve_document'), 'Private document streaming handler exists');
 
 check(js.includes("previous?.addEventListener('click'"), 'Application Previous button has a client-side handler');
 check(js.includes("next?.addEventListener('click'"), 'Application Next button has a client-side handler');

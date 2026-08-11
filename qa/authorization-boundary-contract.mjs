@@ -13,10 +13,10 @@ function assert(condition, name) {
   else failures.push(name);
 }
 
-assert(main.includes('Version: 1.2.39'), 'Plugin header is 1.2.39');
-assert(main.includes("define( 'SMC_VERSION', '1.2.39' )"), 'Runtime version is 1.2.39');
-assert(main.includes("define( 'SMC_DB_VERSION', '1.4.4' )"), 'Database version is 1.4.4');
-assert(main.includes("define( 'SMC_CONTRACT_VERSION', '1.2.2' )"), 'Contract version is 1.2.2 after Founder-approved MFA retirement');
+assert(main.includes('Version: 1.2.40'), 'Plugin header is 1.2.40');
+assert(main.includes("define( 'SMC_VERSION', '1.2.40' )"), 'Runtime version is 1.2.40');
+assert(main.includes("define( 'SMC_DB_VERSION', '1.4.5' )"), 'Database version is 1.4.5');
+assert(main.includes("define( 'SMC_CONTRACT_VERSION', '1.2.3' )"), 'Contract version is 1.2.3 after Founder-approved MFA retirement');
 assert(main.includes("require_once SMC_PATH . 'includes/class-smc-authorization.php'"), 'Authorization boundary is loaded');
 assert(main.includes("array( 'SMC_Authorization', 'init' )"), 'Authorization boundary is initialized');
 assert(main.includes("$policy = smc_policy();"), 'Client policy derives from canonical server policy');
@@ -36,13 +36,14 @@ for (const symbol of [
   'email_verified',
   'phone_verified',
   'institutional_account',
-  'session_two_factor',
   'smc_membership_hard_block',
   'Founder reassignment is locked',
 ]) {
   assert(auth.includes(symbol), `Authorization control: ${symbol}`);
 }
 
+assert(!auth.includes('session_two_factor'), 'Retired File 00 session_two_factor is absent from active authorization');
+assert(!auth.includes('session_is_verified'), 'Retired File 00 MFA session verification is absent from active authorization');
 assert(!auth.includes("0 === strpos( $action, 'sa_' )"), 'No broad sa_ recovery bypass exists');
 assert(!auth.includes("0 === strpos( $action, 'smc_' ) ||"), 'No broad smc_ recovery bypass exists');
 assert(auth.includes("in_array( $action, self::recovery_actions(), true )"), 'Legacy recovery actions use exact allowlist matching before runtime retirement overrides them');
