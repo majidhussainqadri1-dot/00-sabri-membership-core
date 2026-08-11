@@ -27,7 +27,7 @@ File 00 does not own authentication UI, password recovery, passkey ceremony, pub
 
 == CF-01 Provider Contract ==
 
-Contract `smc.cf01.membership-assurance` version `1.0.0` returns a short-lived, purpose-bound, server-side assertion containing an opaque platform UUID, membership state, age/guardian context, jurisdiction context, source record version and explicit allow/deny/unknown result. It returns no clinical data or identity-document content.
+Contract `smc.cf01.membership-assurance` version `1.1.0` returns a short-lived, purpose-bound, server-side assertion containing an opaque platform UUID, membership state, age/guardian context, jurisdiction context, source record version and explicit allow/deny/unknown result. It returns no clinical data or identity-document content.
 
 File 00 no longer provides a second-factor verification result. Any future stronger authentication assurance must come from the canonical authentication owner through a separately approved, versioned contract; membership evidence by itself never grants clinical object, field, relationship, prescription, export, break-glass or key authority.
 
