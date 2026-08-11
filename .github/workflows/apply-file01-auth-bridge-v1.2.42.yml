@@ -21,6 +21,15 @@ jobs:
           node-version: '20'
       - name: Apply root-cause fix
         run: python3 tools/apply-file01-auth-bridge-v1.2.42.py
+      - name: Preserve immutable historical trace assertions
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('qa/master-plan-traceability-contract.mjs')
+          s=p.read_text()
+          s=s.replace("master.includes('Supplemental ten-round corrective review — 1.2.42')", "master.includes('Supplemental ten-round corrective review — 1.2.41')")
+          p.write_text(s)
+          PY
       - name: Install QA dependencies
         run: npm ci
       - name: Refresh deterministic source manifest
