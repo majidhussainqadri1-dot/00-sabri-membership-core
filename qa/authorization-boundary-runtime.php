@@ -20,6 +20,7 @@ final class WP_Error {
 	public function get_error_message() { return $this->message; }
 	public function get_error_data() { return $this->data; }
 }
+function is_wp_error( $value ) { return $value instanceof WP_Error; }
 
 class WP_User {
 	public $ID;
@@ -185,7 +186,6 @@ expect_true( $error instanceof WP_Error && 'smc_membership_hard_block' === $erro
 $GLOBALS['smc_test_current_user'] = 4;
 expect_true( null === SMC_Authorization::enforce_rest_state( null ), 'Verified institutional REST mutation is allowed' );
 
-// Exact recovery allowlist: self-service recovery actions remain reachable.
 $GLOBALS['smc_test_current_user'] = 2;
 $GLOBALS['smc_test_admin'] = true;
 foreach ( array( 'smc_submit_application', 'smc_revoke_session', 'smc_revoke_all_sessions' ) as $recovery_action ) {
@@ -199,7 +199,6 @@ foreach ( array( 'smc_submit_application', 'smc_revoke_session', 'smc_revoke_all
 	}
 }
 
-// A non-recovery smc_* action no longer inherits a broad prefix bypass.
 $_REQUEST = array( 'action' => 'smc_review_transition' );
 $_POST = array();
 try {
@@ -209,7 +208,6 @@ try {
 	expect_true( 302 === $error->status, 'Non-recovery smc action is denied for a hard-blocked administrator' );
 }
 
-// Appeals cannot be claimed by the actor who imposed the latest reject/suspend.
 $GLOBALS['smc_test_current_user'] = 4;
 $GLOBALS['smc_test_review_request'] = array( 'id'=>77, 'user_id'=>20, 'status'=>'appeal_review', 'queue_type'=>'appeal' );
 $GLOBALS['smc_test_previous_actor'] = 4;
@@ -230,7 +228,6 @@ try {
 	expect_true( false, 'Independent reviewer may proceed to the appeal handler' );
 }
 
-// Founder reassignment is immutable through the ordinary settings form.
 $GLOBALS['smc_test_founder'] = 10;
 $GLOBALS['smc_test_review_request'] = false;
 $_REQUEST = array( 'action' => 'smc_save_founder' );
