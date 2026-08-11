@@ -6,6 +6,7 @@
 declare(strict_types=1);
 
 define( 'ABSPATH', __DIR__ . '/' );
+define( 'ARRAY_A', 'ARRAY_A' );
 
 final class WP_Error {
 	private $code;
