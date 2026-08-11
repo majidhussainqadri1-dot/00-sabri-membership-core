@@ -206,9 +206,23 @@ final class SMC_Lifecycle {
 			return $empty;
 		}
 		$decoded = isset( $row['details'] ) && is_string( $row['details'] ) ? json_decode( $row['details'], true ) : null;
+		$reason = is_array( $decoded ) ? sanitize_key( $decoded['reason_code'] ?? $decoded['reason'] ?? '' ) : '';
+		if ( '' === $reason && is_array( $decoded ) ) {
+			// Audit privacy intentionally digests keys containing `reason`/`code`.
+			// Recognize only the one allowlisted automated lifecycle reason without
+			// recovering or exposing arbitrary sensitive audit detail.
+			$age_reason_digest = hash( 'sha256', self::AUTOMATED_AGE_REASON );
+			foreach ( array( 'reason_code_digest', 'reason_digest' ) as $digest_key ) {
+				$digest = strtolower( trim( (string) ( $decoded[ $digest_key ] ?? '' ) ) );
+				if ( preg_match( '/^[a-f0-9]{64}$/', $digest ) && hash_equals( $age_reason_digest, $digest ) ) {
+					$reason = self::AUTOMATED_AGE_REASON;
+					break;
+				}
+			}
+		}
 		return array(
 			'action' => isset( $row['action'] ) ? sanitize_key( $row['action'] ) : '',
-			'reason' => is_array( $decoded ) ? sanitize_key( $decoded['reason_code'] ?? $decoded['reason'] ?? '' ) : '',
+			'reason' => $reason,
 		);
 	}
 
