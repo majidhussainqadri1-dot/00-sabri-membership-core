@@ -7,7 +7,6 @@ const main = fs.readFileSync(path.join(plugin, 'sabri-membership-core.php'), 'ut
 const functions = fs.readFileSync(path.join(plugin, 'includes', 'functions.php'), 'utf8');
 const contracts = fs.readFileSync(path.join(plugin, 'includes', 'class-smc-contracts.php'), 'utf8');
 const workflow = fs.readFileSync(path.join(plugin, 'includes', 'class-smc-workflow.php'), 'utf8');
-const security = fs.readFileSync(path.join(plugin, 'includes', 'class-smc-security.php'), 'utf8');
 const privacy = fs.readFileSync(path.join(plugin, 'includes', 'class-smc-privacy.php'), 'utf8');
 const lifecycle = fs.readFileSync(path.join(plugin, 'includes', 'class-smc-lifecycle.php'), 'utf8');
 const admin = fs.readFileSync(path.join(plugin, 'includes', 'class-smc-admin.php'), 'utf8');
@@ -37,22 +36,21 @@ assert(workflow.includes('SET status=%s,submitted_at=%s,updated_at=%s,row_versio
 assert(workflow.indexOf("INSERT INTO {$wpdb->prefix}smc_contact_otps") < workflow.indexOf('SMC_Contact_Delivery::send_otp') && workflow.includes("DELETE FROM {$wpdb->prefix}smc_contact_otps WHERE user_id=%d AND channel=%s AND target_hash=%s AND code_lookup_hash=%s"), 'OTP verifier row is persisted before delivery and removed on delivery failure');
 assert(workflow.indexOf("INSERT INTO {$wpdb->prefix}smc_guardian_consents") < workflow.indexOf("apply_filters( 'smc_send_guardian_invitation'") && workflow.includes('delivery_receipt_hash IS NOT NULL AND delivered_at IS NOT NULL'), 'Guardian invitation remains unusable until provider receipt evidence is committed');
 
-// Retired MFA helpers remain dormant only for historical migration/regression evidence.
+/* Founder-approved File 00 MFA retirement is the current authority. */
 assert(retirement.includes("remove_action( 'admin_post_smc_' . $action"), 'Founder retirement removes historical MFA handlers from runtime');
 assert(retirement.includes("remove_shortcode( 'smc_membership_recovery' )"), 'Founder retirement removes lost-factor recovery surface');
-assert(workflow.includes('write_user_meta_verified'), 'Historical factor metadata helper remains internally read-after-write verified');
-assert(workflow.includes('delete_user_meta_verified'), 'Historical one-time metadata deletion helper remains verified');
-assert(workflow.includes("'_smc_recovery_receipt_v2'"), 'Historical recovery receipt implementation remains available only as dormant migration provenance');
-assert(workflow.includes('true !== $challenge'), 'Dormant historical recovery helper requires exact TOTP result');
-assert(workflow.includes('consume_recovery_code_for_session'), 'Dormant historical recovery-code service remains internally atomic');
+assert(retirement.includes("'_smc_2fa_enabled'") && retirement.includes("'_smc_totp_secret_enc'") && retirement.includes("'_smc_recovery_receipt_v2'"), 'Retirement cleanup explicitly covers legacy factor/recovery user meta');
+assert(retirement.includes("DELETE FROM {$recovery_table}"), 'Retirement cleanup removes obsolete recovery-code rows');
+assert(retirement.includes("DELETE FROM {$factor_table}"), 'Retirement cleanup removes obsolete factor-state rows');
+assert(retirement.includes("UPDATE {$session_table} SET two_factor_at=NULL,last_totp_slice=NULL"), 'Retirement cleanup clears obsolete factor session state');
+assert(retirement.includes("'file00_mfa_system_retired'"), 'Retirement cleanup appends governed audit evidence');
+assert(retirement.includes("$wpdb->query( 'ROLLBACK' )") && retirement.includes("$wpdb->query( 'COMMIT' )"), 'Retirement cleanup remains transactional and fail closed');
+assert(!workflow.includes("'_smc_recovery_receipt_v2'"), 'Retired recovery receipt is absent from active workflow');
+assert(!workflow.includes('verify_two_factor_challenge'), 'Retired TOTP challenge is absent from active workflow');
+assert(!workflow.includes('consume_recovery_code_for_session'), 'Retired recovery-code session service is absent from active workflow');
+
 assert(workflow.includes("applicant_version=%d,row_version=row_version+1"), 'Guardian verification and self-service generation changes invalidate stale votes');
 assert(workflow.includes("status='suspended',reviewer_note=%s,applicant_version=%d"), 'Guardian withdrawal synchronizes the verification request');
-assert(security.includes('public static function recovery_codes( $user_id, $count = 8, $receipt_callback = null )'), 'Dormant historical recovery service retains atomic receipt persistence');
-assert(security.includes("return new WP_Error( 'smc_recovery_receipt'"), 'Dormant historical receipt failure rolls back code replacement');
-assert(security.includes("self::audit( 'recovery_codes_rotated', $user_id )"), 'Dormant historical recovery rotation remains auditable');
-assert(security.indexOf("self::audit( 'recovery_codes_rotated'") < security.indexOf("$owns_transaction && false === $wpdb->query( 'COMMIT' )", security.indexOf('public static function recovery_codes')), 'Dormant historical recovery audit remains atomic with codes');
-assert(security.includes('public static function consume_recovery_code_for_session'), 'Dormant historical atomic recovery-session method exists');
-assert(security.includes('LIMIT 1 FOR UPDATE'), 'Dormant historical recovery rows remain locked during consumption');
 assert(privacy.includes("'containment_at' => ''"), 'Erasure lock records containment completion separately');
 assert(privacy.includes("if ( ! empty( $lock['containment_at'] ) )"), 'Existing incomplete erasure locks retry containment');
 assert(privacy.includes("'smc_erasure_containment_state'"), 'Durable containment confirmation is fail closed');
