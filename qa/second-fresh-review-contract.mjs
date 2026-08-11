@@ -11,7 +11,7 @@ pass('restricted capability baseline cannot be removed by filter', auth.includes
 pass('hard-block baseline is unioned back after filtering', auth.includes('array_merge( $baseline, $filtered )'));
 for (const state of ['rejected','suspended','expired','appeal_review','erasure_pending','invalid_application']) pass(`mandatory hard block retained: ${state}`, auth.includes(`'${state}'`));
 pass('safe-mode declaration cannot be filtered off', completion.includes('return $declared || $filtered;'));
-pass('private document release requires current two-factor session', /serve_document[\s\S]{0,450}session_is_verified\( \$user_id \)/.test(security));
+pass('private document release requires File 02 assurance through the retirement boundary', /serve_document[\s\S]{0,550}SMC_MFA_Retirement::sensitive_action_authorized\( \$user_id, 'default' \)/.test(security) && !/serve_document[\s\S]{0,550}session_is_verified\(/.test(security));
 pass('event inbox consumer uses canonical schema columns', events.includes('(consumer,event_id,status,attempts,received_at,updated_at)') && !events.includes('(consumer,event_id,dedupe_hash,status,created_at,updated_at)'));
 pass('event inbox idempotency matches unique consumer-event schema', installer.includes('UNIQUE KEY consumer_event (consumer,event_id)') && events.includes('WHERE consumer=%s AND event_id=%s'));
 pass('submission handler enforces lifecycle server-side', /handle_submit_application[\s\S]{0,500}existing_application[\s\S]{0,500}array\( 'draft', 'more_information' \)[\s\S]{0,180}redirect\( 'status', 'saved'/.test(workflow));
