@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+env:
+  FILE02_REF: 0f011b1876e217b7ee46f92903e5315538c1025e
+  FILE02_VERSION: '1.2.1'
+
 jobs:
   review80-release:
     runs-on: ubuntu-24.04
@@ -87,28 +91,37 @@ jobs:
           ' --path=/tmp/wordpress
       - name: Real WordPress MariaDB regressions
         run: php /tmp/wp-cli.phar eval-file "$GITHUB_WORKSPACE/qa/review80-wordpress-mysql.php" --path=/tmp/wordpress
-      - name: Checkout exact merged File 02 1.2.0
+      - name: Checkout exact merged File 02 1.2.1
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           repository: majidhussainqadri1-dot/02-sabri-authentication
-          ref: 8192c45b595b34e13e09934e3b2d554aa2d8553f
+          ref: ${{ env.FILE02_REF }}
           path: file02-exact
           fetch-depth: 1
           persist-credentials: false
-      - name: Reproduce the live activation boundary with corrected File 00
+      - name: Prove corrected File 02 activation boundary with corrected File 00
         run: |
           set -euo pipefail
-          test "$(git -C file02-exact rev-parse HEAD)" = '8192c45b595b34e13e09934e3b2d554aa2d8553f'
+          test "$(git -C file02-exact rev-parse HEAD)" = "$FILE02_REF"
+          grep -Fq "Version: ${FILE02_VERSION}" file02-exact/sabri-authentication.php
+          grep -Fq "require_once SAUTH_DIR . 'includes/class-sauth-storage-router.php';" file02-exact/sabri-authentication.php
           rm -rf /tmp/wordpress/wp-content/plugins/02-sabri-authentication
           cp -R file02-exact /tmp/wordpress/wp-content/plugins/02-sabri-authentication
           rm -rf /tmp/wordpress/wp-content/plugins/02-sabri-authentication/.git
           php /tmp/wp-cli.phar plugin activate 02-sabri-authentication --path=/tmp/wordpress
           php /tmp/wp-cli.phar eval '
             if(!is_plugin_active("02-sabri-authentication/sabri-authentication.php")){fwrite(STDERR,"File02 did not remain active\n");exit(50);}
-            if(!class_exists("SAUTH_Account_Contract") || !SAUTH_Account_Contract::provider_available()){fwrite(STDERR,"File02 still rejects File00 account provider\n");exit(51);}
-            if("1.2.0"!==(string)SAUTH_VERSION){fwrite(STDERR,"unexpected File02 version\n");exit(52);}
-            echo "PASS File02 1.2.0 activation against File00 ".SMC_VERSION."\n";
+            if(!class_exists("SAUTH_Storage_Router")){fwrite(STDERR,"File02 storage router unavailable after bootstrap\n");exit(51);}
+            if(!class_exists("SAUTH_Account_Contract") || !SAUTH_Account_Contract::provider_available()){fwrite(STDERR,"File02 still rejects File00 account provider\n");exit(52);}
+            if("1.2.1"!==(string)SAUTH_VERSION){fwrite(STDERR,"unexpected File02 version\n");exit(53);}
+            echo "PASS File02 1.2.1 clean second request against File00 ".SMC_VERSION."\n";
           ' --path=/tmp/wordpress
+          php /tmp/wp-cli.phar option get siteurl --path=/tmp/wordpress >/dev/null
+          php /tmp/wp-cli.phar plugin status 02-sabri-authentication --path=/tmp/wordpress | grep -Fq 'Status: Active'
+      - name: Cross-contract exact consumer shape
+        env:
+          FILE02_ROOT: ${{ github.workspace }}/file02-exact
+        run: php qa/file02-exact-consumer-compat.php
       - name: Build and verify deterministic package
         run: |
           set -euo pipefail
