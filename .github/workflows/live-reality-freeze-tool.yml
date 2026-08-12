@@ -1,0 +1,45 @@
+name: File 00 Live Reality Freeze Tool
+
+on:
+  pull_request:
+    paths:
+      - 'tools/live-reality-freeze.php'
+      - 'qa/live-reality-freeze-contract.mjs'
+      - '.github/workflows/live-reality-freeze-tool.yml'
+  push:
+    branches:
+      - main
+      - 'agent/**'
+    paths:
+      - 'tools/live-reality-freeze.php'
+      - 'qa/live-reality-freeze-contract.mjs'
+      - '.github/workflows/live-reality-freeze-tool.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  read-only-contract:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['7.4', '8.3']
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up PHP ${{ matrix.php }}
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+      - name: Prove read-only collector syntax and contract
+        run: |
+          set -euo pipefail
+          php -l tools/live-reality-freeze.php
+          node qa/live-reality-freeze-contract.mjs
+          git diff --check
