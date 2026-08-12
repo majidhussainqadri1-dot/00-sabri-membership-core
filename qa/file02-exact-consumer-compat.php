@@ -9,7 +9,8 @@ $bootstrap = file_get_contents( $bootstrap_path );
 $v11 = file_get_contents( dirname( __DIR__ ) . '/source/sabri-membership-core/includes/class-smc-authentication-contract-v11.php' );
 $main = file_get_contents( dirname( __DIR__ ) . '/source/sabri-membership-core/sabri-membership-core.php' );
 function cross_assert( $condition, $message ) { if ( ! $condition ) { fwrite( STDERR, "FAIL: {$message}\n" ); exit( 1 ); } }
-cross_assert( false !== strpos( $bootstrap, 'Version: 1.2.0' ), 'unexpected File 02 release identity' );
+cross_assert( false !== strpos( $bootstrap, 'Version: 1.2.1' ), 'unexpected File 02 release identity' );
+cross_assert( false !== strpos( $bootstrap, "require_once SAUTH_DIR . 'includes/class-sauth-storage-router.php';" ), 'File 02 storage-router bootstrap correction missing' );
 cross_assert( false !== strpos( $consumer, "PROVIDER_NAME        = 'smc.authentication-account'" ), 'File 02 provider name changed' );
 cross_assert( false !== strpos( $consumer, "PROVIDER_MIN_VERSION = '1.1.0'" ), 'File 02 provider minimum version changed' );
 cross_assert( false !== strpos( $consumer, "class_exists( 'SMC_Authentication_Contract_V11' )" ), 'File 02 provider class expectation changed' );
@@ -24,4 +25,4 @@ cross_assert( false !== strpos( $v11, 'SMC_CF01_Contract::ensure_subject_uuid' )
 cross_assert( false !== strpos( $v11, "array_diff( \$missing, array( 'two_factor' ) )" ), 'File 00 v1.1 provider does not strip retired MFA completion' );
 cross_assert( false !== strpos( $main, "define( 'SMC_AUTHENTICATION_CONTRACT_V11_VERSION', '1.1.0' );" ), 'File 00 provider version constant missing' );
 cross_assert( false === strpos( $main, "array( 'SMC_Authentication_Contract', 'init' )" ), 'legacy v1 helper is incorrectly active' );
-echo "Exact File 02 8192c45 compatibility boundary passed.\n";
+echo "Exact merged File 02 1.2.1 compatibility boundary passed.\n";
