@@ -104,6 +104,61 @@ function smc_record_bootstrap_failure( $phase, Throwable $error ) {
 	);
 }
 
+/**
+ * Finalize institutional repair and release identity as one restartable gate.
+ *
+ * The two durable markers are deliberately written independently. A process
+ * interruption after the repair marker is stored but before the release marker
+ * must self-heal on the next administrator request instead of leaving File 00
+ * permanently reporting a stale deployed release. The release marker is never
+ * published until the target DB is current and institutional repair is proven
+ * complete.
+ *
+ * @return bool True only when both durable markers match the current release.
+ */
+function smc_finalize_institutional_release_state() {
+	if ( ! SMC_Security::key_ready() || SMC_DB_VERSION !== (string) get_option( 'smc_db_version', '' ) ) {
+		return false;
+	}
+
+	$repaired = 0;
+	$repair_version_current = SMC_VERSION === (string) get_option( 'smc_institutional_repair_version', '' );
+	if ( ! $repair_version_current || ! SMC_Lifecycle::institutional_repair_complete() ) {
+		$repaired = SMC_Lifecycle::repair_institutional_accounts();
+	}
+
+	if ( ! SMC_Lifecycle::institutional_repair_complete() ) {
+		update_option(
+			'smc_last_migration_failure',
+			array(
+				'message'    => __( 'Institutional lifecycle repair remains incomplete and will retry.', 'sabri-membership-core' ),
+				'updated_at' => current_time( 'mysql', true ),
+			),
+			false
+		);
+		return false;
+	}
+
+	if ( SMC_VERSION !== (string) get_option( 'smc_institutional_repair_version', '' ) ) {
+		update_option( 'smc_institutional_repair_version', SMC_VERSION, false );
+	}
+	if ( SMC_VERSION !== (string) get_option( 'smc_institutional_repair_version', '' ) ) {
+		return false;
+	}
+
+	if ( SMC_VERSION !== (string) get_option( 'smc_release_version', '' ) ) {
+		update_option( 'smc_release_version', SMC_VERSION, false );
+	}
+	if ( SMC_VERSION !== (string) get_option( 'smc_release_version', '' ) ) {
+		return false;
+	}
+
+	if ( $repaired > 0 ) {
+		set_transient( 'smc_institutional_repair_notice', (string) $repaired, 300 );
+	}
+	return true;
+}
+
 add_action(
 	'plugins_loaded',
 	static function () {
@@ -162,20 +217,36 @@ add_action(
 		if ( is_array( $completed_failure ) && SMC_Schema_Compat::ORPHAN_BACKFILL_FAILURE === (string) ( $completed_failure['message'] ?? '' ) ) {
 			delete_option( 'smc_last_migration_failure' );
 		}
-		update_option( 'smc_activation_bootstrap_state_v2', array( 'status' => 'ready', 'phase' => 'deferred_upgrade', 'message' => 'Protected bootstrap completed.', 'updated_at' => current_time( 'mysql', true ) ), false );
 
-		if ( SMC_Security::key_ready() && SMC_VERSION !== get_option( 'smc_institutional_repair_version', '' ) ) {
-			try {
-				$repaired = SMC_Lifecycle::repair_institutional_accounts();
-				if ( SMC_Lifecycle::institutional_repair_complete() ) {
-					update_option( 'smc_institutional_repair_version', SMC_VERSION, false );
-					update_option( 'smc_release_version', SMC_VERSION, false );
-					if ( $repaired > 0 ) { set_transient( 'smc_institutional_repair_notice', (string) $repaired, 300 ); }
-				} else {
-					update_option( 'smc_last_migration_failure', array( 'message' => __( 'Institutional lifecycle repair remains incomplete and will retry.', 'sabri-membership-core' ), 'updated_at' => current_time( 'mysql', true ) ), false );
-				}
-			} catch ( Throwable $error ) { smc_record_bootstrap_failure( 'institutional_repair', $error ); }
+		try {
+			if ( ! smc_finalize_institutional_release_state() ) {
+				update_option(
+					'smc_activation_bootstrap_state_v2',
+					array(
+						'status'     => 'deferred_safe',
+						'phase'      => 'institutional_repair',
+						'message'    => 'Institutional lifecycle repair or release-marker finalization remains incomplete and will retry.',
+						'updated_at' => current_time( 'mysql', true ),
+					),
+					false
+				);
+				return;
+			}
+		} catch ( Throwable $error ) {
+			smc_record_bootstrap_failure( 'institutional_repair', $error );
+			return;
 		}
+
+		update_option(
+			'smc_activation_bootstrap_state_v2',
+			array(
+				'status'     => 'ready',
+				'phase'      => 'deferred_upgrade',
+				'message'    => 'Protected bootstrap completed.',
+				'updated_at' => current_time( 'mysql', true ),
+			),
+			false
+		);
 	}
 );
 
