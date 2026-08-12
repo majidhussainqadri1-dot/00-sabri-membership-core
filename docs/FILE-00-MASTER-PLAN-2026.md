@@ -10,9 +10,10 @@
 
 ## Current implementation identity
 
-- Runtime implementation release: `1.2.42`
+- Runtime implementation release: `1.2.43`
 - Public membership contract: `1.2.3`
 - Database schema: `1.4.5`
+- File 02 account-orchestration provider: `smc.authentication-account` `1.1.0`
 - MFA policy: `2026-08-10-founder-mfa-retirement-v1`
 - File 00 MFA owner: `none`
 - CF-01 membership-assurance contract: `1.1.0` — membership prerequisite only; File 00 authentication/MFA assurance retired
@@ -82,12 +83,24 @@ Release `1.2.42` corrects the canonical owner rather than weakening File 01. Fil
 
 The DB schema remains `1.4.5`; the public membership contract remains `1.2.3`; CF-01 remains `1.1.0`; Advanced Trust remains `1.0.0`. Repository tests/package/CI are not live resolution. After merge, the exact `1.2.42` package must be deployed and the live File 01 Foundation Status/System Check must be re-tested before the incident can be marked Resolved.
 
+## Live-proven File 02 activation contract correction — 1.2.43
+
+On 12 August 2026, live activation of exact merged File 02 `1.2.0` stopped before File 02 changed tables, pages or options because File 02 could not find the required File 00 provider `smc.authentication-account` `1.1.0`. The exact deployed File 00 `1.2.42` ZIP was frozen at SHA-256 `f64e945bd712a3ccc7a385c82de47ccfaaa338e455af090073d68e5a7386a7d6`. Its 24/24 payload manifest matched the reviewed v1.2.42 repository candidate, and a full source search proved that the deployed package contained no `SMC_Authentication_Contract_V11`, no `SMC_AUTHENTICATION_CONTRACT_V11_VERSION`, and no `smc.authentication-account` provider. The root cause is therefore an exact-deployed File 00 omitted-contract/branch-lineage regression, not install order and not a File 02 fail-closed defect.
+
+Release `1.2.43` restores the File 00-owned account-orchestration boundary without reversing the Founder-approved MFA retirement. The reviewed historical v1 transaction helper is retained only as an internal registration/verification/completion transaction helper and is not initialized as an active public contract. `SMC_Authentication_Contract_V11` is the only active public provider and exposes contract version `1.1.0` with `register_account`, `mark_email_verified`, and `get_completion_state`. Successful registration is bound to File 00's canonical `SMC_CF01_Contract::ensure_subject_uuid()` and returns a validated opaque `subject_uuid`, matching the exact merged File 02 consumer at `8192c45b595b34e13e09934e3b2d554aa2d8553f`. Historical `two_factor` completion is stripped, File 00 continues to declare `mfa_owner=none`, and containment uses canonical `SMC_Security::revoke_all_sessions()` rather than restoring historical direct session destruction.
+
+The DB schema remains `1.4.5`; the public membership contract remains `1.2.3`; the File 01 authorization claim remains `1.0.0`; CF-01 remains `1.1.0`; Advanced Trust remains `1.0.0`. Permanent QA includes local source/runtime guards, a cross-repository exact-head compatibility gate pinned to merged File 02 `1.2.0`, and a real WordPress/MariaDB activation regression. Repository success is not live resolution: File 00 `1.2.43` must be deployed first, its DB/bootstrap/package parity re-frozen, File 02 `1.2.0` must then activate successfully, and the affected live authentication/trust workflow must be retested before this incident is marked Resolved.
+
 ## Current evidence
 
+- `RELEASE-1.2.43.md`
+- `qa/file02-account-contract-v1243.mjs`
+- `qa/file02-account-contract-runtime-v1243.php`
+- `qa/file02-exact-consumer-compat.php`
+- `.github/workflows/file02-account-contract-current.yml`
 - `RELEASE-1.2.42.md`
 - `qa/file01-foundation-auth-bridge-contract.mjs`
 - `qa/file01-foundation-auth-bridge-runtime.php`
-
 - `RELEASE-1.2.41.md`
 - `REVIEW-NEXT-10-ROUNDS.md`
 - `qa/next-ten-round-contract.mjs`
@@ -107,22 +120,18 @@ The DB schema remains `1.4.5`; the public membership contract remains `1.2.3`; C
 - `qa/third-fresh-ten-review-traceability.json`
 - `qa/third-fresh-review-contract.mjs`
 - `qa/third-fresh-review-runtime.php`
-
 - `docs/FILE-00-SECOND-FRESH-TEN-ROUND-REVIEW-1.2.15.md`
 - `docs/RELEASE-1.2.15-SECOND-FRESH-TEN-REVIEW.md`
 - `qa/second-fresh-ten-review-traceability.json`
 - `qa/second-fresh-review-contract.mjs`
 - `qa/second-fresh-review-runtime.php`
-
 - `docs/FILE-00-FRESH-TEN-ROUND-REVIEW-1.2.14.md`
 - `docs/RELEASE-1.2.14-FRESH-TEN-REVIEW.md`
 - `qa/fresh-ten-review-traceability.json`
-
 - `docs/FILE-00-ADVANCED-TRUST-EXTENSIONS-1.2.13.md`
 - `qa/advanced-trust-traceability.json`
 - `qa/advanced-trust-contract.mjs`
 - `qa/advanced-trust-runtime.php`
-
 - `docs/FILE-00-LATEST-CENTRAL-TRACEABILITY-1.2.12.md`
 - `docs/RELEASE-1.2.12-LATEST-CENTRAL.md`
 - `qa/latest-central-traceability.json`

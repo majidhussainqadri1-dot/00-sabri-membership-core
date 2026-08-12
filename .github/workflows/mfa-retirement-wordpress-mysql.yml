@@ -31,6 +31,17 @@ jobs:
     steps:
       - name: Checkout exact candidate
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Prove exact immutable File 00 head
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected='${{ github.event.pull_request.head.sha || github.sha }}'
+          test "$(git rev-parse HEAD)" = "$expected"
 
       - name: Set up PHP 8.3
         uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240
@@ -48,6 +59,8 @@ jobs:
           set -euo pipefail
           find source/sabri-membership-core -name '*.php' -print0 | xargs -0 -n1 php -l
           node qa/mfa-retirement-contract.mjs
+          node qa/file02-account-contract-v1243.mjs
+          php qa/file02-account-contract-runtime-v1243.php
 
       - name: Install pinned WP-CLI and WordPress 7.0.1
         run: |
@@ -77,6 +90,7 @@ jobs:
               fwrite(STDERR, "schema migration incomplete: ".wp_json_encode(get_option("smc_last_migration_failure",array()))."\n");
               exit(42);
             }
+            if ( ! defined("SMC_AUTHENTICATION_CONTRACT_V11_VERSION") || "1.1.0" !== SMC_AUTHENTICATION_CONTRACT_V11_VERSION ) { fwrite(STDERR,"File02 account provider unavailable\n"); exit(43); }
             SMC_Schema_Compat::assert_current_queue_indexes();
             echo "PASS canonical File 00 migration ready\n";
           ' --path=/tmp/wordpress
@@ -195,12 +209,12 @@ jobs:
         run: |
           set -euo pipefail
           python3 tools/build.py
-          python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.42.zip
+          python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.43.zip
 
-      - name: Upload installable File 00 v1.2.42 ZIP
+      - name: Upload installable File 00 v1.2.43 ZIP
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: File-00-Sabri-Membership-Core-1.2.42-Ten-Round-Reviewed
-          path: dist/00-sabri-membership-core-1.2.42.zip
+          name: File-00-Sabri-Membership-Core-1.2.43-File02-Compatible
+          path: dist/00-sabri-membership-core-1.2.43.zip
           if-no-files-found: error
           retention-days: 30

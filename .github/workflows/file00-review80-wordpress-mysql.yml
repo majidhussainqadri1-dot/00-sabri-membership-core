@@ -1,4 +1,4 @@
-name: File 00 v1.2.42 Exact-Head Release Gate
+name: File 00 v1.2.43 Exact-Head Release Gate
 
 on:
   pull_request:
@@ -7,6 +7,10 @@ on:
 
 permissions:
   contents: read
+
+env:
+  FILE02_REF: 0f011b1876e217b7ee46f92903e5315538c1025e
+  FILE02_VERSION: '1.2.1'
 
 jobs:
   review80-release:
@@ -29,6 +33,16 @@ jobs:
     steps:
       - name: Checkout exact candidate
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Prove exact immutable File 00 head
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected='${{ github.event.pull_request.head.sha || github.sha }}'
+          test "$(git rev-parse HEAD)" = "$expected"
       - name: Set up PHP 8.3
         uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240
         with:
@@ -43,6 +57,8 @@ jobs:
           set -euo pipefail
           find source/sabri-membership-core -name '*.php' -print0 | xargs -0 -n1 php -l
           php -l qa/review80-wordpress-mysql.php
+          php -l qa/file02-account-contract-runtime-v1243.php
+          php -l qa/file02-exact-consumer-compat.php
           npm test
           git diff --check
           test -z "$(find .github/workflows qa -maxdepth 1 -type f -name 'zz-*' -print -quit)"
@@ -56,7 +72,7 @@ jobs:
           php /tmp/wp-cli.phar config set SMC_MASTER_KEY_ID 'review80-ci-key-v1' --type=constant --path=/tmp/wordpress
           php /tmp/wp-cli.phar config set WP_ENVIRONMENT_TYPE 'staging' --type=constant --path=/tmp/wordpress
           php /tmp/wp-cli.phar core install --path=/tmp/wordpress --url=http://review80.local --title='File 00 Review80 CI' --admin_user=founder --admin_password='Review80-CI-Password!9' --admin_email=founder@example.test --skip-email
-      - name: Activate exact candidate and migrate
+      - name: Activate exact File 00 candidate and migrate
         run: |
           set -euo pipefail
           rm -rf /tmp/wordpress/wp-content/plugins/sabri-membership-core
@@ -68,24 +84,57 @@ jobs:
             SMC_Schema_Compat::reconcile_verification_queue_index(); SMC_Installer::maybe_upgrade();
             if(SMC_DB_VERSION!==(string)get_option("smc_db_version","")){fwrite(STDERR,"migration incomplete\n");exit(42);}
             if(SMC_VERSION!==(string)get_option("smc_release_version","")){fwrite(STDERR,"release marker incomplete\n");exit(43);}
+            if(!defined("SMC_AUTHENTICATION_CONTRACT_V11_VERSION") || version_compare(SMC_AUTHENTICATION_CONTRACT_V11_VERSION,"1.1.0","<")){fwrite(STDERR,"File02 provider version unavailable\n");exit(44);}
+            foreach(array("register_account","mark_email_verified","get_completion_state") as $m){if(!is_callable(array("SMC_Authentication_Contract_V11",$m))){fwrite(STDERR,"File02 provider method unavailable: $m\n");exit(45);}}
             SMC_Schema_Compat::assert_current_queue_indexes();
-            echo "PASS canonical migration ".SMC_VERSION." / ".SMC_DB_VERSION."\n";
+            echo "PASS canonical migration ".SMC_VERSION." / ".SMC_DB_VERSION." / auth-contract ".SMC_AUTHENTICATION_CONTRACT_V11_VERSION."\n";
           ' --path=/tmp/wordpress
       - name: Real WordPress MariaDB regressions
         run: php /tmp/wp-cli.phar eval-file "$GITHUB_WORKSPACE/qa/review80-wordpress-mysql.php" --path=/tmp/wordpress
+      - name: Checkout exact merged File 02 1.2.1
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: majidhussainqadri1-dot/02-sabri-authentication
+          ref: ${{ env.FILE02_REF }}
+          path: file02-exact
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Prove corrected File 02 activation boundary with corrected File 00
+        run: |
+          set -euo pipefail
+          test "$(git -C file02-exact rev-parse HEAD)" = "$FILE02_REF"
+          grep -Fq "Version: ${FILE02_VERSION}" file02-exact/sabri-authentication.php
+          grep -Fq "require_once SAUTH_DIR . 'includes/class-sauth-storage-router.php';" file02-exact/sabri-authentication.php
+          rm -rf /tmp/wordpress/wp-content/plugins/02-sabri-authentication
+          cp -R file02-exact /tmp/wordpress/wp-content/plugins/02-sabri-authentication
+          rm -rf /tmp/wordpress/wp-content/plugins/02-sabri-authentication/.git
+          php /tmp/wp-cli.phar plugin activate 02-sabri-authentication --path=/tmp/wordpress
+          php /tmp/wp-cli.phar eval '
+            if(!is_plugin_active("02-sabri-authentication/sabri-authentication.php")){fwrite(STDERR,"File02 did not remain active\n");exit(50);}
+            if(!class_exists("SAUTH_Storage_Router")){fwrite(STDERR,"File02 storage router unavailable after bootstrap\n");exit(51);}
+            if(!class_exists("SAUTH_Account_Contract") || !SAUTH_Account_Contract::provider_available()){fwrite(STDERR,"File02 still rejects File00 account provider\n");exit(52);}
+            if("1.2.1"!==(string)SAUTH_VERSION){fwrite(STDERR,"unexpected File02 version\n");exit(53);}
+            echo "PASS File02 1.2.1 clean second request against File00 ".SMC_VERSION."\n";
+          ' --path=/tmp/wordpress
+          php /tmp/wp-cli.phar option get siteurl --path=/tmp/wordpress >/dev/null
+          php /tmp/wp-cli.phar plugin status 02-sabri-authentication --path=/tmp/wordpress | grep -Fq 'Status: Active'
+      - name: Cross-contract exact consumer shape
+        env:
+          FILE02_ROOT: ${{ github.workspace }}/file02-exact
+        run: php qa/file02-exact-consumer-compat.php
       - name: Build and verify deterministic package
         run: |
           set -euo pipefail
           python3 tools/build.py
-          python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.42.zip
-          sha256sum dist/00-sabri-membership-core-1.2.42.zip > dist/00-sabri-membership-core-1.2.42.zip.sha256
-          unzip -t dist/00-sabri-membership-core-1.2.42.zip
-      - name: Upload installable File 00 v1.2.42
+          python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.43.zip
+          sha256sum dist/00-sabri-membership-core-1.2.43.zip > dist/00-sabri-membership-core-1.2.43.zip.sha256
+          unzip -t dist/00-sabri-membership-core-1.2.43.zip
+      - name: Upload installable File 00 v1.2.43
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: File-00-Sabri-Membership-Core-1.2.42-Ten-Round-Reviewed
+          name: File-00-Sabri-Membership-Core-1.2.43-File02-Compatibility-Reviewed
           path: |
-            dist/00-sabri-membership-core-1.2.42.zip
-            dist/00-sabri-membership-core-1.2.42.zip.sha256
+            dist/00-sabri-membership-core-1.2.43.zip
+            dist/00-sabri-membership-core-1.2.43.zip.sha256
           if-no-files-found: error
           retention-days: 30

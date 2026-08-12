@@ -12,8 +12,8 @@ const workflow = fs.readFileSync(`${root}/includes/class-smc-workflow.php`, 'utf
 const has = (source, needle, label = needle) => assert.ok(source.includes(needle), `missing MFA-retirement contract: ${label}`);
 const lacks = (source, needle, label = needle) => assert.ok(!source.includes(needle), `retired MFA contract still present: ${label}`);
 
-has(bootstrap, "Version: 1.2.42", 'plugin release 1.2.42');
-has(bootstrap, "define( 'SMC_VERSION', '1.2.42' );", 'runtime release 1.2.42');
+has(bootstrap, "Version: 1.2.43", 'plugin release 1.2.43');
+has(bootstrap, "define( 'SMC_VERSION', '1.2.43' );", 'runtime release 1.2.43');
 has(bootstrap, "define( 'SMC_CONTRACT_VERSION', '1.2.3' );", 'public contract 1.2.3');
 has(bootstrap, "require_once SMC_PATH . 'includes/class-smc-mfa-retirement.php';", 'MFA retirement runtime loaded');
 has(bootstrap, "array( 'SMC_MFA_Retirement', 'init' )", 'MFA retirement runtime initialized');
@@ -34,7 +34,7 @@ has(schemaCompat, "array( 'status', 'next_attempt_at' )", 'file-job queue signat
 has(schemaCompat, "array( 'request_id', 'decision' )", 'exact live legacy approval decision signature is allowlisted');
 has(schemaCompat, "array( 'request_id', 'approval_generation', 'decision' )", 'current approval decision signature is explicit');
 has(schemaCompat, 'DROP INDEX `decision`', 'only the known stale decision index is dropped before dbDelta');
-has(schemaCompat, 'Unsupported approval decision index definition; automatic migration refused.', 'unknown approval decision shapes fail closed');
+has(schemaCompat, 'Unsupported approval decision index definition; automatic migration refused.', 'unknown decision index shapes fail closed');
 has(schemaCompat, 'Current approval decision index could not be verified.', 'current decision index is read-back verified');
 has(schemaCompat, "const ORPHAN_BACKFILL_FAILURE = 'Role-grant backfill failed.'", 'orphan compatibility is gated to exact live failure');
 has(schemaCompat, "'legacy-users-to-1.2.0'", 'orphan compatibility requires completed live baseline');
