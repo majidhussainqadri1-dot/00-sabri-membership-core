@@ -43,3 +43,73 @@ jobs:
           php -l tools/live-reality-freeze.php
           node qa/live-reality-freeze-contract.mjs
           git diff --check
+
+  wordpress-runtime-smoke:
+    runs-on: ubuntu-24.04
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_DATABASE: wordpress
+          MARIADB_USER: wordpress
+          MARIADB_PASSWORD: wordpress
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up PHP 8.3
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240
+        with:
+          php-version: '8.3'
+          coverage: none
+          extensions: mysqli, openssl, mbstring, json
+          tools: none
+      - name: Install pinned WP-CLI and WordPress 7.0.1
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 https://github.com/wp-cli/wp-cli/releases/download/v2.12.0/wp-cli-2.12.0.phar -o /tmp/wp-cli.phar
+          php /tmp/wp-cli.phar core download --version=7.0.1 --path=/tmp/wordpress --force
+          php /tmp/wp-cli.phar config create --path=/tmp/wordpress --dbname=wordpress --dbuser=wordpress --dbpass=wordpress --dbhost=127.0.0.1:3306 --skip-check
+          php /tmp/wp-cli.phar config set SMC_MASTER_KEY 'base64:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=' --type=constant --path=/tmp/wordpress
+          php /tmp/wp-cli.phar config set SMC_MASTER_KEY_ID 'lrf-ci-key-v1' --type=constant --path=/tmp/wordpress
+          php /tmp/wp-cli.phar config set WP_ENVIRONMENT_TYPE 'staging' --type=constant --path=/tmp/wordpress
+          php /tmp/wp-cli.phar core install --path=/tmp/wordpress --url=http://lrf.local --title='File 00 Live Reality Freeze CI' --admin_user=founder --admin_password='LRF-CI-Password!9' --admin_email=founder@example.test --skip-email
+      - name: Activate exact File 00 candidate and reach stable schema
+        run: |
+          set -euo pipefail
+          cp -R source/sabri-membership-core /tmp/wordpress/wp-content/plugins/sabri-membership-core
+          php /tmp/wp-cli.phar plugin activate sabri-membership-core --path=/tmp/wordpress
+          php /tmp/wp-cli.phar eval '
+            $key=SMC_Security::ensure_key_ready(); if(is_wp_error($key)){fwrite(STDERR,$key->get_error_message()."\n");exit(40);}
+            $audit=SMC_Installer::ensure_audit_infrastructure(); if(is_wp_error($audit)){fwrite(STDERR,$audit->get_error_message()."\n");exit(41);}
+            SMC_Schema_Compat::reconcile_verification_queue_index(); SMC_Installer::maybe_upgrade();
+            if(SMC_DB_VERSION!==(string)get_option("smc_db_version","")){fwrite(STDERR,"migration incomplete\n");exit(42);}
+            if(SMC_VERSION!==(string)get_option("smc_release_version","")){fwrite(STDERR,"release marker incomplete\n");exit(43);}
+            SMC_Schema_Compat::assert_current_queue_indexes();
+          ' --path=/tmp/wordpress
+      - name: Execute collector against real WordPress and MariaDB
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file "$GITHUB_WORKSPACE/tools/live-reality-freeze.php" --path=/tmp/wordpress > /tmp/live-reality-freeze.json
+          jq -e '.collector.format == "smc-live-reality-freeze-v1"' /tmp/live-reality-freeze.json >/dev/null
+          jq -e '.collector.read_only == true' /tmp/live-reality-freeze.json >/dev/null
+          jq -e '.repository_truth.repository_head == "unverified_from_deployed_runtime"' /tmp/live-reality-freeze.json >/dev/null
+          jq -e '.deployed_file00.runtime_version == "1.2.43"' /tmp/live-reality-freeze.json >/dev/null
+          jq -e '.deployed_file00.expected_db_version == "1.4.5" and .deployed_file00.actual_db_version == "1.4.5"' /tmp/live-reality-freeze.json >/dev/null
+          jq -e '.deployed_file00.manifest.verified == true' /tmp/live-reality-freeze.json >/dev/null
+          jq -e '.cross_file_contracts.file01_authorization_bridge_registered == true' /tmp/live-reality-freeze.json >/dev/null
+          jq -e '.cross_file_contracts.file02_provider_version == "1.1.0"' /tmp/live-reality-freeze.json >/dev/null
+          jq -e '.live_verification_status == "evidence_collected_not_compared"' /tmp/live-reality-freeze.json >/dev/null
+          jq -e '[.database_shape.smc_tables[].table | startswith("smc_")] | all' /tmp/live-reality-freeze.json >/dev/null
+          test -z "$(jq -r '.database_shape.smc_tables[].table' /tmp/live-reality-freeze.json | grep -E '^wp_' || true)"
