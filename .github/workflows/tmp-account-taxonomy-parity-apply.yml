@@ -10,7 +10,6 @@ permissions:
 
 jobs:
   apply-and-test:
-    if: github.event.head_commit.message != 'fix: align authentication provider with canonical account taxonomy'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -29,47 +28,60 @@ jobs:
           s = provider.read_text()
           old = "$allowed_types   = array( 'member', 'doctor', 'student', 'teacher', 'researcher', 'clinic_staff', 'institution_representative' );"
           new = "$allowed_types   = array_keys( smc_account_types() );"
-          if s.count(old) != 1:
-              raise SystemExit('provider taxonomy preimage mismatch')
-          provider.write_text(s.replace(old, new))
+          if old in s:
+              if s.count(old) != 1:
+                  raise SystemExit('provider taxonomy preimage count mismatch')
+              provider.write_text(s.replace(old, new))
+          elif new not in s:
+              raise SystemExit('provider taxonomy state is neither old nor corrected')
 
           qa = Path('qa/file02-account-contract-v1243.mjs')
           s = qa.read_text()
-          anchor = "assert.ok(v11.includes(\"result['contract_version'] = self::CONTRACT_VERSION\"), 'v1.1 normalize does not preserve provider identity');\n"
-          addition = anchor + "assert.ok(v11.includes(\"$allowed_types   = array_keys( smc_account_types() );\"), 'v1.1 provider is not bound to File 00 canonical account taxonomy');\nassert.equal(v11.includes(\"'clinic_staff'\"), false, 'legacy clinic_staff alias remains hard-coded in provider');\nassert.equal(v11.includes(\"'institution_representative'\"), false, 'legacy institution_representative alias remains hard-coded in provider');\n"
-          if s.count(anchor) != 1:
-              raise SystemExit('source QA preimage mismatch')
-          qa.write_text(s.replace(anchor, addition))
+          marker = "assert.ok(v11.includes(\"$allowed_types   = array_keys( smc_account_types() );\"), 'v1.1 provider is not bound to File 00 canonical account taxonomy');"
+          if marker not in s:
+              anchor = "assert.ok(v11.includes(\"result['contract_version'] = self::CONTRACT_VERSION\"), 'v1.1 normalize does not preserve provider identity');\n"
+              addition = anchor + marker + "\nassert.equal(v11.includes(\"'clinic_staff'\"), false, 'legacy clinic_staff alias remains hard-coded in provider');\nassert.equal(v11.includes(\"'institution_representative'\"), false, 'legacy institution_representative alias remains hard-coded in provider');\n"
+              if s.count(anchor) != 1:
+                  raise SystemExit('source QA preimage mismatch')
+              qa.write_text(s.replace(anchor, addition))
 
           runtime = Path('qa/file02-account-contract-runtime-v1243.php')
           s = runtime.read_text()
-          anchor = "function smc_page_url( $key, $fallback = '' ) { return home_url( $fallback ); }\n"
-          addition = anchor + "function smc_account_types() { return array( 'member'=>'Member', 'patient'=>'Patient', 'student'=>'Student', 'doctor'=>'Doctor', 'teacher'=>'Teacher', 'researcher'=>'Researcher', 'pharmacy'=>'Pharmacy', 'clinic'=>'Clinic', 'publisher'=>'Publisher' ); }\n"
-          if s.count(anchor) != 1:
-              raise SystemExit('runtime QA function preimage mismatch')
-          s = s.replace(anchor, addition)
-          anchor2 = "$v11_source = file_get_contents( dirname( __DIR__ ) . '/source/sabri-membership-core/includes/class-smc-authentication-contract-v11.php' );\n"
-          addition2 = "$validator = new ReflectionMethod( 'SMC_Authentication_Contract_V11', 'validate_extra_fields' );\n$validator->setAccessible( true );\nforeach ( array_keys( smc_account_types() ) as $canonical_type ) {\n\t$checked = $validator->invoke( null, array( 'city'=>'Gujrat', 'account_type'=>$canonical_type, 'authentication_method'=>'password', 'ethical_conduct_version'=>'2026-test', 'profile_photo_required'=>true ) );\n\tv1243_assert( is_array( $checked ) && $canonical_type === $checked['account_type'], 'canonical account type rejected by v1.1 provider: ' . $canonical_type );\n}\nforeach ( array( 'clinic_staff', 'institution_representative' ) as $legacy_alias ) {\n\t$checked = $validator->invoke( null, array( 'city'=>'Gujrat', 'account_type'=>$legacy_alias, 'authentication_method'=>'password', 'ethical_conduct_version'=>'2026-test', 'profile_photo_required'=>true ) );\n\tv1243_assert( ! is_array( $checked ), 'legacy provider-only alias unexpectedly accepted: ' . $legacy_alias );\n}\n\n" + anchor2
-          if s.count(anchor2) != 1:
-              raise SystemExit('runtime QA assertion preimage mismatch')
-          runtime.write_text(s.replace(anchor2, addition2))
+          fn = "function smc_account_types() { return array( 'member'=>'Member', 'patient'=>'Patient', 'student'=>'Student', 'doctor'=>'Doctor', 'teacher'=>'Teacher', 'researcher'=>'Researcher', 'pharmacy'=>'Pharmacy', 'clinic'=>'Clinic', 'publisher'=>'Publisher' ); }"
+          if fn not in s:
+              anchor = "function smc_page_url( $key, $fallback = '' ) { return home_url( $fallback ); }\n"
+              if s.count(anchor) != 1:
+                  raise SystemExit('runtime QA function preimage mismatch')
+              s = s.replace(anchor, anchor + fn + "\n")
+          marker2 = "$validator = new ReflectionMethod( 'SMC_Authentication_Contract_V11', 'validate_extra_fields' );"
+          if marker2 not in s:
+              anchor2 = "$v11_source = file_get_contents( dirname( __DIR__ ) . '/source/sabri-membership-core/includes/class-smc-authentication-contract-v11.php' );\n"
+              addition2 = "$validator = new ReflectionMethod( 'SMC_Authentication_Contract_V11', 'validate_extra_fields' );\n$validator->setAccessible( true );\nforeach ( array_keys( smc_account_types() ) as $canonical_type ) {\n\t$checked = $validator->invoke( null, array( 'city'=>'Gujrat', 'account_type'=>$canonical_type, 'authentication_method'=>'password', 'ethical_conduct_version'=>'2026-test', 'profile_photo_required'=>true ) );\n\tv1243_assert( is_array( $checked ) && $canonical_type === $checked['account_type'], 'canonical account type rejected by v1.1 provider: ' . $canonical_type );\n}\nforeach ( array( 'clinic_staff', 'institution_representative' ) as $legacy_alias ) {\n\t$checked = $validator->invoke( null, array( 'city'=>'Gujrat', 'account_type'=>$legacy_alias, 'authentication_method'=>'password', 'ethical_conduct_version'=>'2026-test', 'profile_photo_required'=>true ) );\n\tv1243_assert( ! is_array( $checked ), 'legacy provider-only alias unexpectedly accepted: ' . $legacy_alias );\n}\n\n" + anchor2
+              if s.count(anchor2) != 1:
+                  raise SystemExit('runtime QA assertion preimage mismatch')
+              s = s.replace(anchor2, addition2)
+          runtime.write_text(s)
           PY
           git diff --check
           php -l source/sabri-membership-core/includes/class-smc-authentication-contract-v11.php
           node qa/file02-account-contract-v1243.mjs
           php qa/file02-account-contract-runtime-v1243.php
-      - name: Record current release-version references for controlled bump
+      - name: Record release-version references
         shell: bash
         run: |
           set -euo pipefail
           grep -RIn --exclude-dir=.git --exclude='package-lock.json' '1\.2\.43' . || true
-      - name: Commit tested correction
+      - name: Commit tested correction if needed
         shell: bash
         run: |
           set -euo pipefail
+          git add source/sabri-membership-core/includes/class-smc-authentication-contract-v11.php qa/file02-account-contract-v1243.mjs qa/file02-account-contract-runtime-v1243.php
+          if git diff --cached --quiet; then
+            echo 'Correction already present; nothing to commit.'
+            exit 0
+          fi
           git config user.name 'majidhussainqadri1-dot'
           git config user.email 'majidhussainqadri1@gmail.com'
-          git add source/sabri-membership-core/includes/class-smc-authentication-contract-v11.php qa/file02-account-contract-v1243.mjs qa/file02-account-contract-runtime-v1243.php
           git diff --cached --check
           git commit -m 'fix: align authentication provider with canonical account taxonomy'
           git push origin HEAD:fix/file00-account-taxonomy-provider-parity-1.2.44
