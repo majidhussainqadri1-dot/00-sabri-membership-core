@@ -49,5 +49,8 @@ for (const marker of [
 }
 assert.equal(v11.includes('wp_destroy_all_sessions'), false, 'v1.1 provider bypasses canonical File 00 session revocation');
 assert.ok(v11.includes("result['contract_version'] = self::CONTRACT_VERSION"), 'v1.1 normalize does not preserve provider identity');
+assert.ok(v11.includes("$allowed_types   = array_keys( smc_account_types() );"), 'v1.1 provider is not bound to File 00 canonical account taxonomy');
+assert.equal(v11.includes("'clinic_staff'"), false, 'legacy clinic_staff alias remains hard-coded in provider');
+assert.equal(v11.includes("'institution_representative'"), false, 'legacy institution_representative alias remains hard-coded in provider');
 
 console.log('File 00 v1.2.43 -> File 02 account-contract source guard passed.');
