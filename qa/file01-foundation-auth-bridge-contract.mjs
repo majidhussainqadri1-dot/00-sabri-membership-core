@@ -3,7 +3,7 @@ const root='source/sabri-membership-core';
 const main=fs.readFileSync(`${root}/sabri-membership-core.php`,'utf8');
 const auth=fs.readFileSync(`${root}/includes/class-smc-authorization.php`,'utf8');
 const failures=[]; let passed=0; const check=(ok,label)=>ok?passed++:failures.push(label);
-check(main.includes('Version: 1.2.43') && main.includes("define( 'SMC_VERSION', '1.2.43' );"),'runtime 1.2.43');
+check(main.includes('Version: 1.2.44') && main.includes("define( 'SMC_VERSION', '1.2.44' );"),'runtime 1.2.44');
 check(main.includes("SMC_FILE01_AUTH_CLAIM_VERSION', '1.0.0'") && main.includes("SMC_FILE01_FOUNDATION_CONTRACT_VERSION', '2.0.0'"),'File 01 bridge contract constants');
 check(auth.includes("add_filter( 'spf_file00_authorization_claim', array( __CLASS__, 'file01_authorization_claim' ), 10, 2 )"),'structured File 01 claim provider registered');
 check(!auth.includes("add_filter( 'spf_file00_capability_claim'"),'no legacy boolean bridge added');

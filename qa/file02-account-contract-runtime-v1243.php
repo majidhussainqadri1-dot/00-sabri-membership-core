@@ -85,4 +85,4 @@ foreach ( array( 'clinic_staff', 'institution_representative' ) as $legacy_alias
 $v11_source = file_get_contents( dirname( __DIR__ ) . '/source/sabri-membership-core/includes/class-smc-authentication-contract-v11.php' );
 v1243_assert( false === strpos( $v11_source, 'wp_destroy_all_sessions' ), 'non-canonical session destruction returned' );
 
-echo "File 00 v1.2.43 File 02 runtime compatibility checks passed.\n";
+echo "File 00 v1.2.44 File 02 runtime compatibility checks passed.\n";

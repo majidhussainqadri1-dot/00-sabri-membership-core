@@ -10,12 +10,12 @@ permissions:
   contents: read
 
 env:
-  FILE02_REF: 0f011b1876e217b7ee46f92903e5315538c1025e
-  FILE02_VERSION: '1.2.1'
+  FILE02_REF: 950f4bd3f63e08304e3afafa501196919223ab20
+  FILE02_VERSION: '1.2.4'
 
 jobs:
   exact-head-contract:
-    name: Exact-head File 02 1.2.1 account-contract compatibility
+    name: Exact-head File 02 1.2.4 account-contract compatibility
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -80,4 +80,4 @@ jobs:
           npm ci --ignore-scripts
           npm run verify
           git diff --check
-          test -f dist/00-sabri-membership-core-1.2.43.zip
+          test -f dist/00-sabri-membership-core-1.2.44.zip

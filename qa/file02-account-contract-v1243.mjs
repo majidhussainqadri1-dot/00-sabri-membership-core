@@ -7,8 +7,8 @@ const base = fs.readFileSync(new URL('source/sabri-membership-core/includes/clas
 const v11 = fs.readFileSync(new URL('source/sabri-membership-core/includes/class-smc-authentication-contract-v11.php', root), 'utf8');
 
 for (const marker of [
-  'Version: 1.2.43',
-  "define( 'SMC_VERSION', '1.2.43' );",
+  'Version: 1.2.44',
+  "define( 'SMC_VERSION', '1.2.44' );",
   "define( 'SMC_DB_VERSION', '1.4.5' );",
   "define( 'SMC_CONTRACT_VERSION', '1.2.3' );",
   "define( 'SMC_AUTHENTICATION_CONTRACT_VERSION', '1.0.0' );",
@@ -53,4 +53,4 @@ assert.ok(v11.includes("$allowed_types   = array_keys( smc_account_types() );"),
 assert.equal(v11.includes("'clinic_staff'"), false, 'legacy clinic_staff alias remains hard-coded in provider');
 assert.equal(v11.includes("'institution_representative'"), false, 'legacy institution_representative alias remains hard-coded in provider');
 
-console.log('File 00 v1.2.43 -> File 02 account-contract source guard passed.');
+console.log('File 00 v1.2.44 -> File 02 account-contract source guard passed.');
