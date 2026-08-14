@@ -47,12 +47,13 @@ jobs:
 
           runtime = Path('qa/file02-account-contract-runtime-v1243.php')
           s = runtime.read_text()
-          fn = "function smc_account_types() { return array( 'member'=>'Member', 'patient'=>'Patient', 'student'=>'Student', 'doctor'=>'Doctor', 'teacher'=>'Teacher', 'researcher'=>'Researcher', 'pharmacy'=>'Pharmacy', 'clinic'=>'Clinic', 'publisher'=>'Publisher' ); }"
-          if fn not in s:
+          harness_marker = "function smc_account_types() { return array( 'member'=>'Member', 'patient'=>'Patient', 'student'=>'Student', 'doctor'=>'Doctor', 'teacher'=>'Teacher', 'researcher'=>'Researcher', 'pharmacy'=>'Pharmacy', 'clinic'=>'Clinic', 'publisher'=>'Publisher' ); }"
+          if harness_marker not in s:
               anchor = "function smc_page_url( $key, $fallback = '' ) { return home_url( $fallback ); }\n"
+              stubs = "function sanitize_text_field( $value ) { return trim( (string) $value ); }\nfunction esc_url_raw( $value ) { return (string) $value; }\nclass WP_Error { private $code; public function __construct( $code ) { $this->code = (string) $code; } public function get_error_code() { return $this->code; } }\n" + harness_marker + "\n"
               if s.count(anchor) != 1:
                   raise SystemExit('runtime QA function preimage mismatch')
-              s = s.replace(anchor, anchor + fn + "\n")
+              s = s.replace(anchor, anchor + stubs)
           marker2 = "$validator = new ReflectionMethod( 'SMC_Authentication_Contract_V11', 'validate_extra_fields' );"
           if marker2 not in s:
               anchor2 = "$v11_source = file_get_contents( dirname( __DIR__ ) . '/source/sabri-membership-core/includes/class-smc-authentication-contract-v11.php' );\n"
