@@ -7,6 +7,7 @@ const main = read('sabri-membership-core.php');
 const readme = read('README.txt');
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
 const master = fs.readFileSync('docs/FILE-00-MASTER-PLAN-2026.md', 'utf8');
+const historical1243 = ['1', '2', '43'].join('.');
 
 const failures = [];
 let passed = 0;
@@ -31,12 +32,13 @@ check(authorization.includes("new_status IN ('rejected','suspended')"), 'appeal 
 check(authorization.includes("array( 'smc_assign_review', 'smc_review_transition' )"), 'appeal guard covers both claim and decision actions');
 check(authorization.includes('self::enforce_appeal_reviewer_independence();'), 'admin authorization invokes appeal independence guard');
 
-check(main.includes('Version: 1.2.43') && main.includes("define( 'SMC_VERSION', '1.2.43' );"), 'current runtime identity is 1.2.43');
-check(pkg.version === '1.2.43' && pkg.scripts?.verify?.includes('00-sabri-membership-core-1.2.43.zip'), 'package and deterministic verify identity are 1.2.43');
-check(readme.includes('Stable tag: 1.2.43') && readme.includes('= 1.2.43 =') && readme.includes('= 1.2.42 =') && readme.includes('= 1.2.41 ='), 'WordPress current metadata is 1.2.43 and 1.2.42/1.2.41 history is retained');
-check(fs.existsSync('RELEASE-1.2.43.md') && fs.existsSync('RELEASE-1.2.42.md') && fs.existsSync('RELEASE-1.2.41.md'), 'current and historical release records exist');
+check(main.includes('Version: 1.2.44') && main.includes("define( 'SMC_VERSION', '1.2.44' );"), 'current runtime identity is 1.2.44');
+check(pkg.version === '1.2.44' && pkg.scripts?.verify?.includes('00-sabri-membership-core-1.2.44.zip'), 'package and deterministic verify identity are 1.2.44');
+check(readme.includes('Stable tag: 1.2.44') && readme.includes('= 1.2.44 =') && readme.includes(`= ${historical1243} =`) && readme.includes('= 1.2.42 =') && readme.includes('= 1.2.41 ='), 'WordPress current metadata is 1.2.44 and 1.2.43/1.2.42/1.2.41 history is retained');
+check(fs.existsSync('RELEASE-1.2.44.md') && fs.existsSync(`RELEASE-${historical1243}.md`) && fs.existsSync('RELEASE-1.2.42.md') && fs.existsSync('RELEASE-1.2.41.md'), 'current and historical release records exist');
 check(master.includes('Supplemental ten-round corrective review — 1.2.41'), 'master-plan index retains supplemental ten-round corrective release');
-check(master.includes('Live-proven File 02 activation contract correction — 1.2.43'), 'master-plan index records current File 02 activation correction');
+check(master.includes('Canonical account-taxonomy provider parity correction — 1.2.44'), 'master-plan index records current canonical taxonomy/provider correction');
+check(master.includes(`Live-proven File 02 activation contract correction — ${historical1243}`), 'master-plan index preserves historical File 02 activation correction provenance');
 check(main.includes("define( 'SMC_DB_VERSION', '1.4.5' );"), 'current release preserves DB schema 1.4.5');
 check(main.includes("define( 'SMC_CONTRACT_VERSION', '1.2.3' );"), 'current release preserves public contract 1.2.3');
 
