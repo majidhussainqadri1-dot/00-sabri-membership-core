@@ -9,8 +9,8 @@ permissions:
   contents: read
 
 env:
-  FILE02_REF: 0f011b1876e217b7ee46f92903e5315538c1025e
-  FILE02_VERSION: '1.2.1'
+  FILE02_REF: a714c23fea33ecdfe9110f69c0ee1f07c9f2bcbb
+  FILE02_VERSION: '1.3.3'
 
 jobs:
   review80-release:
@@ -70,6 +70,7 @@ jobs:
           php /tmp/wp-cli.phar config create --path=/tmp/wordpress --dbname=wordpress --dbuser=wordpress --dbpass=wordpress --dbhost=127.0.0.1:3306 --skip-check
           php /tmp/wp-cli.phar config set SMC_MASTER_KEY 'base64:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=' --type=constant --path=/tmp/wordpress
           php /tmp/wp-cli.phar config set SMC_MASTER_KEY_ID 'review80-ci-key-v1' --type=constant --path=/tmp/wordpress
+          php /tmp/wp-cli.phar config set SA_MASTER_KEY 'file02-integration-dedicated-master-key-2026' --type=constant --path=/tmp/wordpress
           php /tmp/wp-cli.phar config set WP_ENVIRONMENT_TYPE 'staging' --type=constant --path=/tmp/wordpress
           php /tmp/wp-cli.phar core install --path=/tmp/wordpress --url=http://review80.local --title='File 00 Review80 CI' --admin_user=founder --admin_password='Review80-CI-Password!9' --admin_email=founder@example.test --skip-email
       - name: Activate exact File 00 candidate and migrate
@@ -91,7 +92,7 @@ jobs:
           ' --path=/tmp/wordpress
       - name: Real WordPress MariaDB regressions
         run: php /tmp/wp-cli.phar eval-file "$GITHUB_WORKSPACE/qa/review80-wordpress-mysql.php" --path=/tmp/wordpress
-      - name: Checkout exact merged File 02 1.2.1
+      - name: Checkout exact merged File 02 1.3.3
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           repository: majidhussainqadri1-dot/02-sabri-authentication
@@ -113,11 +114,44 @@ jobs:
             if(!is_plugin_active("02-sabri-authentication/sabri-authentication.php")){fwrite(STDERR,"File02 did not remain active\n");exit(50);}
             if(!class_exists("SAUTH_Storage_Router")){fwrite(STDERR,"File02 storage router unavailable after bootstrap\n");exit(51);}
             if(!class_exists("SAUTH_Account_Contract") || !SAUTH_Account_Contract::provider_available()){fwrite(STDERR,"File02 still rejects File00 account provider\n");exit(52);}
-            if("1.2.1"!==(string)SAUTH_VERSION){fwrite(STDERR,"unexpected File02 version\n");exit(53);}
-            echo "PASS File02 1.2.1 clean second request against File00 ".SMC_VERSION."\n";
+            if("1.3.3"!==(string)SAUTH_VERSION){fwrite(STDERR,"unexpected File02 version\n");exit(53);}
+            echo "PASS File02 1.3.3 clean second request against File00 ".SMC_VERSION."\n";
           ' --path=/tmp/wordpress
           php /tmp/wp-cli.phar option get siteurl --path=/tmp/wordpress >/dev/null
           php /tmp/wp-cli.phar plugin status 02-sabri-authentication --path=/tmp/wordpress | grep -Fq 'Status: Active'
+      - name: Prove signed-link verification becomes File 00 receipt-bearing truth
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval '
+            global $wpdb;
+            $email="file02-handoff@example.test";
+            $user_id=wp_create_user("file02-handoff","Integration-Receipt-Password-2026!",$email);
+            if(is_wp_error($user_id)){fwrite(STDERR,$user_id->get_error_message()."\n");exit(60);}
+            $GLOBALS["file02_verification_message"]="";
+            add_filter("sauth_email_verification_delivery",static function($delivered,$target,$subject,$message,$headers,$subject_id){
+                $GLOBALS["file02_verification_message"]=(string)$message;
+                return true;
+            },10,6);
+            $issued=SAUTH_Email_Verification::issue($user_id,$email,true);
+            if(is_wp_error($issued)||"sent"!==(string)($issued["result"]??"")){fwrite(STDERR,"File02 issue failed\n");exit(61);}
+            if(!preg_match("/[?&]token=([^&\\s]+)/",$GLOBALS["file02_verification_message"],$match)){fwrite(STDERR,"verification token not captured\n");exit(62);}
+            $token=rawurldecode((string)$match[1]);
+            $verified=SAUTH_Email_Verification::verify($user_id,$token);
+            $token="";
+            if(is_wp_error($verified)||"verified"!==(string)($verified["result"]??"")){fwrite(STDERR,"File02 verify failed: ".(is_wp_error($verified)?$verified->get_error_code():wp_json_encode($verified))."\n");exit(63);}
+            $row=$wpdb->get_row($wpdb->prepare("SELECT verified_at,delivery_receipt_hash,delivered_at FROM {$wpdb->prefix}smc_contact_otps WHERE user_id=%d AND channel=%s LIMIT 1",$user_id,"email"),ARRAY_A);
+            if(!is_array($row)||empty($row["verified_at"])||empty($row["delivered_at"])||1!==preg_match("/^[0-9a-f]{64}$/",(string)($row["delivery_receipt_hash"]??""))){fwrite(STDERR,"receipt-bearing File00 row missing\n");exit(64);}
+            if(!SMC_Contracts::contact_verified($user_id,"email")){fwrite(STDERR,"File00 canonical reader rejected File02 verified-link receipt\n");exit(65);}
+            $completion=SMC_Authentication_Contract_V11::get_completion_state($user_id,array("purpose"=>"post_authentication_completion"));
+            if(!is_array($completion)||in_array("email",(array)($completion["missing_steps"]??array()),true)||false!==strpos((string)($completion["next_route"]??""),"/verify-email/")){fwrite(STDERR,"completion still routes verified email back to verification\n");exit(66);}
+            $bad_email="file02-unscoped@example.test";
+            $bad_user=wp_create_user("file02-unscoped","Integration-Unscoped-Password-2026!",$bad_email);
+            if(is_wp_error($bad_user)){fwrite(STDERR,$bad_user->get_error_message()."\n");exit(67);}
+            $bad=SMC_Authentication_Contract_V11::mark_email_verified($bad_user,$bad_email,array());
+            if("deny"!==(string)($bad["result"]??"")||"email_verification_context_invalid"!==(string)($bad["reason_code"]??"")){fwrite(STDERR,"unscoped verification handoff did not fail closed\n");exit(68);}
+            if(SMC_Contracts::contact_verified($bad_user,"email")){fwrite(STDERR,"unscoped handoff unexpectedly created canonical verification\n");exit(69);}
+            echo "PASS File02 signed-link -> File00 receipt-bearing canonical email truth\n";
+          ' --path=/tmp/wordpress
       - name: Cross-contract exact consumer shape
         env:
           FILE02_ROOT: ${{ github.workspace }}/file02-exact
