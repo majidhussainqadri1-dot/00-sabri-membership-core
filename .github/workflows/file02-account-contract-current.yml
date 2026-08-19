@@ -10,12 +10,12 @@ permissions:
   contents: read
 
 env:
-  FILE02_REF: 950f4bd3f63e08304e3afafa501196919223ab20
-  FILE02_VERSION: '1.2.4'
+  FILE02_REF: a714c23fea33ecdfe9110f69c0ee1f07c9f2bcbb
+  FILE02_VERSION: '1.3.3'
 
 jobs:
   exact-head-contract:
-    name: Exact-head File 02 1.2.4 account-contract compatibility
+    name: Exact-head File 02 1.3.3 account-contract compatibility
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
