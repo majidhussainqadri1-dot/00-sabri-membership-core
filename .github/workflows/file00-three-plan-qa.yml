@@ -58,7 +58,7 @@ jobs:
           grep -Fq 'Runtime implementation release: `1.2.44`' docs/FILE-00-MASTER-PLAN-2026.md
           grep -Fq 'Database schema: `1.4.5`' docs/FILE-00-MASTER-PLAN-2026.md
           grep -Fq 'Founder change-control' docs/FILE-00-MASTER-PLAN-2026.md
-          grep -Fq 'Live-proven File 02 activation contract correction — 1.2.44' docs/FILE-00-MASTER-PLAN-2026.md
+          grep -Fq 'Canonical account-taxonomy provider parity correction — 1.2.44' docs/FILE-00-MASTER-PLAN-2026.md
           grep -Fq 'Live-proven orphaned application role-backfill correction — 1.2.39' docs/FILE-00-MASTER-PLAN-2026.md
           grep -Fq '80-round review hardening — 1.2.40' docs/FILE-00-MASTER-PLAN-2026.md
           grep -Fq 'Supplemental ten-round corrective review — 1.2.41' docs/FILE-00-MASTER-PLAN-2026.md
