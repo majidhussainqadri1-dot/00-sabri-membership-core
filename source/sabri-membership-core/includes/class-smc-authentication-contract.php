@@ -211,18 +211,31 @@ final class SMC_Authentication_Contract {
 	/**
 	 * Record exact ownership of the account's canonical email.
 	 *
+	 * File 02 owns the signed-link challenge and delivery surface. A successful
+	 * File 02 verification callback is therefore delivery evidence as well as
+	 * ownership evidence: the one-time link could not be consumed without the
+	 * message reaching the canonical mailbox. File 00 binds that attestation to
+	 * its existing receipt-bearing contact invariant rather than weakening the
+	 * invariant in SMC_Contracts::contact_verified().
+	 *
 	 * @return array<string,mixed>
 	 */
 	public static function mark_email_verified( $user_id, $email, $context = array() ) {
 		global $wpdb;
 		$user_id = absint( $user_id );
 		$email   = sanitize_email( (string) $email );
+		$context = is_array( $context ) ? $context : array();
 		$user    = $user_id ? get_userdata( $user_id ) : false;
 		if ( ! $user instanceof WP_User || ! is_email( $email ) || ! hash_equals( strtolower( (string) $user->user_email ), strtolower( $email ) ) ) {
 			return self::response( 'deny', 'email_subject_mismatch' );
 		}
 		if ( SMC_Completion::safe_mode() || smc_privacy_erasure_lock( $user_id ) ) {
 			return self::response( 'unknown', 'provider_safe_mode' );
+		}
+		$purpose         = sanitize_key( (string) ( $context['purpose'] ?? '' ) );
+		$idempotency_key = trim( (string) ( $context['idempotency_key'] ?? '' ) );
+		if ( 'email_verification' !== $purpose || strlen( $idempotency_key ) < 16 || strlen( $idempotency_key ) > 190 ) {
+			return self::response( 'deny', 'email_verification_context_invalid' );
 		}
 
 		$target_hash = SMC_Security::blind_index( strtolower( $email ), 'contact-target' );
@@ -233,31 +246,55 @@ final class SMC_Authentication_Contract {
 			return self::response( 'allow', 'already_verified', array( 'user_id' => $user_id ) );
 		}
 
-		$nonce             = wp_generate_password( 32, true, true );
-		$code_lookup_hash  = SMC_Security::blind_index( $nonce, 'contact-code' );
-		$code_hash         = wp_hash_password( $nonce );
-		$nonce             = '';
-		if ( is_wp_error( $code_lookup_hash ) || '' === (string) $code_hash ) {
+		$delivery_receipt_hash = SMC_Security::blind_index(
+			'file02-email-verification|' . $user_id . '|' . $target_hash . '|' . $idempotency_key,
+			'authentication-email-delivery-receipt'
+		);
+		$nonce            = wp_generate_password( 32, true, true );
+		$code_lookup_hash = SMC_Security::blind_index( $nonce, 'contact-code' );
+		$code_hash        = wp_hash_password( $nonce );
+		$nonce            = '';
+		if ( is_wp_error( $delivery_receipt_hash ) || is_wp_error( $code_lookup_hash ) || '' === (string) $code_hash ) {
 			return self::response( 'unknown', 'email_receipt_unavailable' );
 		}
 		$now = current_time( 'mysql', true );
 		$sql = $wpdb->prepare(
 			"INSERT INTO {$wpdb->prefix}smc_contact_otps
-			(user_id,channel,target_hash,code_lookup_hash,code_hash,attempts,expires_at,verified_at,created_at)
-			VALUES (%d,'email',%s,%s,%s,0,%s,%s,%s)
-			ON DUPLICATE KEY UPDATE target_hash=VALUES(target_hash),code_lookup_hash=VALUES(code_lookup_hash),code_hash=VALUES(code_hash),attempts=0,expires_at=VALUES(expires_at),verified_at=VALUES(verified_at)",
+			(user_id,channel,target_hash,code_lookup_hash,code_hash,attempts,expires_at,verified_at,created_at,delivery_receipt_hash,delivered_at)
+			VALUES (%d,'email',%s,%s,%s,0,%s,%s,%s,%s,%s)
+			ON DUPLICATE KEY UPDATE target_hash=VALUES(target_hash),code_lookup_hash=VALUES(code_lookup_hash),code_hash=VALUES(code_hash),attempts=0,expires_at=VALUES(expires_at),verified_at=VALUES(verified_at),delivery_receipt_hash=VALUES(delivery_receipt_hash),delivered_at=VALUES(delivered_at)",
 			$user_id,
 			$target_hash,
 			$code_lookup_hash,
 			$code_hash,
 			$now,
 			$now,
+			$now,
+			$delivery_receipt_hash,
 			$now
 		);
 		if ( false === $wpdb->query( $sql ) ) {
 			return self::response( 'unknown', 'email_verification_store_failed' );
 		}
-		if ( ! SMC_Security::audit( 'authentication_email_verified', $user_id, array( 'contract_version' => self::CONTRACT_VERSION ) ) ) {
+		if ( ! SMC_Contracts::contact_verified( $user_id, 'email' ) ) {
+			return self::response( 'unknown', 'email_verification_receipt_unreadable' );
+		}
+		if ( ! SMC_Security::audit(
+			'authentication_email_verified',
+			$user_id,
+			array(
+				'contract_version' => self::CONTRACT_VERSION,
+				'evidence_owner'   => 'file02',
+				'evidence_kind'    => 'signed_email_link',
+			)
+		) ) {
+			$wpdb->update(
+				$wpdb->prefix . 'smc_contact_otps',
+				array( 'verified_at' => null, 'delivery_receipt_hash' => null, 'delivered_at' => null ),
+				array( 'user_id' => $user_id, 'channel' => 'email', 'target_hash' => $target_hash, 'delivery_receipt_hash' => $delivery_receipt_hash ),
+				array( '%s', '%s', '%s' ),
+				array( '%d', '%s', '%s', '%s' )
+			);
 			return self::response( 'unknown', 'email_verification_audit_failed' );
 		}
 		return self::response( 'allow', 'email_verified', array( 'user_id' => $user_id ) );

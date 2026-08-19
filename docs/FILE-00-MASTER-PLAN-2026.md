@@ -10,7 +10,7 @@
 
 ## Current implementation identity
 
-- Runtime implementation release: `1.2.43`
+- Runtime implementation release: `1.2.44`
 - Public membership contract: `1.2.3`
 - Database schema: `1.4.5`
 - File 02 account-orchestration provider: `smc.authentication-account` `1.1.0`
@@ -91,8 +91,15 @@ Release `1.2.43` restores the File 00-owned account-orchestration boundary witho
 
 The DB schema remains `1.4.5`; the public membership contract remains `1.2.3`; the File 01 authorization claim remains `1.0.0`; CF-01 remains `1.1.0`; Advanced Trust remains `1.0.0`. Permanent QA includes local source/runtime guards, a cross-repository exact-head compatibility gate pinned to merged File 02 `1.2.0`, and a real WordPress/MariaDB activation regression. Repository success is not live resolution: File 00 `1.2.43` must be deployed first, its DB/bootstrap/package parity re-frozen, File 02 `1.2.0` must then activate successfully, and the affected live authentication/trust workflow must be retested before this incident is marked Resolved.
 
+## Canonical account-taxonomy provider parity correction — 1.2.44
+
+Fresh repository review of File 00's exact canonical taxonomy and active `smc.authentication-account` 1.1.0 provider proved a duplicated-vocabulary drift: File 00 canonically defines `member`, `patient`, `student`, `doctor`, `teacher`, `researcher`, `pharmacy`, `clinic`, and `publisher`, while the provider had separately hard-coded a smaller set plus `clinic_staff` and `institution_representative`. Release `1.2.44` removes that duplication and makes the public provider validate directly against `array_keys( smc_account_types() )`; no lossy alias remap is introduced.
+
+The DB schema remains `1.4.5`, the public membership contract remains `1.2.3`, and `smc.authentication-account` remains contract `1.1.0` because the correction restores provider conformance to File 00's existing canonical taxonomy rather than changing the contract envelope. The current cross-repository gate exact-pins File 02 `1.2.4` at `950f4bd3f63e08304e3afafa501196919223ab20` and proves both provider shape and canonical account-choice parity. Repository/CI success does not establish deployment; staging/live require separate exact deployed-build, DB/migration and workflow evidence.
+
 ## Current evidence
 
+- `RELEASE-1.2.44.md`
 - `RELEASE-1.2.43.md`
 - `qa/file02-account-contract-v1243.mjs`
 - `qa/file02-account-contract-runtime-v1243.php`

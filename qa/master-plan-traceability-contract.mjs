@@ -37,15 +37,15 @@ if (evidence.conclusion === 'success') {
   assert((evidence.head_sha ?? '') === '' && (evidence.workflow_run_id ?? 0) === 0 && evidence.package_sha256 === '', 'Pending evidence blank');
 }
 const plugin = read('source/sabri-membership-core/sabri-membership-core.php');
-assert(plugin.includes('Version: 1.2.43') && plugin.includes("define( 'SMC_DB_VERSION', '1.4.5' )") && plugin.includes("define( 'SMC_CONTRACT_VERSION', '1.2.3' )") && plugin.includes("define( 'SMC_CF01_CONTRACT_VERSION', '1.1.0' )") && plugin.includes("define( 'SMC_ADVANCED_TRUST_CONTRACT_VERSION', '1.0.0' )"), 'Current runtime identity 1.2.43/1.4.5/1.2.3 + CF-01 1.1.0 + advanced trust 1.0.0');
+assert(plugin.includes('Version: 1.2.44') && plugin.includes("define( 'SMC_DB_VERSION', '1.4.5' )") && plugin.includes("define( 'SMC_CONTRACT_VERSION', '1.2.3' )") && plugin.includes("define( 'SMC_CF01_CONTRACT_VERSION', '1.1.0' )") && plugin.includes("define( 'SMC_ADVANCED_TRUST_CONTRACT_VERSION', '1.0.0' )"), 'Current runtime identity 1.2.44/1.4.5/1.2.3 + CF-01 1.1.0 + advanced trust 1.0.0');
 const master = read('docs/FILE-00-MASTER-PLAN-2026.md');
-assert(master.includes('Runtime implementation release: `1.2.43`'), 'Master index current runtime');
+assert(master.includes('Runtime implementation release: `1.2.44`'), 'Master index current runtime');
 assert(master.includes('Public membership contract: `1.2.3`'), 'Master index current public contract');
 assert(master.includes('File 00 MFA owner: `none`'), 'Master index records Founder-approved MFA retirement');
 assert(master.includes('File 26 membership projection contract: `1.0.0`'), 'Master index File 26 projection');
 assert(master.includes('Historical 1.2.11 three-plan evidence remains immutable'), 'Historical evidence boundary explicit');
 assert(master.includes('Supplemental ten-round corrective review — 1.2.41'), 'Current supplemental corrective review is indexed');
-assert(master.includes('Live-proven File 02 activation contract correction — 1.2.43'), 'Live-proven File 02 activation correction is indexed');
+assert(master.includes('Canonical account-taxonomy provider parity correction — 1.2.44'), 'Canonical account-taxonomy provider correction is indexed');
 const human = read('docs/FILE-00-IMPLEMENTATION-TRACEABILITY-1.2.11.md');
 assert((human.match(/\| F00-R\d{3} \|/g) || []).length === 100, 'Historical human matrix 100 rows');
 const current = JSON.parse(read('qa/latest-central-traceability.json'));

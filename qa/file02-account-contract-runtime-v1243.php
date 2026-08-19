@@ -9,6 +9,10 @@ function get_user_meta( $user_id, $key, $single = false ) { return ''; }
 function home_url( $path = '' ) { return 'https://example.test' . $path; }
 function wp_validate_redirect( $url, $fallback = '' ) { return 0 === strpos( (string) $url, 'https://example.test/' ) ? $url : $fallback; }
 function smc_page_url( $key, $fallback = '' ) { return home_url( $fallback ); }
+function sanitize_text_field( $value ) { return trim( (string) $value ); }
+function esc_url_raw( $value ) { return (string) $value; }
+class WP_Error { private $code; public function __construct( $code ) { $this->code = (string) $code; } public function get_error_code() { return $this->code; } }
+function smc_account_types() { return array( 'member'=>'Member', 'patient'=>'Patient', 'student'=>'Student', 'doctor'=>'Doctor', 'teacher'=>'Teacher', 'researcher'=>'Researcher', 'pharmacy'=>'Pharmacy', 'clinic'=>'Clinic', 'publisher'=>'Publisher' ); }
 
 class V1243_WPDB_Stub {
 	public $prefix = 'wp_';
@@ -67,7 +71,18 @@ $completion = SMC_Authentication_Contract_V11::get_completion_state( 7, array() 
 v1243_assert( 'allow' === $completion['result'], 'v1.1 completion did not remain available' );
 v1243_assert( ! in_array( 'two_factor', $completion['missing_steps'], true ), 'retired File 00 MFA step leaked through v1.1 provider' );
 
+$validator = new ReflectionMethod( 'SMC_Authentication_Contract_V11', 'validate_extra_fields' );
+$validator->setAccessible( true );
+foreach ( array_keys( smc_account_types() ) as $canonical_type ) {
+	$checked = $validator->invoke( null, array( 'city'=>'Gujrat', 'account_type'=>$canonical_type, 'authentication_method'=>'password', 'ethical_conduct_version'=>'2026-test', 'profile_photo_required'=>true ) );
+	v1243_assert( is_array( $checked ) && $canonical_type === $checked['account_type'], 'canonical account type rejected by v1.1 provider: ' . $canonical_type );
+}
+foreach ( array( 'clinic_staff', 'institution_representative' ) as $legacy_alias ) {
+	$checked = $validator->invoke( null, array( 'city'=>'Gujrat', 'account_type'=>$legacy_alias, 'authentication_method'=>'password', 'ethical_conduct_version'=>'2026-test', 'profile_photo_required'=>true ) );
+	v1243_assert( ! is_array( $checked ), 'legacy provider-only alias unexpectedly accepted: ' . $legacy_alias );
+}
+
 $v11_source = file_get_contents( dirname( __DIR__ ) . '/source/sabri-membership-core/includes/class-smc-authentication-contract-v11.php' );
 v1243_assert( false === strpos( $v11_source, 'wp_destroy_all_sessions' ), 'non-canonical session destruction returned' );
 
-echo "File 00 v1.2.43 File 02 runtime compatibility checks passed.\n";
+echo "File 00 v1.2.44 File 02 runtime compatibility checks passed.\n";

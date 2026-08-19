@@ -159,7 +159,7 @@ final class SMC_Authentication_Contract_V11 {
 		$google_subject  = trim( sanitize_text_field( (string) ( $payload['google_subject'] ?? '' ) ) );
 		$google_verified = ! empty( $payload['google_email_verified'] );
 		$picture         = esc_url_raw( (string) ( $payload['google_picture_candidate'] ?? '' ) );
-		$allowed_types   = array( 'member', 'doctor', 'student', 'teacher', 'researcher', 'clinic_staff', 'institution_representative' );
+		$allowed_types   = array_keys( smc_account_types() );
 		$city_length     = function_exists( 'mb_strlen' ) ? mb_strlen( $city, 'UTF-8' ) : strlen( $city );
 
 		if ( $city_length < 2 || $city_length > 120 ) {

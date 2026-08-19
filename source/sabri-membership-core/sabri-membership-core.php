@@ -3,7 +3,7 @@
  * Plugin Name: Sabri Membership Core
  * Plugin URI: https://github.com/majidhussainqadri1-dot/00-sabri-membership-core
  * Description: Canonical membership eligibility, identity assurance, guardian consent, security assertions, and verification governance for the Sabri Social Homeopathy Platform.
- * Version: 1.2.43
+ * Version: 1.2.44
  * Requires at least: 6.4
  * Requires PHP: 7.4
  * Author: Dr. Allamah Majid Hussain Sabri Muhaddith Mursheed
@@ -13,7 +13,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'SMC_VERSION', '1.2.43' );
+define( 'SMC_VERSION', '1.2.44' );
 define( 'SMC_DB_VERSION', '1.4.5' );
 define( 'SMC_CONTRACT_VERSION', '1.2.3' );
 define( 'SMC_CF01_CONTRACT_VERSION', '1.1.0' );

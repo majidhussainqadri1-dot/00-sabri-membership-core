@@ -72,5 +72,5 @@ jobs:
           set -euo pipefail
           npm run build
           npm test
-      - name: Build and verify deterministic 1.2.43 package
+      - name: Build and verify deterministic 1.2.44 package
         run: npm run verify

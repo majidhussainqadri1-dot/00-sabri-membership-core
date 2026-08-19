@@ -8,7 +8,7 @@ const main=read('source/sabri-membership-core/sabri-membership-core.php');
 const readme=read('source/sabri-membership-core/README.txt');
 const qa=read('qa/advanced-trust-runtime.php');
 const checks=[
- ['runtime 1.2.43',main.includes('Version: 1.2.43')&&main.includes("SMC_VERSION', '1.2.43")],
+ ['runtime 1.2.44',main.includes('Version: 1.2.44')&&main.includes("SMC_VERSION', '1.2.44")],
  ['institutional expired hard block',fn.includes("'rejected', 'suspended', 'expired', 'appeal_review', 'erasure_pending'")],
  ['recovery baseline cannot be filtered away',auth.includes('array_merge( self::$recovery_actions, $filtered )')],
  ['administrator no longer bypasses ordinary admin gate',!auth.includes('if ( $is_admin && ! $is_file00 )')],

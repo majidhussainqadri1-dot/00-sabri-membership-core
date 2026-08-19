@@ -1,4 +1,4 @@
-name: File 00 1.2.43 Current + Historical Audit-Key Transition QA
+name: File 00 1.2.44 Current + Historical Audit-Key Transition QA
 
 on:
   pull_request:
@@ -38,10 +38,10 @@ jobs:
       - name: Exact current release and retained governing traceability
         run: |
           set -euo pipefail
-          grep -Fq 'Version: 1.2.43' source/sabri-membership-core/sabri-membership-core.php
-          grep -Fq '"version": "1.2.43"' package.json
-          test "$(node -p "require('./package-lock.json').version")" = '1.2.43'
-          test "$(node -p "require('./package-lock.json').packages[''].version")" = '1.2.43'
+          grep -Fq 'Version: 1.2.44' source/sabri-membership-core/sabri-membership-core.php
+          grep -Fq '"version": "1.2.44"' package.json
+          test "$(node -p "require('./package-lock.json').version")" = '1.2.44'
+          test "$(node -p "require('./package-lock.json').packages[''].version")" = '1.2.44'
           grep -Fq "define( 'SMC_DB_VERSION', '1.4.5' )" source/sabri-membership-core/sabri-membership-core.php
           grep -Fq "define( 'SMC_CONTRACT_VERSION', '1.2.3' )" source/sabri-membership-core/sabri-membership-core.php
           grep -Fq "define( 'SMC_ADVANCED_TRUST_CONTRACT_VERSION', '1.0.0' )" source/sabri-membership-core/sabri-membership-core.php
@@ -53,16 +53,16 @@ jobs:
           node qa/next-ten-round-contract.mjs
           node qa/file02-account-contract-v1243.mjs
           php qa/file02-account-contract-runtime-v1243.php
-          test -f dist/00-sabri-membership-core-1.2.43.zip
+          test -f dist/00-sabri-membership-core-1.2.44.zip
           test -z "$(git ls-files 'dist/*')"
-          grep -Fq 'Runtime implementation release: `1.2.43`' docs/FILE-00-MASTER-PLAN-2026.md
+          grep -Fq 'Runtime implementation release: `1.2.44`' docs/FILE-00-MASTER-PLAN-2026.md
           grep -Fq 'Database schema: `1.4.5`' docs/FILE-00-MASTER-PLAN-2026.md
           grep -Fq 'Founder change-control' docs/FILE-00-MASTER-PLAN-2026.md
-          grep -Fq 'Live-proven File 02 activation contract correction — 1.2.43' docs/FILE-00-MASTER-PLAN-2026.md
+          grep -Fq 'Canonical account-taxonomy provider parity correction — 1.2.44' docs/FILE-00-MASTER-PLAN-2026.md
           grep -Fq 'Live-proven orphaned application role-backfill correction — 1.2.39' docs/FILE-00-MASTER-PLAN-2026.md
           grep -Fq '80-round review hardening — 1.2.40' docs/FILE-00-MASTER-PLAN-2026.md
           grep -Fq 'Supplemental ten-round corrective review — 1.2.41' docs/FILE-00-MASTER-PLAN-2026.md
-          test -f RELEASE-1.2.43.md
+          test -f RELEASE-1.2.44.md
           test -f RELEASE-1.2.42.md
           test -f RELEASE-1.2.41.md
           test -f RELEASE-1.2.40.md
@@ -102,11 +102,11 @@ jobs:
           test ! -e .github/workflows/apply-fifth-round10-fix.yml
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: 00-sabri-membership-core-1.2.43-${{ github.sha }}
+          name: 00-sabri-membership-core-1.2.44-${{ github.sha }}
           path: |
-            dist/00-sabri-membership-core-1.2.43.zip
+            dist/00-sabri-membership-core-1.2.44.zip
             dist/CHECKSUMS.sha256
-            RELEASE-1.2.43.md
+            RELEASE-1.2.44.md
             RELEASE-1.2.42.md
             RELEASE-1.2.41.md
             RELEASE-1.2.40.md
