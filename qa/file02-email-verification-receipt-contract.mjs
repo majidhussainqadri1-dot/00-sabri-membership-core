@@ -1,6 +1,8 @@
 import fs from 'node:fs';
+import { createHash } from 'node:crypto';
 
-const auth = fs.readFileSync('source/sabri-membership-core/includes/class-smc-authentication-contract.php', 'utf8');
+const authBytes = fs.readFileSync('source/sabri-membership-core/includes/class-smc-authentication-contract.php');
+const auth = authBytes.toString('utf8');
 const contracts = fs.readFileSync('source/sabri-membership-core/includes/class-smc-contracts.php', 'utf8');
 
 function assert(condition, message) {
@@ -37,4 +39,5 @@ assert(
   'The fix must not weaken contact verification to verified_at alone.'
 );
 
+console.log(`AUTH_CONTRACT_SHA256=${createHash('sha256').update(authBytes).digest('hex')}`);
 console.log('File 02 signed-email-link receipt handoff contract checks passed.');
