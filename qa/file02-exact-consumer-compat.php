@@ -1,6 +1,8 @@
 <?php
 $file02 = getenv( 'FILE02_ROOT' );
+$file02_version = trim( (string) getenv( 'FILE02_VERSION' ) );
 if ( ! $file02 ) { fwrite( STDERR, "FILE02_ROOT is required\n" ); exit( 2 ); }
+if ( '' === $file02_version || ! preg_match( '/^\d+\.\d+\.\d+$/', $file02_version ) ) { fwrite( STDERR, "FILE02_VERSION is required\n" ); exit( 2 ); }
 $consumer_path = rtrim( $file02, '/\\' ) . '/includes/class-sauth-account-contract.php';
 $bootstrap_path = rtrim( $file02, '/\\' ) . '/sabri-authentication.php';
 $registration_path = rtrim( $file02, '/\\' ) . '/includes/class-sa-registration.php';
@@ -11,7 +13,7 @@ $registration = file_get_contents( $registration_path );
 $v11 = file_get_contents( dirname( __DIR__ ) . '/source/sabri-membership-core/includes/class-smc-authentication-contract-v11.php' );
 $main = file_get_contents( dirname( __DIR__ ) . '/source/sabri-membership-core/sabri-membership-core.php' );
 function cross_assert( $condition, $message ) { if ( ! $condition ) { fwrite( STDERR, "FAIL: {$message}\n" ); exit( 1 ); } }
-cross_assert( false !== strpos( $bootstrap, 'Version: 1.2.4' ), 'unexpected File 02 release identity' );
+cross_assert( false !== strpos( $bootstrap, 'Version: ' . $file02_version ), 'unexpected File 02 release identity' );
 cross_assert( false !== strpos( $bootstrap, "require_once SAUTH_DIR . 'includes/class-sauth-storage-router.php';" ), 'File 02 storage-router bootstrap correction missing' );
 cross_assert( false !== strpos( $consumer, "PROVIDER_NAME        = 'smc.authentication-account'" ), 'File 02 provider name changed' );
 cross_assert( false !== strpos( $consumer, "PROVIDER_MIN_VERSION = '1.1.0'" ), 'File 02 provider minimum version changed' );
@@ -30,4 +32,4 @@ foreach ( array( 'member', 'patient', 'student', 'doctor', 'teacher', 'researche
 foreach ( array( 'clinic_staff', 'institution_representative' ) as $legacy ) { cross_assert( false === strpos( $registration, "'{$legacy}'" ), "File 02 provider-only alias remains: {$legacy}" ); }
 cross_assert( false !== strpos( $v11, 'array_keys( smc_account_types() )' ), 'File 00 provider is not bound to canonical taxonomy' );
 cross_assert( false === strpos( $main, "array( 'SMC_Authentication_Contract', 'init' )" ), 'legacy v1 helper is incorrectly active' );
-echo "Exact File 02 1.2.4 compatibility boundary passed.\n";
+echo "Exact File 02 {$file02_version} compatibility boundary passed.\n";
