@@ -32,6 +32,11 @@ jobs:
           set -euo pipefail
           node --check source/sabri-membership-core/assets/membership-evidence-stage.js
           node qa/file00-live-document-transport-autosave-r1.mjs
+      - name: Manifest diagnostics
+        run: |
+          set -euo pipefail
+          cd source/sabri-membership-core
+          sha256sum assets/membership-evidence-stage.js sabri-membership-core.php
       - name: Deterministic source manifest
         run: |
           set -euo pipefail
