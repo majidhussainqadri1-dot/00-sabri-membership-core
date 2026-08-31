@@ -123,7 +123,7 @@ for (const symbol of [
 assert(!main.includes('class-smc-profile.php'), 'File 03 profile ownership is not duplicated');
 assert(!main.includes('class-smc-knowledge.php'), 'Files 04/06 content ownership is not duplicated');
 assert(!fs.existsSync(path.join(plugin, 'templates', 'membership.php')), 'File 20 shell is not duplicated');
-assert(fs.readdirSync(path.join(plugin, 'assets')).sort().join(',') === 'membership.css,membership.js', 'Only canonical runtime assets are packaged');
+assert(fs.readdirSync(path.join(plugin, 'assets')).sort().join(',') === 'membership-evidence-stage.js,membership.css,membership.js', 'Only canonical runtime assets are packaged');
 assert(!allPhp.includes('wp_mail('), 'File 19 notification ownership is not bypassed');
 assert(!allPhp.includes('wp_set_auth_cookie('), 'File 02 authentication cookies are not duplicated');
 assert(!allPhp.includes('register_post_type('), 'Publishing and encyclopedia post types are not duplicated');
