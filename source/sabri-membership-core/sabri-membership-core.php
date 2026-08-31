@@ -30,6 +30,7 @@ require_once SMC_PATH . 'includes/functions.php';
 require_once SMC_PATH . 'includes/class-smc-installer.php';
 require_once SMC_PATH . 'includes/class-smc-schema-compat.php';
 require_once SMC_PATH . 'includes/class-smc-host-compat.php';
+require_once SMC_PATH . 'includes/class-smc-live-document-transport-repair.php';
 require_once SMC_PATH . 'includes/class-smc-security.php';
 require_once SMC_PATH . 'includes/class-smc-events.php';
 require_once SMC_PATH . 'includes/class-smc-completion.php';
@@ -47,6 +48,19 @@ require_once SMC_PATH . 'includes/class-smc-lifecycle.php';
 require_once SMC_PATH . 'includes/class-smc-three-plan.php';
 require_once SMC_PATH . 'includes/class-smc-latest-central-2026.php';
 require_once SMC_PATH . 'includes/class-smc-advanced-trust-2026.php';
+
+add_action(
+	'wp_ajax_smc_stage_identity_document',
+	static function () {
+		if ( ! is_user_logged_in() || ! check_ajax_referer( SMC_Live_Document_Transport_Repair::NONCE_ACTION, 'nonce', false ) ) {
+			wp_send_json_error( array( 'code' => 'unauthorized', 'message' => __( 'Your secure session could not be verified. Reload the application and try again.', 'sabri-membership-core' ) ), 403 );
+		}
+		if ( empty( $_POST['truth'] ) || empty( $_POST['privacy'] ) || empty( $_POST['terms'] ) || empty( $_POST['ethical'] ) ) {
+			wp_send_json_error( array( 'code' => 'consent_required', 'message' => __( 'Complete and accept all required application declarations before identity evidence is transferred to protected storage.', 'sabri-membership-core' ) ), 400 );
+		}
+	},
+	0
+);
 
 /* The legacy v1 transaction helper is internal; preserve only its receipt privacy callbacks. */
 add_filter( 'wp_privacy_personal_data_exporters', array( 'SMC_Authentication_Contract', 'register_exporter' ), 20 );
@@ -113,6 +127,7 @@ add_action(
 			array( 'SMC_Contracts', 'init' ), array( 'SMC_CF01_Contract', 'init' ),
 			array( 'SMC_Authentication_Contract_V11', 'init' ), array( 'SMC_Authorization', 'init' ),
 			array( 'SMC_Workflow', 'init' ), array( 'SMC_MFA_Retirement', 'init' ), array( 'SMC_Host_Compat', 'init' ),
+			array( 'SMC_Live_Document_Transport_Repair', 'init' ),
 			array( 'SMC_Contact_Delivery', 'init' ), array( 'SMC_Admin', 'init' ), array( 'SMC_Privacy', 'init' ),
 			array( 'SMC_Lifecycle', 'init' ), array( 'SMC_Three_Plan', 'init' ), array( 'SMC_Latest_Central_2026', 'init' ),
 			array( 'SMC_Advanced_Trust_2026', 'init' ),
