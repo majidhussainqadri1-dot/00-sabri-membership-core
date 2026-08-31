@@ -134,7 +134,33 @@ final class SMC_MFA_Retirement {
 	}
 
 	private static function request_action() { return isset( $_REQUEST['action'] ) ? sanitize_key( wp_unslash( $_REQUEST['action'] ) ) : ''; } // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-	private static function request_is_membership_surface() { return ( function_exists( 'smc_is_membership_page' ) && smc_is_membership_page() ) || wp_doing_cron(); }
+	private static function request_is_membership_surface() {
+		if ( ( function_exists( 'smc_is_membership_page' ) && smc_is_membership_page() ) || wp_doing_cron() ) {
+			return true;
+		}
+
+		/*
+		 * admin-post.php runs through admin_init before dispatching the requested
+		 * action. Draft/incomplete applicants are intentionally not yet eligible,
+		 * so this retired-MFA compatibility guard must not redirect canonical
+		 * membership recovery actions to the status page before their handlers run.
+		 * Keep this as an explicit allowlist: arbitrary smc_* actions must not become
+		 * an eligibility bypass.
+		 */
+		$action = self::request_action();
+		$recovery_actions = array(
+			'smc_submit_application',
+			'smc_request_contact_otp',
+			'smc_verify_contact_otp',
+			'smc_revoke_session',
+			'smc_revoke_all_sessions',
+			'smc_resubmit',
+			'smc_appeal',
+			'smc_withdraw_guardian',
+			'smc_verify_guardian',
+		);
+		return $action && in_array( $action, $recovery_actions, true );
+	}
 	public static function enforce_frontend_state() {
 		if ( ! is_user_logged_in() || is_admin() || self::request_is_membership_surface() ) { return; }
 		$user_id = get_current_user_id();
