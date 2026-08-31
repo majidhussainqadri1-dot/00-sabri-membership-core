@@ -1,0 +1,30 @@
+name: File 00 Submission Recovery Gate
+
+on:
+  pull_request:
+    branches: ['main']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  submission-recovery:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Set up PHP 8.3
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240
+        with:
+          php-version: '8.3'
+          coverage: none
+      - name: Syntax and live-regression contract
+        run: |
+          set -euo pipefail
+          php -l source/sabri-membership-core/includes/class-smc-mfa-retirement.php
+          node qa/mfa-retirement-admin-post-recovery-v1245.mjs
+          (cd source/sabri-membership-core && sha256sum -c MANIFEST.sha256)
