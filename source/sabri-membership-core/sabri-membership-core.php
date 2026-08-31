@@ -30,6 +30,7 @@ require_once SMC_PATH . 'includes/functions.php';
 require_once SMC_PATH . 'includes/class-smc-installer.php';
 require_once SMC_PATH . 'includes/class-smc-schema-compat.php';
 require_once SMC_PATH . 'includes/class-smc-host-compat.php';
+require_once SMC_PATH . 'includes/class-smc-live-document-transport-repair.php';
 require_once SMC_PATH . 'includes/class-smc-security.php';
 require_once SMC_PATH . 'includes/class-smc-events.php';
 require_once SMC_PATH . 'includes/class-smc-completion.php';
@@ -113,6 +114,7 @@ add_action(
 			array( 'SMC_Contracts', 'init' ), array( 'SMC_CF01_Contract', 'init' ),
 			array( 'SMC_Authentication_Contract_V11', 'init' ), array( 'SMC_Authorization', 'init' ),
 			array( 'SMC_Workflow', 'init' ), array( 'SMC_MFA_Retirement', 'init' ), array( 'SMC_Host_Compat', 'init' ),
+			array( 'SMC_Live_Document_Transport_Repair', 'init' ),
 			array( 'SMC_Contact_Delivery', 'init' ), array( 'SMC_Admin', 'init' ), array( 'SMC_Privacy', 'init' ),
 			array( 'SMC_Lifecycle', 'init' ), array( 'SMC_Three_Plan', 'init' ), array( 'SMC_Latest_Central_2026', 'init' ),
 			array( 'SMC_Advanced_Trust_2026', 'init' ),
