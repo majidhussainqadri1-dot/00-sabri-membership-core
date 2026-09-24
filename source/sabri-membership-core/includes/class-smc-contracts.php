@@ -32,6 +32,7 @@ final class SMC_Contracts {
 
 	public static function register_account( $user_id ) {
 		global $wpdb;
+		if ( '1' === (string) get_user_meta( $user_id, '_smc_legacy_author_placeholder_v1', true ) ) { return; }
 		if ( smc_privacy_erasure_lock( $user_id ) || smc_application( $user_id ) ) {
 			return;
 		}
