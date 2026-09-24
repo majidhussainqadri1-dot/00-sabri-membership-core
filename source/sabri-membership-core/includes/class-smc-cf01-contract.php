@@ -29,6 +29,8 @@ final class SMC_CF01_Contract {
 
 	public static function init() {
 		add_action( 'user_register', array( __CLASS__, 'ensure_subject_uuid' ), 5, 1 );
+		add_filter( 'sabri_file00_platform_uuid_v1', array( __CLASS__, 'file04_platform_uuid' ), 10, 3 );
+		add_filter( 'sabri_file00_legacy_author_placeholder_v1', array( __CLASS__, 'file04_legacy_author_placeholder' ), 10, 2 );
 	}
 
 	/**
@@ -166,6 +168,91 @@ final class SMC_CF01_Contract {
 		$envelope['result']      = 'allow';
 		$envelope['reason_code'] = 'membership_prerequisite_satisfied';
 		return $envelope;
+	}
+
+
+	/**
+	 * File 04 compatibility projection for the canonical immutable subject UUID.
+	 * The filter never invents an identity outside File 00.
+	 */
+	public static function file04_platform_uuid( $existing, $user_id, $context = array() ) {
+		unset( $context );
+		if ( is_string( $existing ) && self::valid_uuid( strtolower( trim( $existing ) ) ) ) {
+			return strtolower( trim( $existing ) );
+		}
+		return self::ensure_subject_uuid( absint( $user_id ) );
+	}
+
+	/**
+	 * Governed deleted/unknown legacy-author placeholder for File 04 migration.
+	 * A single non-login service identity is created and owned by File 00 so
+	 * migration never misattributes unknown authors to a real member.
+	 */
+	public static function file04_legacy_author_placeholder( $existing, $request = array() ) {
+		if ( is_array( $existing ) && ! empty( $existing['verified'] ) ) {
+			return $existing;
+		}
+		$request = is_array( $request ) ? $request : array();
+		$legacy_id = absint( $request['legacy_id'] ?? 0 );
+		$legacy_author_id = absint( $request['legacy_author_id'] ?? 0 );
+		$request_digest = strtolower( trim( (string) ( $request['request_digest'] ?? '' ) ) );
+		if ( $legacy_id <= 0 || 1 !== preg_match( '/^[a-f0-9]{64}$/', $request_digest ) ) {
+			return array( 'verified' => false, 'provider_id' => 'file00_legacy_author_placeholder_v1' );
+		}
+		$user_id = self::ensure_legacy_author_placeholder_user();
+		if ( $user_id <= 0 ) {
+			return array( 'verified' => false, 'provider_id' => 'file00_legacy_author_placeholder_v1' );
+		}
+		$uuid = self::ensure_subject_uuid( $user_id );
+		if ( ! self::valid_uuid( $uuid ) ) {
+			return array( 'verified' => false, 'provider_id' => 'file00_legacy_author_placeholder_v1' );
+		}
+		return array(
+			'verified'         => true,
+			'provider_id'      => 'file00_legacy_author_placeholder_v1',
+			'legacy_id'        => $legacy_id,
+			'legacy_author_id' => $legacy_author_id,
+			'user_id'          => $user_id,
+			'platform_uuid'    => $uuid,
+			'request_digest'   => $request_digest,
+			'placeholder'      => true,
+			'owner'            => 'File 00',
+			'contract_version' => defined( 'SMC_CF01_CONTRACT_VERSION' ) ? SMC_CF01_CONTRACT_VERSION : self::CONTRACT_VERSION,
+		);
+	}
+
+	private static function ensure_legacy_author_placeholder_user() {
+		$login = 'sabri_legacy_author_placeholder';
+		$user_id = function_exists( 'username_exists' ) ? absint( username_exists( $login ) ) : 0;
+		if ( $user_id > 0 ) {
+			return $user_id;
+		}
+		if ( ! function_exists( 'wp_insert_user' ) ) {
+			return 0;
+		}
+		$password = function_exists( 'wp_generate_password' ) ? wp_generate_password( 64, true, true ) : wp_generate_uuid4() . wp_generate_uuid4();
+		$created = wp_insert_user(
+			array(
+				'user_login'   => $login,
+				'user_pass'    => $password,
+				'display_name' => 'Legacy Author (Unknown)',
+				'nickname'     => 'Legacy Author',
+				'role'         => 'subscriber',
+				'description'  => 'File 00 governed placeholder used only to preserve unknown/deleted legacy publication attribution during migration.',
+			)
+		);
+		if ( is_wp_error( $created ) || absint( $created ) <= 0 ) {
+			return 0;
+		}
+		$user_id = absint( $created );
+		update_user_meta( $user_id, '_smc_legacy_author_placeholder_v1', 1 );
+		update_user_meta( $user_id, '_smc_login_disabled_v1', 1 );
+		if ( ! SMC_Security::audit( 'legacy_author_placeholder_created', $user_id, array( 'contract' => 'file04-authorship-v1' ) ) ) {
+			require_once ABSPATH . 'wp-admin/includes/user.php';
+			wp_delete_user( $user_id );
+			return 0;
+		}
+		return $user_id;
 	}
 
 	/**
