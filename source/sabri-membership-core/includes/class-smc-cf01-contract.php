@@ -29,6 +29,9 @@ final class SMC_CF01_Contract {
 
 	public static function init() {
 		add_action( 'user_register', array( __CLASS__, 'ensure_subject_uuid' ), 5, 1 );
+		add_filter( 'sabri_file00_platform_uuid_v1', array( __CLASS__, 'filter_platform_uuid' ), 10, 3 );
+		add_filter( 'sabri_file00_legacy_author_placeholder_v1', array( __CLASS__, 'legacy_author_placeholder' ), 10, 2 );
+		add_filter( 'wp_authenticate_user', array( __CLASS__, 'block_placeholder_login' ), 99, 2 );
 	}
 
 	/**
@@ -59,6 +62,124 @@ final class SMC_CF01_Contract {
 			return '';
 		}
 		return strtolower( $candidate );
+	}
+
+
+	/**
+	 * File 04 authorship bridge: resolve only File 00-owned immutable UUID truth.
+	 * An earlier valid provider wins; this bridge never guesses from display
+	 * names, e-mail addresses, roles or legacy metadata.
+	 */
+	public static function filter_platform_uuid( $existing, $user_id, $context = array() ) {
+		$existing = strtolower( trim( (string) $existing ) );
+		if ( self::valid_uuid( $existing ) ) {
+			return $existing;
+		}
+		$user_id = absint( $user_id );
+		$context = is_array( $context ) ? $context : array();
+		if ( ! $user_id || ! get_userdata( $user_id ) ) {
+			return '';
+		}
+		$file_number = sanitize_key( (string) ( $context['file_number'] ?? '' ) );
+		$purpose = sanitize_key( (string) ( $context['purpose'] ?? '' ) );
+		if ( '04' !== $file_number || 'legacy_publication_migration' !== $purpose ) {
+			return '';
+		}
+		return self::ensure_subject_uuid( $user_id );
+	}
+
+	/**
+	 * Return a dedicated non-login File 00 placeholder for deleted/unknown
+	 * legacy authors. The placeholder is a transparent attribution sentinel,
+	 * never a real person's identity.
+	 */
+	public static function legacy_author_placeholder( $existing, $request = array() ) {
+		if ( is_array( $existing ) && ! empty( $existing['verified'] ) ) {
+			return $existing;
+		}
+		$request = is_array( $request ) ? $request : array();
+		$legacy_id = absint( $request['legacy_id'] ?? 0 );
+		$legacy_author_id = absint( $request['legacy_author_id'] ?? 0 );
+		$digest = strtolower( trim( (string) ( $request['request_digest'] ?? '' ) ) );
+		if ( '04' !== sanitize_key( (string) ( $request['file_number'] ?? '' ) )
+			|| $legacy_id <= 0
+			|| 1 !== preg_match( '/^[a-f0-9]{64}$/', $digest ) ) {
+			return array( 'verified' => false, 'provider_id' => 'file00_legacy_author_placeholder_v1' );
+		}
+		if ( ! is_user_logged_in() || ! ( current_user_can( 'manage_options' ) || current_user_can( 'sabri_feed_run_migrations' ) ) ) {
+			return array( 'verified' => false, 'provider_id' => 'file00_legacy_author_placeholder_v1' );
+		}
+		$user_id = self::ensure_legacy_author_placeholder_user();
+		if ( is_wp_error( $user_id ) || $user_id <= 0 ) {
+			return array(
+				'verified' => false,
+				'provider_id' => 'file00_legacy_author_placeholder_v1',
+				'error_code' => is_wp_error( $user_id ) ? $user_id->get_error_code() : 'placeholder_unavailable',
+			);
+		}
+		$uuid = self::ensure_subject_uuid( $user_id );
+		if ( ! self::valid_uuid( $uuid ) ) {
+			return array( 'verified' => false, 'provider_id' => 'file00_legacy_author_placeholder_v1' );
+		}
+		return array(
+			'verified'         => true,
+			'provider_id'      => 'file00_legacy_author_placeholder_v1',
+			'user_id'          => $user_id,
+			'platform_uuid'    => $uuid,
+			'legacy_id'        => $legacy_id,
+			'legacy_author_id' => $legacy_author_id,
+			'request_digest'   => $digest,
+			'attribution_class'=> 'unknown_or_deleted_legacy_author',
+		);
+	}
+
+	private static function ensure_legacy_author_placeholder_user() {
+		$login = 'sabri_legacy_unknown_author';
+		$user = get_user_by( 'login', $login );
+		if ( $user ) {
+			$user_id = absint( $user->ID );
+			return $user_id > 0 && '1' === (string) get_user_meta( $user_id, '_smc_legacy_author_placeholder_v1', true )
+				? $user_id
+				: new WP_Error( 'smc_legacy_author_placeholder_collision', 'The reserved legacy-author login is already bound to another identity.' );
+		}
+		$user_id = wp_insert_user(
+			array(
+				'user_login'   => $login,
+				'user_pass'    => wp_generate_password( 64, true, true ),
+				'display_name' => 'Legacy Author (Unknown/Deleted)',
+				'user_nicename'=> 'legacy-author-unknown-deleted',
+				'role'         => 'subscriber',
+				'meta_input'   => array( '_smc_legacy_author_placeholder_v1' => '1' ),
+			)
+		);
+		if ( is_wp_error( $user_id ) ) {
+			return $user_id;
+		}
+		$user_id = absint( $user_id );
+		$marked = '1' === (string) get_user_meta( $user_id, '_smc_legacy_author_placeholder_v1', true );
+		$uuid = $marked ? self::ensure_subject_uuid( $user_id ) : '';
+		$audit = $marked && self::valid_uuid( $uuid ) && SMC_Security::audit(
+			'legacy_author_placeholder_created',
+			$user_id,
+			array( 'contract' => self::CONTRACT_VERSION, 'purpose' => 'file04_legacy_publication_migration' )
+		);
+		if ( ! $marked || ! self::valid_uuid( $uuid ) || ! $audit ) {
+			if ( ! function_exists( 'wp_delete_user' ) && defined( 'ABSPATH' ) ) {
+				$admin_user_file = ABSPATH . 'wp-admin/includes/user.php';
+				if ( is_readable( $admin_user_file ) ) { require_once $admin_user_file; }
+			}
+			if ( function_exists( 'wp_delete_user' ) ) { wp_delete_user( $user_id ); }
+			return new WP_Error( 'smc_legacy_author_placeholder_create_failed', 'The governed legacy-author placeholder could not be created atomically.' );
+		}
+		return $user_id;
+	}
+
+	public static function block_placeholder_login( $user, $password ) {
+		unset( $password );
+		if ( $user instanceof WP_User && '1' === (string) get_user_meta( $user->ID, '_smc_legacy_author_placeholder_v1', true ) ) {
+			return new WP_Error( 'smc_legacy_author_placeholder_login_denied', __( 'This system attribution identity cannot sign in.', 'sabri-membership-core' ) );
+		}
+		return $user;
 	}
 
 	/**

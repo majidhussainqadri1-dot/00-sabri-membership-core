@@ -1,4 +1,4 @@
-name: File 00 v1.2.44 Exact-Head Release Gate
+name: File 00 v1.2.45 Exact-Head Release Gate
 
 on:
   pull_request:
@@ -160,15 +160,15 @@ jobs:
         run: |
           set -euo pipefail
           python3 tools/build.py
-          python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.44.zip
-          sha256sum dist/00-sabri-membership-core-1.2.44.zip > dist/00-sabri-membership-core-1.2.44.zip.sha256
-          unzip -t dist/00-sabri-membership-core-1.2.44.zip
-      - name: Upload installable File 00 v1.2.44
+          python3 qa/verify-package.py dist/00-sabri-membership-core-1.2.45.zip
+          sha256sum dist/00-sabri-membership-core-1.2.45.zip > dist/00-sabri-membership-core-1.2.45.zip.sha256
+          unzip -t dist/00-sabri-membership-core-1.2.45.zip
+      - name: Upload installable File 00 v1.2.45
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: File-00-Sabri-Membership-Core-1.2.44-File02-Compatibility-Reviewed
+          name: File-00-Sabri-Membership-Core-1.2.45-File02-Compatibility-Reviewed
           path: |
-            dist/00-sabri-membership-core-1.2.44.zip
-            dist/00-sabri-membership-core-1.2.44.zip.sha256
+            dist/00-sabri-membership-core-1.2.45.zip
+            dist/00-sabri-membership-core-1.2.45.zip.sha256
           if-no-files-found: error
           retention-days: 30
