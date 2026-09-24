@@ -10,7 +10,7 @@
 
 ## Current implementation identity
 
-- Runtime implementation release: `1.2.44`
+- Runtime implementation release: `1.2.45`
 - Public membership contract: `1.2.3`
 - Database schema: `1.4.5`
 - File 02 account-orchestration provider: `smc.authentication-account` `1.1.0`
@@ -91,6 +91,14 @@ Release `1.2.43` restores the File 00-owned account-orchestration boundary witho
 
 The DB schema remains `1.4.5`; the public membership contract remains `1.2.3`; the File 01 authorization claim remains `1.0.0`; CF-01 remains `1.1.0`; Advanced Trust remains `1.0.0`. Permanent QA includes local source/runtime guards, a cross-repository exact-head compatibility gate pinned to merged File 02 `1.2.0`, and a real WordPress/MariaDB activation regression. Repository success is not live resolution: File 00 `1.2.43` must be deployed first, its DB/bootstrap/package parity re-frozen, File 02 `1.2.0` must then activate successfully, and the affected live authentication/trust workflow must be retested before this incident is marked Resolved.
 
+## File 04 governed authorship compatibility — 1.2.45
+
+Release `1.2.45` adds explicit File 00-owned compatibility contracts for File 04 legacy-publication authorship migration. Existing WordPress principals resolve through the immutable File 00 platform UUID. Deleted or unknown legacy authors resolve only to a dedicated, non-login, clearly labelled placeholder identity created and audited by File 00; this avoids false attribution to a real person. The compatibility bridge does not restore retired File 00 MFA and does not transfer authentication ownership away from File 02 or the consuming protected action.
+
+- `sabri_file00_platform_uuid_v1` — bounded immutable subject UUID provider for File 04 migration.
+- `sabri_file00_legacy_author_placeholder_v1` — governed unknown/deleted-author sentinel contract.
+- Placeholder login is denied and the placeholder receives no publishing authority.
+
 ## Canonical account-taxonomy provider parity correction — 1.2.44
 
 Fresh repository review of File 00's exact canonical taxonomy and active `smc.authentication-account` 1.1.0 provider proved a duplicated-vocabulary drift: File 00 canonically defines `member`, `patient`, `student`, `doctor`, `teacher`, `researcher`, `pharmacy`, `clinic`, and `publisher`, while the provider had separately hard-coded a smaller set plus `clinic_staff` and `institution_representative`. Release `1.2.44` removes that duplication and makes the public provider validate directly against `array_keys( smc_account_types() )`; no lossy alias remap is introduced.
@@ -99,6 +107,7 @@ The DB schema remains `1.4.5`, the public membership contract remains `1.2.3`, a
 
 ## Current evidence
 
+- `RELEASE-1.2.45.md`
 - `RELEASE-1.2.44.md`
 - `RELEASE-1.2.43.md`
 - `qa/file02-account-contract-v1243.mjs`
