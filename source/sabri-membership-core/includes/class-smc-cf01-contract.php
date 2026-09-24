@@ -149,13 +149,14 @@ final class SMC_CF01_Contract {
 				'display_name' => 'Legacy Author (Unknown/Deleted)',
 				'user_nicename'=> 'legacy-author-unknown-deleted',
 				'role'         => 'subscriber',
+				'meta_input'   => array( '_smc_legacy_author_placeholder_v1' => '1' ),
 			)
 		);
 		if ( is_wp_error( $user_id ) ) {
 			return $user_id;
 		}
 		$user_id = absint( $user_id );
-		$marked = add_user_meta( $user_id, '_smc_legacy_author_placeholder_v1', '1', true );
+		$marked = '1' === (string) get_user_meta( $user_id, '_smc_legacy_author_placeholder_v1', true );
 		$uuid = $marked ? self::ensure_subject_uuid( $user_id ) : '';
 		$audit = $marked && self::valid_uuid( $uuid ) && SMC_Security::audit(
 			'legacy_author_placeholder_created',
