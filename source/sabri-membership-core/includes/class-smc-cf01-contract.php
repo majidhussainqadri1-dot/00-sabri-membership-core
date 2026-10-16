@@ -64,6 +64,35 @@ final class SMC_CF01_Contract {
 	}
 
 	/**
+	 * Resolve one canonical File00 subject to its current WordPress user ID.
+	 * Only an internal PHP owner contract: no public endpoint and no role grant.
+	 * Never create a UUID, never return an ambiguous match, and never use a
+	 * caller-supplied numeric account identifier as authoritative identity.
+	 *
+	 * @param mixed $subject_uuid The opaque v4 canonical File00 subject.
+	 * @return int The uniquely verified existing user ID, or 0 when unknown.
+	 */
+	public static function resolve_user_id_by_subject_uuid( $subject_uuid ) {
+		if ( ! is_string( $subject_uuid ) || $subject_uuid !== trim( $subject_uuid ) ) { return 0; }
+		$subject_uuid = strtolower( $subject_uuid );
+		if ( ! self::valid_uuid( $subject_uuid ) ) { return 0; }
+		// File00 owns this internal usermeta key. Read at most two matches to
+		// detect collisions instead of arbitrarily choosing someone else's account.
+		$matches = get_users( array(
+			'fields'     => 'ids',
+			'number'     => 2,
+			'meta_key'   => '_smc_platform_uuid_v1',
+			'meta_value' => $subject_uuid,
+		) );
+		if ( ! is_array( $matches ) || 1 !== count( $matches ) || ! is_scalar( $matches[0] ) ) { return 0; }
+		$user_id = absint( $matches[0] );
+		if ( ! $user_id || ! get_userdata( $user_id ) ) { return 0; }
+		$stored = get_user_meta( $user_id, '_smc_platform_uuid_v1', true );
+		if ( ! self::valid_uuid( $stored ) || ! hash_equals( $subject_uuid, strtolower( $stored ) ) ) { return 0; }
+		return $user_id;
+	}
+
+	/**
 	 * Return a bounded membership-prerequisite assertion for one requested
 	 * clinical-domain action. A File 00 "allow" means only that the membership
 	 * side of the prerequisite is satisfied. It is never clinical object,

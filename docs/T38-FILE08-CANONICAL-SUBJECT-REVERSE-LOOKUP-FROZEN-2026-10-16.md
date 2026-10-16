@@ -1,0 +1,9 @@
+# File00 T38 — frozen cross-owner compatibility defect (before source correction)
+
+**Date:** 2026-10-16. File00 exact main baseline `2fa7c022ee9cd1b65432e900579512f304532442`. File08 T37 baseline `b25705866b46188db7a73a83f61ffc0aee402e8f`. Deployed WordPress plugin and database both unverified.
+
+F08-FUT-18 in the user-attached File08 master plan calls for a verified platform subject with an appointment-bound, revocable support/interpreter role and no clinical-write rights. The consolidated central plan makes File00 canonical identity owner. File08 currently invokes `smc_get_user_id_by_subject_uuid` if present, otherwise its legacy fallback searches `_smc_subject_uuid`. We read all **24** PHP files in File00's `source/sabri-membership-core` and found neither the intended reverse-lookup helper nor this legacy metadata alias. File00's existing `SMC_CF01_Contract::ensure_subject_uuid()` persists `_smc_platform_uuid_v1`. This is an exact-repository contract incompatibility, not proven installed failure.
+
+**Proposed owner-only additive read contract:** `SMC_CF01_Contract::resolve_user_id_by_subject_uuid()` and a guarded `smc_get_user_id_by_subject_uuid()` internal PHP function. It must accept one canonical UUID, query at most two matching subject records, return one existent WordPress account ID only on unambiguous exact stored UUID match, return 0 on malformed/duplicate/missing/mismatched/deleted data, create no account or subject, and expose no REST/PII. No File08 direct usermeta read. This contract is not an authorization grant; File08 must separately check membership/current role and object consent/appointment state.
+
+**Release gates:** native negative tests, PHP 7.4/8.3 syntax and exact-head quality workflow, deterministic package, compatibility with File08 T38 proposed consumer, paired real WordPress DB/install and live parity. No merged/deployed/operational claim.
