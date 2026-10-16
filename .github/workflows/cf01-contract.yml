@@ -61,6 +61,8 @@ jobs:
           mapfile -t php_files < <(find source qa -type f -name '*.php' -print | sort)
           test "${#php_files[@]}" -ge 15
           for file in "${php_files[@]}"; do php -l "$file"; done
+      - name: T38 File08 canonical subject reverse lookup negative fixtures
+        run: php qa/t38-file08-inverse-subject-runtime.php
       - name: Exact source digest evidence before manifest gate
         run: |
           sha256sum source/sabri-membership-core/includes/class-smc-cf01-contract.php
