@@ -6,7 +6,9 @@
 
 File04 current-main `includes/class-snfla-plan-completion.php::authorship_preflight()` constructs an attribution-placeholder request with `file_number=04`, `legacy_id`, `legacy_author_id` and a **canonical request_digest** computed by `SNFLA_Checksum::hash`. It checks the File00 reply's `legacy_id`, `legacy_author_id`, `request_digest`, `user_id` and `platform_uuid`. Earlier File04 PR #5 did not include that request digest; **the current main already fixed it**. No stale-file Consumer patch is needed.
 
-File04 existing-author requests use `sabri_file00_platform_uuid_v1` with `file_number=04`, `legacy_id` and `purpose=legacy_publication_migration`; unknown/deleted authors use `sabri_file00_legacy_author_placeholder_v1` with the digest. File04's capability owner is `sabri_feed_run_migrations`; a WordPress principal holding that capability is required by the File00 provider on this candidate. A WP-CLI migration must be run under a privileged authenticated principal; anonymous/unowned CLI actions are not authorized.
+File04 existing-author requests use `sabri_file00_platform_uuid_v1` with `file_number=04`, `legacy_id` and `purpose=legacy_publication_migration`; unknown/deleted authors use `sabri_file00_legacy_author_placeholder_v1` with the digest. File04's exact current `SNFLA_Capabilities::CAP_RUN` is `sabri_file04_run_migrations`. Its `current_actor()` also permits `sabri_feed_run_migrations` as an explicitly governed canonical File21 migration fallback. File00's owner filter now recognizes **either exact capability**, but requires an authenticated principal; it does not accept arbitrary or review-only capabilities. A WP-CLI migration must be run under a privileged authenticated principal; anonymous/unowned CLI actions are not authorized.
+
+**Late source parity correction:** a follow-up inspection of File04 `class-snfla-capabilities.php` identified the concrete File04 CAP_RUN name plus its distinct File21 migration fallback. The first File00 guard admitted only the fallback; that would have rejected an otherwise valid File04 CAP_RUN operator. Both exact paths are now tested; the public/anonymous path remains denied. This was caught during candidate review, not on live.
 
 ## Red-first source findings
 
@@ -20,7 +22,7 @@ The old placeholder logic also checked only **digest shape**, not canonical equa
 
 ## Bounded File00 owner-source corrections
 
-- `file04_migration_authorized()`: require exact consumer `04`, positive `legacy_id`, exact `legacy_publication_migration` purpose for UUID projection, an authenticated current WP user and canonical `sabri_feed_run_migrations` capability.
+- `file04_migration_authorized()`: require exact consumer `04`, positive `legacy_id`, exact `legacy_publication_migration` purpose for UUID projection, an authenticated current WP user and either the exact File04 `sabri_file04_run_migrations` capability or the canonical File21 `sabri_feed_run_migrations` fallback.
 - `file04_request_digest()`: reconstruct the 3-field sorted JSON digest using `wp_json_encode(..., JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)` and `sha256`, matching File04 current-main `SNFLA_Checksum::hash` for these scalar fields. Reject malformed or mismatching requests, not just hashes of the right length.
 - `file04_platform_uuid()`: discard caller-supplied `$existing`, deny unauthorized/incorrect context and derive only the canonical File00 UUID for a current user.
 - `file04_legacy_author_placeholder()`: discard untrusted previously verified results; validate canonical request and principal; only then return the File00-owned, digest-bound non-login attribution sentinel.
