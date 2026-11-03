@@ -50,6 +50,8 @@ const extMethods=[
 ];
 const code=baseRead('class-smc-advanced-trust-2026.php');
 const all=legacy.requirements||[], groups=legacy.groups||[], old=oldExt.requirements||[];
+const centralStaticContract=read('qa/latest-central-contract.mjs');
+const advancedStaticContract=read('qa/advanced-trust-contract.mjs');
 const fail=[];
 const idEquals=(actual,anticipated)=>JSON.stringify(actual)===JSON.stringify(anticipated);
 if(!idEquals(all.map(x=>x.id),requirementIds))fail.push('F00-R ID sequence malformed');
@@ -73,6 +75,7 @@ for(const req of all){
   owner:group.owner, evidence_class:group.test_class,
   source_evidence:sources, test_file_pointers:tests,
   source_granularity:'historical_group_pointer_only',
+  individual_static_check_present:false,
   direct_v12_behavior_test_attested:false,
   historical_code_status:req.code_status,
   historical_acceptance_status:req.acceptance_status,
@@ -90,6 +93,7 @@ for(const c of cen){
    owner:'File00 canonical identity/entitlement owner',evidence_class:'source assertions plus runtime and consumer acceptance',
    source_evidence:files,test_file_pointers:tests,source_tokens:tokens,
    source_granularity:'requirement_specific_static_signals',
+   individual_static_check_present:centralStaticContract.split('\n').some(line=>line.includes("['"+c.id+" ")),
    current_source_signal_verified:files.every(e=>e.exists)&&tokens.every(t=>t.present),
    current_test_files_present:tests.every(e=>e.exists),
    direct_v12_behavior_test_attested:false,cross_repo_or_external_gate:'consumer verification pending',
@@ -99,6 +103,8 @@ for(let i=0;i<old.length;i++){
  const req=old[i],method=extMethods[i],direct=new RegExp('\\bfunction\\s+'+method+'\\s*\\(').test(code);
  const codeId=code.includes(req.id),contract=read('qa/advanced-trust-contract.mjs');
  const directStatic=contract.includes(req.id), evidence=[pointer(source.advanced)];
+ const suffix=String(i+1).padStart(3,'0');
+ const namedCheck=advancedStaticContract.split('\n').some(line=>line.includes("['EXT-"+suffix+" ") && line.includes("'"+req.id+"'"));
  const tests=[pointer('qa/advanced-trust-contract.mjs'),pointer('qa/advanced-trust-runtime.php'),
    pointer('qa/advanced-trust-review-hardening-runtime.php')];
  if(req.id==='F00-EXT-020')tests.push(pointer('qa/v12-actor-binding-runtime.php'));
@@ -108,6 +114,7 @@ for(let i=0;i<old.length;i++){
    source_evidence:evidence,test_file_pointers:tests,source_symbol:'SMC_Advanced_Trust_2026::'+method,
    source_granularity:'requirement_specific_method',
    method_exists:direct,requirement_id_present:codeId,static_test_marker_present:directStatic,
+   individual_static_check_present:namedCheck,
    current_source_signal_verified:direct&&codeId,
    current_test_files_present:tests.every(e=>e.exists),
    direct_v12_behavior_test_attested:false,cross_repo_or_external_gate:'independent per-ID behavioral attestation pending',
@@ -127,6 +134,13 @@ const summary={
  externally_accepted:0,
  historical_group_pointer_count:rows.filter(r=>r.source_granularity==='historical_group_pointer_only').length,
  requirement_specific_static_source_count:rows.filter(r=>r.source_granularity!=='historical_group_pointer_only'&&r.current_source_signal_verified).length,
+ named_individual_static_assertion_source_count:count('individual_static_check_present'),
+ per_family_source_signals:{
+   historical_R_group_pointer:rows.filter(r=>r.id.startsWith('F00-R')&&r.current_source_signal_verified).length,
+   central_static_tokens:rows.filter(r=>r.id.startsWith('F00-CEN')&&r.current_source_signal_verified).length,
+   advanced_extension_methods:rows.filter(r=>r.id.startsWith('F00-EXT')&&r.current_source_signal_verified).length,
+ },
+ static_checks_executed_result_verified:false,
  fail_closed_gate:true,
  plan_artifact:'Sabri-Website-Master-Plan-v12.docx',
  uploaded_plan_sha256:'dad203567cb5d20209ac08614955a4f15856c4708055b8fcac564c8e7473b25a',
@@ -141,5 +155,7 @@ if(!fs.existsSync(file('build')))fs.mkdirSync(file('build'),{recursive:true});
 fs.writeFileSync(file('build/file00-v12-123-evidence.json'),JSON.stringify(report,null,2)+'\n');
 console.log('File00 v12 evidence: '+rows.length+'/123 individually inventoried; source signals '+summary.source_signal_verified_count+
   '; referenced test files present '+summary.test_file_presence_count+'; individual acceptances '+summary.individual_behavioral_acceptances);
+console.log('Named per-ID static checks present: '+summary.named_individual_static_assertion_source_count+
+ '; CI outcomes not independently certified by this scanner.');
 console.log('Acceptance cannot be claimed from this evidence scanner alone.');
 if(fail.length){console.error(fail.join('\n'));process.exit(1)}
