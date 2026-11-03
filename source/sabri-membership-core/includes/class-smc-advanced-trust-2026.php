@@ -1093,7 +1093,10 @@ final class SMC_Advanced_Trust_2026 {
 	private static function actor_is_current( $actor_id, $capability = '', $founder_or_admin = false ) {
 		$actor_id = absint( $actor_id );
 		if ( $actor_id <= 0 ) { return false; }
-		if ( function_exists( 'get_current_user_id' ) && get_current_user_id() > 0 && get_current_user_id() !== $actor_id ) { return false; }
+		// A supplied actor ID is never an authentication context. The current
+		// WordPress principal must exist and match exactly, including Founder
+		// and empty-capability flows. Anonymous/CLI requests fail closed.
+		if ( ! function_exists( 'get_current_user_id' ) || get_current_user_id() <= 0 || get_current_user_id() !== $actor_id ) { return false; }
 		if ( $founder_or_admin && function_exists( 'smc_is_founder' ) && smc_is_founder( $actor_id ) ) { return true; }
 		return '' === $capability || current_user_can( $capability );
 	}
