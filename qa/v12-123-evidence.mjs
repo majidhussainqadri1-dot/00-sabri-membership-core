@@ -123,6 +123,32 @@ for(let i=0;i<old.length;i++){
    accepted:false,reason:'Tests are shared; existence and ID marker do not prove requirement-specific behavior'});
 }
 if(rows.length!==123||!idEquals(rows.map(r=>r.id),expected))fail.push('One or more of 123 rows missing or out of order');
+// Execute the requirement-named static checks, rather than assuming that a
+// label present in a file means the test actually ran. Distinguish this
+// checkout's static contract result from a completed, independent CI run.
+const exercised=new Set();
+const staticEvidence=[
+ {file:'qa/latest-central-contract.mjs',regex:/^PASS:\s+(F00-CEN-0[12])\b/gm,ids:['F00-CEN-01','F00-CEN-02']},
+ {file:'qa/advanced-trust-contract.mjs',regex:/^PASS\s+EXT-(\d{3})\b/gm,
+  ids:Array.from({length:20},(_,i)=>'F00-EXT-'+String(i+1).padStart(3,'0'))},
+];
+for(const entry of staticEvidence){
+ try{
+  const stdout=execFileSync(process.execPath,[file(entry.file)],{cwd:root,encoding:'utf8',maxBuffer:1024*1024});
+  const matches=[...stdout.matchAll(entry.regex)].map(m=>entry.file.includes('advanced-trust')?'F00-EXT-'+m[1]:m[1]);
+  const passed=new Set(matches);
+  for(const id of entry.ids){
+   if(!passed.has(id))fail.push('Missing individually executed static assertion: '+id);
+   else exercised.add(id);
+  }
+ }catch(e){fail.push('Static contract execution failed: '+entry.file+': '+(e.message||String(e)).slice(0,160));}
+}
+for(const row of rows){
+ row.static_contract_executed_and_passed=exercised.has(row.id);
+ row.static_contract_evidence_source=row.static_contract_executed_and_passed
+    ? (row.id.startsWith('F00-EXT')?'qa/advanced-trust-contract.mjs':'qa/latest-central-contract.mjs'):null;
+ row.static_contract_result_scope='checkout_only_not_independent_CI_or_behavioral_acceptance';
+}
 let head='unknown';
 try{head=execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8',stdio:['ignore','pipe','ignore']}).trim()}catch{}
 const count=k=>rows.filter(r=>r[k]===true).length;
@@ -135,6 +161,7 @@ const summary={
  historical_group_pointer_count:rows.filter(r=>r.source_granularity==='historical_group_pointer_only').length,
  requirement_specific_static_source_count:rows.filter(r=>r.source_granularity!=='historical_group_pointer_only'&&r.current_source_signal_verified).length,
  named_individual_static_assertion_source_count:count('individual_static_check_present'),
+ requirement_named_static_checks_executed_passed:count('static_contract_executed_and_passed'),
  per_family_source_signals:{
    historical_R_group_pointer:rows.filter(r=>r.id.startsWith('F00-R')&&r.current_source_signal_verified).length,
    central_static_tokens:rows.filter(r=>r.id.startsWith('F00-CEN')&&r.current_source_signal_verified).length,
@@ -157,5 +184,6 @@ console.log('File00 v12 evidence: '+rows.length+'/123 individually inventoried; 
   '; referenced test files present '+summary.test_file_presence_count+'; individual acceptances '+summary.individual_behavioral_acceptances);
 console.log('Named per-ID static checks present: '+summary.named_individual_static_assertion_source_count+
  '; CI outcomes not independently certified by this scanner.');
+console.log('Requirement-named checkout static assertions executed and passed: '+summary.requirement_named_static_checks_executed_passed+'/123; separate CI and behavior pending.');
 console.log('Acceptance cannot be claimed from this evidence scanner alone.');
 if(fail.length){console.error(fail.join('\n'));process.exit(1)}
