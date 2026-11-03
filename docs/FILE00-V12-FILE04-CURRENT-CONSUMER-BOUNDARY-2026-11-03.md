@@ -47,3 +47,20 @@ There is no new role grant, login, paid tier, clinical authorization or foreign 
 Next work: identify and exercise each File00 R/CEN/EXT behavioral acceptance with explicit positive/negative tests, pin consumer File04/File08 runtime using actual two-plugin source artifacts, review reserved-sentinel creation metadata/audit rollback, reconcile source-version choices, then finish coding other files **before** staging/live verification per Founder plan.
 
 Repository Main: `2fa7c022ee9cd1b65432e900579512f304532442`. Exact candidate HEAD/CI to be attached after final workflow conclusion. Deployed Version **unverified**; DB Version **unverified**; Migration State **unverified**; Live Verification Status **deferred/unverified**. **Exact deployed code ابھی unverified ہے؛ repository-based diagnosis provisional ہے۔**
+
+## 2026-11-03 — Additional File04 sentinel persistence/audit fault-recovery pass
+
+**Proven new owner-source defect:** `ensure_legacy_author_placeholder_user()` previously executed two `update_user_meta()` writes without checking the stored values, then issued an audit event. A database/write-filter failure could leave a newly created account without one or both essential non-login/attribution markers, yet permit a success path. The previous audit-failure rollback also unconditionally required a WordPress admin include, breaking isolated runtime testing and obscuring the true persistence boundary.
+
+**Bounded remedy:**
+- Include `_smc_legacy_author_placeholder_v1` and `_smc_login_disabled_v1` in the WordPress user creation's `meta_input`, reducing the unprotected creation window.
+- Read back both markers after creation. If a marker is absent, retry the ordinary metadata write and require a positive persisted readback; do not trust update function return values alone.
+- Verify the created ID resolves to the exact reserved login before any deletion/compensation attempt.
+- On missing marker or failed mandatory `SMC_Security::audit()`, attempt a compensating delete via `wp_delete_user()` (loading the WordPress include only if needed). **Never** issue a verified placeholder receipt on these failures.
+- Keep normal login filters: a preserved, marked sentinel cannot authenticate.
+
+**Adversarial harness:** `qa/v12-file04-placeholder-persistence-runtime.php` injects no-op or failed metadata persistence, a false-positive metadata return, audit refusal, deletion failure and insertion failure. It distinguishes genuine creation, marker readback, compensating deletion and fail-closed response. Final tested result: **15/15 PHP fixture assertions PASS**. This is simulated fault-recovery source QA, not a production database transaction or independently installed two-plugin rehearsal.
+
+**Explicit residual risk / recovery obstacle:** If the underlying database cannot delete an account *and* the initial login-disabled marker is absent because writes failed, a newly created but unverified reserved-login account could remain. The source returns no successful attribution receipt; the state still requires an authenticated operator DB inspection/cleanup and cannot be called automatically resolved. Exact recovery under actual database outages and races remains an external integration/acceptance gate. No live or staging database was touched.
+
+The exact source file `class-smc-cf01-contract.php` is re-bound in `MANIFEST.sha256` after this correction. This is an additional bounded owner-code defect fix; it does **not** change the earlier 123/123 per-ID acceptance boundary.
