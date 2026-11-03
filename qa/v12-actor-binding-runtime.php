@@ -39,6 +39,7 @@ class SMC_Security { public static function subject_hash($id){return hash('sha25
 class SMC_V12_WPDB {
     public $prefix='wp_';
     function prepare($sql,...$args) { return $sql; }
+    function get_var($sql) { return false; } // No approval evidence in this mock.
     function get_results($sql,$mode=null) { return array(array('id'=>1,'action'=>'contact_verified','created_at'=>'2026-11-01 00:00:00')); }
 }
 $wpdb = new SMC_V12_WPDB();
