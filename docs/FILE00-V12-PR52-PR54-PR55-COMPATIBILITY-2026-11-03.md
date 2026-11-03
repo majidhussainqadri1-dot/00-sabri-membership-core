@@ -29,13 +29,15 @@ Current File00 `main` already includes `file04_platform_uuid()`, `file04_legacy_
 
 **Conservative resolution:** Do **not** import the old PR52 File04 helper implementation, workflow YAML or version bumps into PR55. Keep current File00 implementation as source candidate and require a separate exact current File04 consumer contract test identifying its filter names, request provenance, login prohibition, actor/CLI authority and placeholder collision prevention. PR52 stays unmerged until deliberately superseded or independently rebased and reviewed.
 
-**Open security design review (not claimed fixed):** current `file04_platform_uuid()` accepts a syntactically valid `$existing` UUID before binding it to `$user_id`, and current File04 placeholder generation has a less restrictive request-authority condition than the divergent PR52 candidate. This is a source-level trust-boundary concern; **do not call it an exploited live vulnerability or make a breaking patch without frozen consumer inputs and failing adversarial tests**.
+**Red-first File04 source corrections now implemented in PR #55:** `qa/v12-file04-authorship-guard-runtime.php` initially failed on 3 direct unauthorized outcomes (a foreign account UUID, a deleted account inheriting a supplied UUID, and a reserved-login real member treated as an attribution sentinel). A fourth missing-guard case was independently reproduced as an undefined `block_placeholder_login()` call. The candidate now always derives projected identity from `ensure_subject_uuid( $user_id )`, rejects a reserved-login user without both trusted placeholder and login-disabled markers, and denies sentinel authentication through both WordPress `authenticate` and `wp_authenticate_user` boundaries. The final targeted suite is **10/10 PASS**, and normal user sign-in remains unaffected. **These are source corrections, not evidence of a live exploit.**
+
+**Still open / not silently solved:** approval of the precise File04 consumer request contract, explicit admin/CLI authority and migration-purpose binding, independent File04 runtime parity, and the divergent 1.2.45 release version. These require File04's exact source interface and additional authenticated consumer tests before release.
 
 ## 123-requirement acceptance boundary
 
 `qa/v12-123-evidence.mjs` emits one machine-readable row per `F00-R001–R100`, `F00-CEN-01–03`, and `F00-EXT-001–020`. Each row separates historical group-pointer evidence, code/token/source checksums, discovered test files, individual behavioral proof and external acceptance. Its accepted counts **must stay false** until stronger independently performed tests and external approvals are attached.
 
-**Next best source work:** prove File04's exact current consumer invocation against File00 on both PHP7.4 and 8.3, add fail-closed tests for forged/mismatched platform UUID and placeholder collision, reconcile File00/File04 release version and review the 123 rows with per-ID negative tests where needed. Staging/live deployment is deferred until all files' code review is complete.
+**Next best source work:** independently run the exact File04 consumer (including authenticated admin/CLI migration context) against File00 on both PHP7.4 and 8.3, reconcile File00/File04 release version and review the 123 rows with per-ID negative tests where needed. Staging/live deployment is deferred until all files' code review is complete.
 
 ## Live Reality fields
 
