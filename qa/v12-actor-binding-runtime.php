@@ -22,6 +22,10 @@ function metadata_exists($type,$id,$key) { return isset($GLOBALS['smc_v12_meta']
 function apply_filters($tag,$value,...$args) {
     if($tag==='smc_reverification_interval_seconds') return 10*YEAR_IN_SECONDS;
     if($tag==='smc_system_reverification_authorized') return true; // untrusted legacy boolean
+    if($tag==='smc_system_reverification_authorization_v1' && !empty($GLOBALS['smc_v12_signed_claim'])) {
+        return array('owner'=>'file00','contract_version'=>'1.0.0','authorized'=>true,
+           'source'=>$args[1], 'subject'=>'uuid-'.$args[0], 'asserted_at'=>time());
+    }
     return $value;
 }
 class WP_Error {
@@ -30,6 +34,7 @@ class WP_Error {
     function get_error_code() { return $this->code; }
 }
 function is_wp_error($x){return $x instanceof WP_Error;}
+class SMC_CF01_Contract { public static function ensure_subject_uuid($id){return 'uuid-'.$id;} }
 class SMC_Security { public static function subject_hash($id){return hash('sha256','test-subject-'.$id);} }
 class SMC_V12_WPDB {
     public $prefix='wp_';
@@ -72,6 +77,14 @@ $cases[]=array('stored future due date never extends beyond canonical maximum',
 $sys=SMC_Advanced_Trust_2026::mark_reverified(1,0,'system');
 $cases[]=array('bare boolean adapter cannot authorize system reverification',
   is_wp_error($sys)&&$sys->get_error_code()==='smc_reverify_authorization');
+
+// Valid, bound File 00 service claims pass authorization, but cannot commit if
+// our deliberate persistence fault injector refuses all updates.
+$GLOBALS['smc_v12_signed_claim']=true;
+$typed=SMC_Advanced_Trust_2026::mark_reverified(1,0,'system');
+$cases[]=array('typed File00 system claim reaches guarded persistence',
+  is_wp_error($typed)&&$typed->get_error_code()==='smc_reverify_store');
+$GLOBALS['smc_v12_signed_claim']=false;
 
 // F00-EXT-020 — cross-subject timeline needs current typed and purpose-bound
 // authority, not a general membership-management capability alone.
