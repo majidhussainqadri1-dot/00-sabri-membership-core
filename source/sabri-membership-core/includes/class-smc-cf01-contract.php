@@ -224,7 +224,8 @@ final class SMC_CF01_Contract {
 			|| ! function_exists( 'get_current_user_id' )
 			|| absint( get_current_user_id() ) <= 0
 			|| ! function_exists( 'current_user_can' )
-			|| ! current_user_can( 'sabri_feed_run_migrations' ) ) {
+			|| ( ! current_user_can( 'sabri_file04_run_migrations' )
+				&& ! current_user_can( 'sabri_feed_run_migrations' ) ) ) {
 			return false;
 		}
 		return true;
