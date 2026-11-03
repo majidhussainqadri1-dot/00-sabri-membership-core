@@ -31,6 +31,8 @@ final class SMC_CF01_Contract {
 		add_action( 'user_register', array( __CLASS__, 'ensure_subject_uuid' ), 5, 1 );
 		add_filter( 'sabri_file00_platform_uuid_v1', array( __CLASS__, 'file04_platform_uuid' ), 10, 3 );
 		add_filter( 'sabri_file00_legacy_author_placeholder_v1', array( __CLASS__, 'file04_legacy_author_placeholder' ), 10, 2 );
+		add_filter( 'authenticate', array( __CLASS__, 'block_placeholder_login' ), 99, 3 );
+		add_filter( 'wp_authenticate_user', array( __CLASS__, 'block_placeholder_login' ), 99, 2 );
 	}
 
 	/**
@@ -242,6 +244,21 @@ final class SMC_CF01_Contract {
 			'owner'            => 'File 00',
 			'contract_version' => defined( 'SMC_CF01_CONTRACT_VERSION' ) ? SMC_CF01_CONTRACT_VERSION : self::CONTRACT_VERSION,
 		);
+	}
+
+	/**
+	 * A legacy-author sentinel is attribution metadata, never a principal.
+	 * Both native and plugin authentication paths fail closed for this ID.
+	 */
+	public static function block_placeholder_login( $user, $username = '', $password = '' ) {
+		unset( $username, $password );
+		if ( $user instanceof WP_User
+			&& ( '1' === (string) get_user_meta( $user->ID, '_smc_legacy_author_placeholder_v1', true )
+				|| '1' === (string) get_user_meta( $user->ID, '_smc_login_disabled_v1', true ) ) ) {
+			return new WP_Error( 'smc_legacy_author_placeholder_login_denied',
+				__( 'This system attribution identity cannot sign in.', 'sabri-membership-core' ) );
+		}
+		return $user;
 	}
 
 	private static function ensure_legacy_author_placeholder_user() {
