@@ -73,6 +73,30 @@ final class SMC_CF01_Contract {
 	 * @param array $context Requested action, purpose, jurisdiction and trace ID.
 	 * @return array<string,mixed>
 	 */
+	/**
+	 * Internal File08 canonical subject lookup: read-only and exactly unique.
+	 * No authorization, relationship, clinical permission or role is granted.
+	 */
+	public static function resolve_user_id_by_subject_uuid( $subject_uuid ) {
+		if ( ! is_string( $subject_uuid ) || $subject_uuid !== trim( $subject_uuid ) ) { return 0; }
+		$subject_uuid = strtolower( $subject_uuid );
+		if ( ! self::valid_uuid( $subject_uuid ) ) { return 0; }
+		// File00 owns this internal usermeta key. Read at most two matches to
+		// detect collisions instead of arbitrarily choosing someone else's account.
+		$matches = get_users( array(
+			'fields'     => 'ids',
+			'number'     => 2,
+			'meta_key'   => '_smc_platform_uuid_v1',
+			'meta_value' => $subject_uuid,
+		) );
+		if ( ! is_array( $matches ) || 1 !== count( $matches ) || ! is_scalar( $matches[0] ) ) { return 0; }
+		$user_id = absint( $matches[0] );
+		if ( ! $user_id || ! get_userdata( $user_id ) ) { return 0; }
+		$stored = get_user_meta( $user_id, '_smc_platform_uuid_v1', true );
+		if ( ! self::valid_uuid( $stored ) || ! hash_equals( $subject_uuid, strtolower( $stored ) ) ) { return 0; }
+		return $user_id;
+	}
+
 	public static function membership_assertion( $user_id, $context = array() ) {
 		$user_id = absint( $user_id );
 		$context = is_array( $context ) ? $context : array();
