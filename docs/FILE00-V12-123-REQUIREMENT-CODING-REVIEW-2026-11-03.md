@@ -19,7 +19,7 @@ The supplied `Sabri-Website-Master-Plan-v12.docx` File 00 requirements include *
 | F00-V12-D03 — untyped system reverification | GitHub Run #821: bare boolean adapter crossed system authorization boundary | System reverification now requires typed File00 owner/version, subject/source binding and fresh timestamp; old boolean shortcut removed | `qa/v12-actor-binding-runtime.php` |
 | F00-V12-D04 — cross-subject timeline disclosure | GitHub Run #821: blanket management capability returned another user's trust activity | Cross-subject reader must have current step-up, explicit File00 authorization, bound actor/subject, nonempty purpose and freshness; self-service remains available | `qa/v12-actor-binding-runtime.php` |
 
-**Change boundary:** all four changes remain inside `source/sabri-membership-core/includes/class-smc-advanced-trust-2026.php` and its targeted QA. Canonical File02 authentication ownership and the previously approved File00 MFA-retirement policy were **not** replaced. The production-code checksum was re-bound in `source/sabri-membership-core/MANIFEST.sha256`; the deterministic package is validated by CI. No new paid tier or donation-derived privilege was added.
+**First four-defect change boundary:** the original four corrections remain inside `source/sabri-membership-core/includes/class-smc-advanced-trust-2026.php` and its targeted QA. Canonical File02 authentication ownership and the previously approved File00 MFA-retirement policy were **not** replaced. The production-code checksum was re-bound in `source/sabri-membership-core/MANIFEST.sha256`; the deterministic package is validated by CI. No new paid tier or donation-derived privilege was added.
 
 ## Twelve distinct source-review lenses
 
@@ -40,6 +40,14 @@ Machine-readable, repeatable source and historical-register inspection is in `qa
 
 **Interpretation:** these are **12 different automated static review lenses**, not twelve independent comprehensive human/security audits. Their success verifies only the signals they explicitly check. The separate regression suite exercises **14 runtime cases** and the inherited repository QA remains authoritative for source and package. Do not convert 12 passes to a statement that the 123 requirements have all been behaviorally proven.
 
+## Subsequent cross-repository reconciliation and three additional source safeguards
+
+- PR #54's File08 canonical subject reverse-lookup interface is now **integrated in Draft PR #55**: `SMC_CF01_Contract::resolve_user_id_by_subject_uuid()` and `smc_get_user_id_by_subject_uuid()`. Original native negative suite `qa/t38-file08-inverse-subject-runtime.php` **13/13 PASS**. File08 consumer PR #29 checks forward UUID equality, but is not installed or merged.
+- Comparing PR #52's 1.2.45 File04 authorship code against current main identified stale base divergence (5 behind/16 ahead), incompatible reserved-login names and competing callback implementations. **Do not blindly merge PR #52**.
+- File04 additional fail-closed source review: forged caller-supplied `$existing` UUID cannot override canonical File00 user UUID; unknown user cannot inherit supplied UUID; reserved placeholder-login collision is denied; real placeholder login is blocked by both standard WordPress authentication filters; ordinary users remain unaffected. Four original failing situations were reproduced (3 assertions and one missing guard), then corrected. `qa/v12-file04-authorship-guard-runtime.php`: **10/10 PASS**.
+- `qa/v12-123-evidence.mjs` now produces a **123-row individual evidence inventory**, distinguishing prior group pointers from requirement-specific source methods. Its initial exact-head CI observed **103** source-code signals, **113** test-file pointers and **0 individually accepted end-to-end requirements**. The 20 governance/final-approval records without runtime source evidence are not automatically code defects.
+- Full companion-file acceptance and File04 migration authorization remain explicit open gates; see `docs/FILE00-V12-PR52-PR54-PR55-COMPATIBILITY-2026-11-03.md`.
+
 ## Repository and integration blockers
 
 1. Draft PR **#54** (File08 canonical UUID reverse lookup) remains independent/unmerged; its candidate `63dd097874d9309236526eafb1f1f1faa86655eb` is not equal to `main`.
@@ -56,4 +64,4 @@ Repository main: `2fa7c022ee9cd1b65432e900579512f304532442`; corrected Draft PR 
 
 ## No-overclaim decision
 
-Four concrete source defects were reproduced and corrected in Draft PR #55; 12 source-review lenses and 14 targeted Runtime Assertions are executed in its test workflow. This is NOT 123/123 end-to-end acceptance, NOT a claim that unrelated modules are complete, and NOT staging/production resolved. No repository main merge or live deployment follows from this document.
+Seven source defects have bounded corrections in Draft PR #55 (four original advanced-trust defects plus three File04 source issues), with a separate File08 contract gap integrated; 12 automated source-review lenses, 14 advanced-trust tests, 13 File08 resolver tests and 10 File04 tests are in the workflow. This is NOT 123/123 end-to-end acceptance, NOT a claim that unrelated modules are complete, and NOT staging/production resolved. No repository main merge or live deployment follows from this document.
