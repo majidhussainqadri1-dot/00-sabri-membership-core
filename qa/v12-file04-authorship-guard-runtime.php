@@ -27,6 +27,20 @@ function get_current_user_id(){return $GLOBALS['smc_v12_signed_in']?42:0;}
 function current_user_can($cap){return $cap==='sabri_feed_run_migrations' && $GLOBALS['smc_v12_migration_cap'];}
 function wp_json_encode($value,$flags=0){return json_encode($value,$flags);}
 function sanitize_key($v){return strtolower(preg_replace('/[^a-z0-9_-]/','',(string)$v));}
+$GLOBALS['smc_v12_filter_map']=array();
+function add_action($tag,$callback,$priority=10,$accepted=1) { return true; }
+function add_filter($tag,$callback,$priority=10,$accepted=1) {
+    $GLOBALS['smc_v12_filter_map'][$tag][] = array('callback'=>$callback,'accepted'=>$accepted);
+    return true;
+}
+function apply_filters($tag,$value,...$args) {
+    foreach ($GLOBALS['smc_v12_filter_map'][$tag]??array() as $entry) {
+        $all=array_merge(array($value),$args);
+        $value=call_user_func_array($entry['callback'],array_slice($all,0,$entry['accepted']));
+    }
+    return $value;
+}
+
 class WP_Error{public $code;function __construct($s){$this->code=$s;}}
 class WP_User{public $ID;function __construct($id){$this->ID=$id;}}
 class SMC_Security{public static function audit($n,$id,$a=array()){return true;}}
@@ -90,6 +104,23 @@ $blocked=SMC_CF01_Contract::block_placeholder_login($sentinel,'ignored','secret'
 $test(is_wp_error($blocked),'legacy attribution sentinel explicitly denied normal sign-in');
 $unchanged=SMC_CF01_Contract::block_placeholder_login($person,'ignored','secret');
 $test($unchanged===$person,'real member is not blocked by placeholder login policy');
+// Consumer-shaped WordPress hook invocation: source payload is exactly the
+// three-field canonicalized request emitted by File04 main authorship_preflight.
+SMC_CF01_Contract::init();
+$hookUUID=apply_filters('sabri_file00_platform_uuid_v1','',77,$ctx);
+$test($hookUUID===$canonical,'registered File04 UUID filter returns canonical author subject');
+$hookPlaceholder=apply_filters('sabri_file00_legacy_author_placeholder_v1',array('verified'=>false),$request);
+$test(is_array($hookPlaceholder)&&!empty($hookPlaceholder['verified'])
+  &&$hookPlaceholder['user_id']===5
+  &&$hookPlaceholder['request_digest']===$request['request_digest']
+  &&$hookPlaceholder['legacy_id']===123
+  &&$hookPlaceholder['legacy_author_id']===0,
+  'registered File04 placeholder filter returns request-bound File00 owner receipt');
+$hookLogin=apply_filters('authenticate',new WP_User(5),'sabri_legacy_author_placeholder','blocked');
+$test(is_wp_error($hookLogin),'registered authenticate filter denies placeholder sign-in');
+$hookNormal=apply_filters('wp_authenticate_user',new WP_User(77),'secret');
+$test($hookNormal instanceof WP_User && $hookNormal->ID===77,'registered WordPress user filter allows real member');
+
 $bad=array_values(array_filter($tests,function($a){return !$a[0];}));
 if($bad){foreach($bad as $x){fwrite(STDERR,'File00 File04 FAIL '.$x[1]."\n");}exit(1);}
 echo 'File00 File04 owner guard '.count($tests).'/'.count($tests)." PASS\n";
