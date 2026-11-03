@@ -452,3 +452,10 @@ function smc_notify( $user_id, $type, $title, $body, $priority = 'high', $link =
 function smc_db_error( $message ) {
 	return new WP_Error( 'smc_database', $message );
 }
+
+if ( ! function_exists( 'smc_get_user_id_by_subject_uuid' ) ) {
+	function smc_get_user_id_by_subject_uuid( $subject_uuid ) {
+		return class_exists( 'SMC_CF01_Contract' )
+			? SMC_CF01_Contract::resolve_user_id_by_subject_uuid( $subject_uuid ) : 0;
+	}
+}
