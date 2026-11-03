@@ -59,6 +59,7 @@ const lenses=[
   ['anonymous actor explicitly denied',adv.includes('get_current_user_id() <= 0')],
   ['real 8-case runtime negative test wired',pkg.scripts.test.includes('qa/v12-actor-binding-runtime.php')],
   ['File01 typed bridge',auth.includes('file01_authorization_claim')],
+  ['untyped system reverification rejected',adv.includes('system_reverification_authorized') && !adv.includes("(bool) apply_filters( 'smc_system_reverification_authorized'")],
  ]),
  review('04 — File02 assurance ownership',[
   ['File02 account owner',central.includes("'authentication_owner'")],
@@ -69,11 +70,14 @@ const lenses=[
   ['age/guardian reconciliation',lifecycle.includes('recheck_ages')],
   ['guardian succession consent',adv.includes('complete_guardian_succession')],
   ['critical identity revocation',adv.includes('critical_identity_change')&&adv.includes('revoke_all_sessions')],
+  ['periodic verification bounded to one year',adv.includes('function reverification_interval_seconds') && adv.includes('min( YEAR_IN_SECONDS, $requested )')],
+  ['stored future due value clamped',adv.includes('min( $stored_due_at, $policy_due_at )')],
  ]),
  review('06 — privacy and minimum disclosure',[
   ['privacy-safe claim generator',adv.includes('minimal_assertions')],
   ['selective proofs verified',adv.includes('verify_selective_disclosure_proof')],
   ['consent graph baseline',adv.includes('consent_dependency_graph')],
+  ['cross-subject timeline has purpose-bound claim',adv.includes('trust_timeline_cross_subject_authorized') && adv.includes('smc_trust_timeline_access_v1')],
   ['private identity encryption',security.includes('aes-256-gcm')],
  ]),
  review('07 — revocation and time constraints',[
