@@ -93,6 +93,18 @@ $GLOBALS['user_meta'][5]['_smc_legacy_author_placeholder_v1']=1;
 $GLOBALS['user_meta'][5]['_smc_login_disabled_v1']=1;
 $valid=SMC_CF01_Contract::file04_legacy_author_placeholder(null,$request);
 $test(is_array($valid)&&!empty($valid['verified'])&&$valid['user_id']===5,'verified reserved sentinel remains a stable placeholder');
+
+$forgedWhenReady=SMC_CF01_Contract::file04_legacy_author_placeholder(null,$fake);
+$test(is_array($forgedWhenReady)&&empty($forgedWhenReady['verified']),'forged 64-hex digest rejected even with real sentinel already present');
+$GLOBALS['smc_v12_migration_cap']=false;
+$unauthorizedWhenReady=SMC_CF01_Contract::file04_legacy_author_placeholder(null,$request);
+$test(is_array($unauthorizedWhenReady)&&empty($unauthorizedWhenReady['verified']),'ordinary user cannot reuse valid sentinel to claim migration authority');
+$GLOBALS['smc_v12_migration_cap']=true;
+$GLOBALS['smc_v12_signed_in']=false;
+$anonymousWhenReady=SMC_CF01_Contract::file04_legacy_author_placeholder(null,$request);
+$test(is_array($anonymousWhenReady)&&empty($anonymousWhenReady['verified']),'anonymous user cannot reuse existing verified sentinel');
+$GLOBALS['smc_v12_signed_in']=true;
+
 $independentlyVerified=SMC_CF01_Contract::file04_legacy_author_placeholder($spoofed,$request);
 $test(is_array($independentlyVerified)&&!empty($independentlyVerified['verified'])
   &&$independentlyVerified['user_id']===5
