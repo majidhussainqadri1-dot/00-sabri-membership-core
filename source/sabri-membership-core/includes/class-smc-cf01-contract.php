@@ -202,9 +202,12 @@ final class SMC_CF01_Contract {
 	 * The filter never invents an identity outside File 00.
 	 */
 	public static function file04_platform_uuid( $existing, $user_id, $context = array() ) {
-		// Caller-provided prior values are observations, never canonical File00
-		// identity authority. Refuse forged, cross-account and deleted subjects.
-		unset( $existing, $context );
+		// The filter's prior value is untrusted. A public or other-module
+		// invocation cannot mint an unrelated member's canonical UUID.
+		unset( $existing );
+		if ( ! self::file04_migration_authorized( $context, false ) ) {
+			return '';
+		}
 		return self::ensure_subject_uuid( absint( $user_id ) );
 	}
 
@@ -213,15 +216,49 @@ final class SMC_CF01_Contract {
 	 * A single non-login service identity is created and owned by File 00 so
 	 * migration never misattributes unknown authors to a real member.
 	 */
-	public static function file04_legacy_author_placeholder( $existing, $request = array() ) {
-		if ( is_array( $existing ) && ! empty( $existing['verified'] ) ) {
-			return $existing;
+	private static function file04_migration_authorized( $context, $placeholder = false ) {
+		$context = is_array( $context ) ? $context : array();
+		if ( '04' !== (string) ( $context['file_number'] ?? '' )
+			|| absint( $context['legacy_id'] ?? 0 ) <= 0
+			|| ( ! $placeholder && 'legacy_publication_migration' !== (string) ( $context['purpose'] ?? '' ) )
+			|| ! function_exists( 'get_current_user_id' )
+			|| absint( get_current_user_id() ) <= 0
+			|| ! function_exists( 'current_user_can' )
+			|| ! current_user_can( 'sabri_feed_run_migrations' ) ) {
+			return false;
 		}
+		return true;
+	}
+
+	/**
+	 * Independently reproduce File04's SHA256 of a canonically sorted,
+	 * JSON-encoded, three-field migration request. A 64-hex appearance alone
+	 * is not a proof that the request fields were bound.
+	 */
+	private static function file04_request_digest( $legacy_id, $legacy_author_id ) {
+		$payload = array(
+			'file_number' => '04',
+			'legacy_id' => absint( $legacy_id ),
+			'legacy_author_id' => absint( $legacy_author_id ),
+		);
+		ksort( $payload, SORT_STRING );
+		$json = wp_json_encode( $payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES );
+		return is_string( $json ) ? hash( 'sha256', $json ) : '';
+	}
+
+	public static function file04_legacy_author_placeholder( $existing, $request = array() ) {
+		// Untrusted upstream filter outputs never certify File00 authorship.
+		unset( $existing );
 		$request = is_array( $request ) ? $request : array();
 		$legacy_id = absint( $request['legacy_id'] ?? 0 );
 		$legacy_author_id = absint( $request['legacy_author_id'] ?? 0 );
 		$request_digest = strtolower( trim( (string) ( $request['request_digest'] ?? '' ) ) );
-		if ( $legacy_id <= 0 || 1 !== preg_match( '/^[a-f0-9]{64}$/', $request_digest ) ) {
+		$expected_digest = self::file04_request_digest( $legacy_id, $legacy_author_id );
+		if ( ! self::file04_migration_authorized( $request, true )
+			|| ! is_string( $request['request_digest'] ?? null )
+			|| 1 !== preg_match( '/^[a-f0-9]{64}$/D', $request_digest )
+			|| '' === $expected_digest
+			|| ! hash_equals( $expected_digest, $request_digest ) ) {
 			return array( 'verified' => false, 'provider_id' => 'file00_legacy_author_placeholder_v1' );
 		}
 		$user_id = self::ensure_legacy_author_placeholder_user();
