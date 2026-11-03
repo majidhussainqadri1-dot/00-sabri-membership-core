@@ -12,6 +12,8 @@ $GLOBALS['user_meta'] = array(
   77=>array('_smc_platform_uuid_v1'=>'00000000-0000-4000-8000-000000000077'),
   88=>array('_smc_platform_uuid_v1'=>'00000000-0000-4000-8000-000000000088'));
 $GLOBALS['new_users']=0;
+$GLOBALS['smc_v12_signed_in']=true;
+$GLOBALS['smc_v12_migration_cap']=true;
 function absint($x){return abs((int)$x);}
 function get_userdata($x){return $GLOBALS['users'][(int)$x] ?? false;}
 function get_user_meta($x,$key,$single=true){return $GLOBALS['user_meta'][(int)$x][$key] ?? '';}
@@ -20,6 +22,11 @@ function wp_insert_user($args){$GLOBALS['new_users']++;return new WP_Error('unex
 function wp_generate_uuid4(){return '00000000-0000-4000-8000-000000009999';}
 function is_wp_error($x){return $x instanceof WP_Error;}
 function __($s,$domain=''){return $s;}
+function is_user_logged_in(){return $GLOBALS['smc_v12_signed_in'];}
+function get_current_user_id(){return $GLOBALS['smc_v12_signed_in']?42:0;}
+function current_user_can($cap){return $cap==='sabri_feed_run_migrations' && $GLOBALS['smc_v12_migration_cap'];}
+function wp_json_encode($value,$flags=0){return json_encode($value,$flags);}
+function sanitize_key($v){return strtolower(preg_replace('/[^a-z0-9_-]/','',(string)$v));}
 class WP_Error{public $code;function __construct($s){$this->code=$s;}}
 class WP_User{public $ID;function __construct($id){$this->ID=$id;}}
 class SMC_Security{public static function audit($n,$id,$a=array()){return true;}}
@@ -27,20 +34,47 @@ require dirname(__DIR__).'/source/sabri-membership-core/includes/class-smc-cf01-
 $tests=array();$test=function($condition,$label)use(&$tests){$tests[]=array((bool)$condition,$label);};
 $canonical='00000000-0000-4000-8000-000000000077';
 $foreign='00000000-0000-4000-8000-000000000088';
-$ctx=array('file_number'=>'04','purpose'=>'legacy_publication_migration');
+$ctx=array('file_number'=>'04','legacy_id'=>123,'purpose'=>'legacy_publication_migration');
 $test(SMC_CF01_Contract::file04_platform_uuid($canonical,77,$ctx)===$canonical,'own canonical source remains stable');
 $test(SMC_CF01_Contract::file04_platform_uuid($foreign,77,$ctx)===$canonical,'forged other-account UUID cannot override File00 owner');
 $test(SMC_CF01_Contract::file04_platform_uuid($canonical,999,$ctx)==='','deleted or unknown user cannot inherit a supplied UUID');
 $test(SMC_CF01_Contract::file04_platform_uuid('not-uuid',77,$ctx)===$canonical,'untrusted malformed UUID cannot replace canonical owner');
-$request=array('file_number'=>'04','legacy_id'=>123,'legacy_author_id'=>0,'request_digest'=>str_repeat('b',64));
+$unsigned=array('file_number'=>'04','legacy_id'=>123,'legacy_author_id'=>0);
+ksort($unsigned,SORT_STRING);
+$request=$unsigned;
+$request['request_digest']=hash('sha256',wp_json_encode($unsigned,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES));
 $placeholder=SMC_CF01_Contract::file04_legacy_author_placeholder(null,$request);
 $test(is_array($placeholder)&&empty($placeholder['verified']),'reserved-login real user collision is denied');
 $test($GLOBALS['new_users']===0,'collision never creates another account');
+$wrongContext=SMC_CF01_Contract::file04_platform_uuid('',77,array('file_number'=>'09','legacy_id'=>123,'purpose'=>'legacy_publication_migration'));
+$test($wrongContext==='','File04 UUID filter rejects wrong consumer');
+$wrongPurpose=SMC_CF01_Contract::file04_platform_uuid('',77,array('file_number'=>'04','legacy_id'=>123,'purpose'=>'public_profile'));
+$test($wrongPurpose==='','File04 UUID filter refuses unrelated purpose');
+$GLOBALS['smc_v12_signed_in']=false;
+$guestUUID=SMC_CF01_Contract::file04_platform_uuid('',77,$ctx);
+$test($guestUUID==='','anonymous caller cannot mint another user UUID through migration filter');
+$guestPlaceholder=SMC_CF01_Contract::file04_legacy_author_placeholder(null,$request);
+$test(is_array($guestPlaceholder)&&empty($guestPlaceholder['verified']),'anonymous caller cannot create placeholder with digest');
+$GLOBALS['smc_v12_signed_in']=true;
+$GLOBALS['smc_v12_migration_cap']=false;
+$unprivilegedPlaceholder=SMC_CF01_Contract::file04_legacy_author_placeholder(null,$request);
+$test(is_array($unprivilegedPlaceholder)&&empty($unprivilegedPlaceholder['verified']),'authenticated user without migration capability denied');
+$GLOBALS['smc_v12_migration_cap']=true;
+
 $invalid=$request;$invalid['request_digest']='not-a-digest';
 $denied=SMC_CF01_Contract::file04_legacy_author_placeholder(null,$invalid);
 $test(is_array($denied)&&empty($denied['verified']),'invalid migration digest is rejected');
 // Once a reserved account has been independently verified as a sentinel,
 // its sign-in still fails, while an unrelated person is not blocked.
+$fake=$request;$fake['request_digest']=str_repeat('b',64);
+$badDigest=SMC_CF01_Contract::file04_legacy_author_placeholder(null,$fake);
+$test(is_array($badDigest)&&empty($badDigest['verified']),'arbitrary well-formed but incorrect digest fails closed');
+$wrongFile=$request;$wrongFile['file_number']='09';
+$badFile=SMC_CF01_Contract::file04_legacy_author_placeholder(null,$wrongFile);
+$test(is_array($badFile)&&empty($badFile['verified']),'placeholder rejects wrong consumer file identifier');
+$spoofed=array('verified'=>true,'user_id'=>77,'platform_uuid'=>$canonical,'request_digest'=>$request['request_digest']);
+$untrusted=SMC_CF01_Contract::file04_legacy_author_placeholder($spoofed,$request);
+$test(is_array($untrusted)&&empty($untrusted['verified']),'preverified upstream filter payload cannot bypass File00 owner');
 $GLOBALS['user_meta'][5]['_smc_legacy_author_placeholder_v1']=1;
 $GLOBALS['user_meta'][5]['_smc_login_disabled_v1']=1;
 $valid=SMC_CF01_Contract::file04_legacy_author_placeholder(null,$request);
