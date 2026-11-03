@@ -310,6 +310,18 @@ final class SMC_CF01_Contract {
 				|| '1' !== (string) get_user_meta( $user_id, '_smc_login_disabled_v1', true ) ) {
 				return 0;
 			}
+			// A failed create-audit followed by failed deletion must not be
+			// laundered into a verified identity on a subsequent request.
+			// Existing pre-upgrade sentinels need fresh recovery evidence.
+			if ( '1' !== (string) get_user_meta( $user_id, '_smc_legacy_author_placeholder_audited_v1', true ) ) {
+				if ( ! SMC_Security::audit( 'legacy_author_placeholder_recovered', $user_id, array( 'contract' => 'file04-authorship-v1' ) ) ) {
+					return 0;
+				}
+				update_user_meta( $user_id, '_smc_legacy_author_placeholder_audited_v1', 1 );
+				if ( '1' !== (string) get_user_meta( $user_id, '_smc_legacy_author_placeholder_audited_v1', true ) ) {
+					return 0;
+				}
+			}
 			return $user_id;
 		}
 		if ( ! function_exists( 'wp_insert_user' ) ) {
@@ -353,6 +365,12 @@ final class SMC_CF01_Contract {
 			}
 		}
 		if ( ! SMC_Security::audit( 'legacy_author_placeholder_created', $user_id, array( 'contract' => 'file04-authorship-v1' ) ) ) {
+			return self::rollback_unverified_legacy_author_placeholder( $user_id );
+		}
+		// Completion must be durable and distinguishable from an unaudited
+		// orphan left by a failed compensating delete.
+		update_user_meta( $user_id, '_smc_legacy_author_placeholder_audited_v1', 1 );
+		if ( '1' !== (string) get_user_meta( $user_id, '_smc_legacy_author_placeholder_audited_v1', true ) ) {
 			return self::rollback_unverified_legacy_author_placeholder( $user_id );
 		}
 		return $user_id;
