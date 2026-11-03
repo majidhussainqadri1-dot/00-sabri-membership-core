@@ -324,20 +324,55 @@ final class SMC_CF01_Contract {
 				'nickname'     => 'Legacy Author',
 				'role'         => 'subscriber',
 				'description'  => 'File 00 governed placeholder used only to preserve unknown/deleted legacy publication attribution during migration.',
+				// Install the no-login markers as early as WordPress allows,
+				// not after exposing a newly created subscriber principal.
+				'meta_input'   => array(
+					'_smc_legacy_author_placeholder_v1' => 1,
+					'_smc_login_disabled_v1'            => 1,
+				),
 			)
 		);
 		if ( is_wp_error( $created ) || absint( $created ) <= 0 ) {
 			return 0;
 		}
 		$user_id = absint( $created );
-		update_user_meta( $user_id, '_smc_legacy_author_placeholder_v1', 1 );
-		update_user_meta( $user_id, '_smc_login_disabled_v1', 1 );
-		if ( ! SMC_Security::audit( 'legacy_author_placeholder_created', $user_id, array( 'contract' => 'file04-authorship-v1' ) ) ) {
-			require_once ABSPATH . 'wp-admin/includes/user.php';
-			wp_delete_user( $user_id );
+		$record = get_userdata( $user_id );
+		// Never compensate by deleting a different principal if a provider
+		// returned a stale or ambiguous account ID.
+		if ( ! $record || (string) ( $record->user_login ?? '' ) !== $login ) {
 			return 0;
 		}
+		foreach ( array( '_smc_legacy_author_placeholder_v1', '_smc_login_disabled_v1' ) as $marker ) {
+			if ( '1' !== (string) get_user_meta( $user_id, $marker, true ) ) {
+				update_user_meta( $user_id, $marker, 1 );
+			}
+			// WordPress update_user_meta may report false for an unchanged
+			// value; the persisted readback, not that return value, decides.
+			if ( '1' !== (string) get_user_meta( $user_id, $marker, true ) ) {
+				return self::rollback_unverified_legacy_author_placeholder( $user_id );
+			}
+		}
+		if ( ! SMC_Security::audit( 'legacy_author_placeholder_created', $user_id, array( 'contract' => 'file04-authorship-v1' ) ) ) {
+			return self::rollback_unverified_legacy_author_placeholder( $user_id );
+		}
 		return $user_id;
+	}
+
+	/**
+	 * Best-effort compensation for a failed new-user creation saga. Never
+	 * return a verified File04 identity when persistence or audit failed.
+	 * Failure of wp_delete_user itself still needs an operator DB review.
+	 */
+	private static function rollback_unverified_legacy_author_placeholder( $user_id ) {
+		$user_id = absint( $user_id );
+		if ( $user_id > 0 && ! function_exists( 'wp_delete_user' )
+			&& defined( 'ABSPATH' ) && is_file( ABSPATH . 'wp-admin/includes/user.php' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/user.php';
+		}
+		if ( $user_id > 0 && function_exists( 'wp_delete_user' ) ) {
+			wp_delete_user( $user_id );
+		}
+		return 0;
 	}
 
 	/**
