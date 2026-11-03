@@ -14,6 +14,7 @@ $GLOBALS['user_meta'] = array(
 $GLOBALS['new_users']=0;
 $GLOBALS['smc_v12_signed_in']=true;
 $GLOBALS['smc_v12_migration_cap']=true;
+$GLOBALS['smc_v12_legacy_cap']=false;
 function absint($x){return abs((int)$x);}
 function get_userdata($x){return $GLOBALS['users'][(int)$x] ?? false;}
 function get_user_meta($x,$key,$single=true){return $GLOBALS['user_meta'][(int)$x][$key] ?? '';}
@@ -24,7 +25,11 @@ function is_wp_error($x){return $x instanceof WP_Error;}
 function __($s,$domain=''){return $s;}
 function is_user_logged_in(){return $GLOBALS['smc_v12_signed_in'];}
 function get_current_user_id(){return $GLOBALS['smc_v12_signed_in']?42:0;}
-function current_user_can($cap){return $cap==='sabri_feed_run_migrations' && $GLOBALS['smc_v12_migration_cap'];}
+function current_user_can($cap){
+    if($cap==='sabri_file04_run_migrations')return $GLOBALS['smc_v12_migration_cap'];
+    if($cap==='sabri_feed_run_migrations')return $GLOBALS['smc_v12_legacy_cap'];
+    return false;
+}
 function wp_json_encode($value,$flags=0){return json_encode($value,$flags);}
 function sanitize_key($v){return strtolower(preg_replace('/[^a-z0-9_-]/','',(string)$v));}
 $GLOBALS['smc_v12_filter_map']=array();
@@ -50,6 +55,12 @@ $canonical='00000000-0000-4000-8000-000000000077';
 $foreign='00000000-0000-4000-8000-000000000088';
 $ctx=array('file_number'=>'04','legacy_id'=>123,'purpose'=>'legacy_publication_migration');
 $test(SMC_CF01_Contract::file04_platform_uuid($canonical,77,$ctx)===$canonical,'own canonical source remains stable');
+$GLOBALS['smc_v12_migration_cap']=false;
+$GLOBALS['smc_v12_legacy_cap']=true;
+$legacyAuthorizedUUID=SMC_CF01_Contract::file04_platform_uuid('untrusted',77,$ctx);
+$test($legacyAuthorizedUUID===$canonical,'current File04 canonical File21 migration fallback is accepted');
+$GLOBALS['smc_v12_legacy_cap']=false;
+$GLOBALS['smc_v12_migration_cap']=true;
 $test(SMC_CF01_Contract::file04_platform_uuid($foreign,77,$ctx)===$canonical,'forged other-account UUID cannot override File00 owner');
 $test(SMC_CF01_Contract::file04_platform_uuid($canonical,999,$ctx)==='','deleted or unknown user cannot inherit a supplied UUID');
 $test(SMC_CF01_Contract::file04_platform_uuid('not-uuid',77,$ctx)===$canonical,'untrusted malformed UUID cannot replace canonical owner');
