@@ -19,6 +19,7 @@ function username_exists($x){return $x==='sabri_legacy_author_placeholder'?5:0;}
 function wp_insert_user($args){$GLOBALS['new_users']++;return new WP_Error('unexpected_create');}
 function wp_generate_uuid4(){return '00000000-0000-4000-8000-000000009999';}
 function is_wp_error($x){return $x instanceof WP_Error;}
+function __($s,$domain=''){return $s;}
 class WP_Error{public $code;function __construct($s){$this->code=$s;}}
 class WP_User{public $ID;function __construct($id){$this->ID=$id;}}
 class SMC_Security{public static function audit($n,$id,$a=array()){return true;}}
