@@ -18,6 +18,7 @@ $GLOBALS['smc_v12_legacy_cap']=false;
 function absint($x){return abs((int)$x);}
 function get_userdata($x){return $GLOBALS['users'][(int)$x] ?? false;}
 function get_user_meta($x,$key,$single=true){return $GLOBALS['user_meta'][(int)$x][$key] ?? '';}
+function update_user_meta($x,$key,$value){$GLOBALS['user_meta'][(int)$x][$key]=$value;return true;}
 function username_exists($x){return $x==='sabri_legacy_author_placeholder'?5:0;}
 function wp_insert_user($args){$GLOBALS['new_users']++;return new WP_Error('unexpected_create');}
 function wp_generate_uuid4(){return '00000000-0000-4000-8000-000000009999';}
@@ -104,6 +105,7 @@ $GLOBALS['user_meta'][5]['_smc_legacy_author_placeholder_v1']=1;
 $GLOBALS['user_meta'][5]['_smc_login_disabled_v1']=1;
 $valid=SMC_CF01_Contract::file04_legacy_author_placeholder(null,$request);
 $test(is_array($valid)&&!empty($valid['verified'])&&$valid['user_id']===5,'verified reserved sentinel remains a stable placeholder');
+$test((string)get_user_meta(5,'_smc_legacy_author_placeholder_audited_v1',true)==='1','existing sentinel is recovered through a durable File00 audit attestation');
 
 $forgedWhenReady=SMC_CF01_Contract::file04_legacy_author_placeholder(null,$fake);
 $test(is_array($forgedWhenReady)&&empty($forgedWhenReady['verified']),'forged 64-hex digest rejected even with real sentinel already present');
