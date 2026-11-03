@@ -55,7 +55,7 @@ class WP_User{public $ID;function __construct($id){$this->ID=$id;}}
 class SMC_Security{
     public static function audit($action,$id,$details=array()){
         $GLOBALS['st']['audits'][]=$action;
-        if(!empty($GLOBALS['st']['fault']['audit_fail']) && $action==='legacy_author_placeholder_created')return false;
+        if(!empty($GLOBALS['st']['fault']['audit_fail']) && strpos($action,'legacy_author_placeholder_')===0)return false;
         return true;
     }
 }
@@ -71,6 +71,7 @@ $r=$invoke();
 $check('healthy sentinel created and verified',is_array($r)&&!empty($r['verified'])&&$r['user_id']===901);
 $check('both login and attribution markers persisted',get_user_meta(901,'_smc_login_disabled_v1',true)==='1'||get_user_meta(901,'_smc_login_disabled_v1',true)===1 ? get_user_meta(901,'_smc_legacy_author_placeholder_v1',true)==='1'||get_user_meta(901,'_smc_legacy_author_placeholder_v1',true)===1 : false);
 $check('verified successful create leaves existing user',!!get_userdata(901));
+$check('successful audit commitment is durably marked',get_user_meta(901,'_smc_legacy_author_placeholder_audited_v1',true)==='1'||get_user_meta(901,'_smc_legacy_author_placeholder_audited_v1',true)===1);
 
 $r=$invoke(array('ignore_meta_input'=>true,'meta_fail'=>'_smc_login_disabled_v1'));
 $check('failed login-disabled marker denies result',empty($r['verified']));
@@ -92,6 +93,13 @@ $r=$invoke(array('audit_fail'=>true,'delete_fail'=>true));
 $check('failed deletion still denies verified receipt',empty($r['verified']));
 $check('retained orphan sentinel has login-disabled marker',get_user_meta(901,'_smc_login_disabled_v1',true)==='1'||get_user_meta(901,'_smc_login_disabled_v1',true)===1);
 $check('orphan with stored disabled marker cannot authenticate',is_wp_error(SMC_CF01_Contract::block_placeholder_login(new WP_User(901))));
+$retryWhileAuditDown=SMC_CF01_Contract::file04_legacy_author_placeholder(null,$req);
+$check('unaudited orphan cannot be reclassified as verified on retry',empty($retryWhileAuditDown['verified']));
+$GLOBALS['st']['fault']['audit_fail']=false;
+$recoverAfterAudit=SMC_CF01_Contract::file04_legacy_author_placeholder(null,$req);
+$check('orphan can be accepted only after audited recovery plus durable marker',
+  !empty($recoverAfterAudit['verified']) &&
+  (string)get_user_meta(901,'_smc_legacy_author_placeholder_audited_v1',true)==='1');
 
 $r=$invoke(array('insert'=>true));
 $check('insert failure neither verifies nor fabricates user',empty($r['verified'])&&!get_userdata(901));
