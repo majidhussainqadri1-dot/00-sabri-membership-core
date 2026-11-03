@@ -200,10 +200,9 @@ final class SMC_CF01_Contract {
 	 * The filter never invents an identity outside File 00.
 	 */
 	public static function file04_platform_uuid( $existing, $user_id, $context = array() ) {
-		unset( $context );
-		if ( is_string( $existing ) && self::valid_uuid( strtolower( trim( $existing ) ) ) ) {
-			return strtolower( trim( $existing ) );
-		}
+		// Caller-provided prior values are observations, never canonical File00
+		// identity authority. Refuse forged, cross-account and deleted subjects.
+		unset( $existing, $context );
 		return self::ensure_subject_uuid( absint( $user_id ) );
 	}
 
@@ -249,6 +248,13 @@ final class SMC_CF01_Contract {
 		$login = 'sabri_legacy_author_placeholder';
 		$user_id = function_exists( 'username_exists' ) ? absint( username_exists( $login ) ) : 0;
 		if ( $user_id > 0 ) {
+			// Reserved login collision is not authority to relabel a real
+			// person as a non-login legacy attribution sentinel.
+			if ( ! get_userdata( $user_id )
+				|| '1' !== (string) get_user_meta( $user_id, '_smc_legacy_author_placeholder_v1', true )
+				|| '1' !== (string) get_user_meta( $user_id, '_smc_login_disabled_v1', true ) ) {
+				return 0;
+			}
 			return $user_id;
 		}
 		if ( ! function_exists( 'wp_insert_user' ) ) {
