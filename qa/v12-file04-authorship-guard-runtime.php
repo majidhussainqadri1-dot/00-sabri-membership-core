@@ -79,6 +79,12 @@ $GLOBALS['user_meta'][5]['_smc_legacy_author_placeholder_v1']=1;
 $GLOBALS['user_meta'][5]['_smc_login_disabled_v1']=1;
 $valid=SMC_CF01_Contract::file04_legacy_author_placeholder(null,$request);
 $test(is_array($valid)&&!empty($valid['verified'])&&$valid['user_id']===5,'verified reserved sentinel remains a stable placeholder');
+$independentlyVerified=SMC_CF01_Contract::file04_legacy_author_placeholder($spoofed,$request);
+$test(is_array($independentlyVerified)&&!empty($independentlyVerified['verified'])
+  &&$independentlyVerified['user_id']===5
+  &&$independentlyVerified['platform_uuid']==='00000000-0000-4000-8000-000000000005',
+  'preverified upstream receipt is replaced by File00 authoritative identity');
+
 $sentinel=new WP_User(5);$person=new WP_User(77);
 $blocked=SMC_CF01_Contract::block_placeholder_login($sentinel,'ignored','secret');
 $test(is_wp_error($blocked),'legacy attribution sentinel explicitly denied normal sign-in');
