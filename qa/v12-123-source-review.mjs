@@ -65,6 +65,10 @@ const lenses=[
   ['File02 account owner',central.includes("'authentication_owner'")],
   ['typed authentication assurance',adv.includes('smc_file02_authentication_assurance_v1')],
   ['MFA retired without silent legacy factor',mfa.includes('retire_mfa_assertions')],
+  ['File08 canonical UUID resolver available',cf.includes('resolve_user_id_by_subject_uuid') && read(src+'functions.php').includes('smc_get_user_id_by_subject_uuid')],
+  ['File04 never trusts existing caller UUID',cf.includes('function file04_platform_uuid') && cf.includes('unset( $existing, $context )')],
+  ['File04 reserved author collision guarded',cf.includes("'_smc_legacy_author_placeholder_v1'") && cf.includes("'_smc_login_disabled_v1'") && cf.includes('function block_placeholder_login')],
+  ['T38 and File04 negative runtime suites wired',pkg.scripts.test.includes('qa/t38-file08-inverse-subject-runtime.php') && pkg.scripts.test.includes('qa/v12-file04-authorship-guard-runtime.php')],
  ]),
  review('05 — age, guardian and revalidation',[
   ['age/guardian reconciliation',lifecycle.includes('recheck_ages')],
