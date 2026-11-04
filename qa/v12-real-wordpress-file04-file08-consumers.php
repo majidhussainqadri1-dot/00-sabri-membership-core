@@ -66,6 +66,12 @@ if ( ! is_wp_error( $known_id ) && absint( $known_id ) > 0 ) {
 		'File04 returned sentinel cannot become a current login principal' );
 
 	$role->remove_cap( $cap );
+	// WordPress caches the current WP_User::allcaps within a request.
+	// Mimic the next protected request after role change instead of
+	// treating an intentionally stale in-memory auth object as DB truth.
+	wp_set_current_user( 0 );
+	clean_user_cache( $founder->ID );
+	wp_set_current_user( $founder->ID );
 	$denied = SNFLA_Plan_Completion::authorship_preflight( $known_id );
 	$check( is_wp_error( $denied ) && 'snfla_author_platform_uuid_unresolved' === $denied->get_error_code(),
 		'real File04 consumer denies a known-author request without current migration authority' );
@@ -73,6 +79,9 @@ if ( ! is_wp_error( $known_id ) && absint( $known_id ) > 0 ) {
 	$check( is_wp_error( $denied_ghost ) && 'snfla_author_placeholder_contract_required' === $denied_ghost->get_error_code(),
 		'real File04 consumer denies deleted-author request without migration authority' );
 	$role->add_cap( $cap );
+	wp_set_current_user( 0 );
+	clean_user_cache( $founder->ID );
+	wp_set_current_user( $founder->ID );
 
 	wp_set_current_user( 0 );
 	$guest = SNFLA_Plan_Completion::authorship_preflight( $known_id );
