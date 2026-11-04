@@ -290,11 +290,18 @@ final class SMC_CF01_Contract {
 	 */
 	public static function block_placeholder_login( $user, $username = '', $password = '' ) {
 		unset( $username, $password );
-		if ( $user instanceof WP_User
-			&& ( '1' === (string) get_user_meta( $user->ID, '_smc_legacy_author_placeholder_v1', true )
-				|| '1' === (string) get_user_meta( $user->ID, '_smc_login_disabled_v1', true ) ) ) {
-			return new WP_Error( 'smc_legacy_author_placeholder_login_denied',
-				__( 'This system attribution identity cannot sign in.', 'sabri-membership-core' ) );
+		if ( $user instanceof WP_User ) {
+			// Never rely on usermeta alone: a failed two-marker write plus a
+			// failed compensating delete can leave a reserved-login orphan.
+			$record = get_userdata( $user->ID );
+			$login = (string) ( $user->user_login ?? ( $record->user_login ?? '' ) );
+			$reserved = 0 === strcasecmp( $login, 'sabri_legacy_author_placeholder' );
+			$marked = '1' === (string) get_user_meta( $user->ID, '_smc_legacy_author_placeholder_v1', true )
+				|| '1' === (string) get_user_meta( $user->ID, '_smc_login_disabled_v1', true );
+			if ( $reserved || $marked ) {
+				return new WP_Error( 'smc_legacy_author_placeholder_login_denied',
+					__( 'This system attribution identity cannot sign in.', 'sabri-membership-core' ) );
+			}
 		}
 		return $user;
 	}
