@@ -38,6 +38,7 @@ function smc_application($id){
   'phone_e164_enc'=>'phone', 'profile_visibility'=>'private');
 }
 function smc_age_from_dob($dob){
+ if($dob==='under_min')return 10;
  if($dob==='minor')return 16;
  if($dob==='adult')return 25;
  return false;
@@ -86,6 +87,15 @@ $GLOBALS['v12_subject']['guardian_required']=false;
 $a=SMC_Contracts::assertions(77);
 $test('unreadable or unknown DOB never generates an approved protected assertion',
  empty($a['eligible'])&&empty($a['can_message'])&&empty($a['can_book_appointment']));
+$GLOBALS['v12_subject']['birth']='under_min';
+$GLOBALS['v12_subject']['guardian_required']=true;
+$GLOBALS['v12_subject']['consent']=true;
+$a=SMC_Contracts::assertions(77);
+$test('guardian approval cannot override legal minimum age at action time',
+ empty($a['eligible'])&&empty($a['can_message'])&&empty($a['can_book_appointment']));
+$GLOBALS['v12_subject']['birth']='adult';
+$GLOBALS['v12_subject']['guardian_required']=false;
+$GLOBALS['v12_subject']['consent']=false;
 $GLOBALS['v12_subject']['institutional']=true;
 $a=SMC_Contracts::assertions(77);
 $test('institutional account remains exempt from ordinary human DOB path',!empty($a['eligible']));
