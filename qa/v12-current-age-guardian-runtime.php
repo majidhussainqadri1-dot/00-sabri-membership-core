@@ -5,6 +5,7 @@
  * sufficient. Isolated WordPress data-contract fixture, no live DB.
  */
 define('ABSPATH',__DIR__.'/');
+define('SMC_CONTRACT_VERSION','fixture-contract-1.0.0');
 $GLOBALS['v12_subject']=array(
  'birth'=>'minor','guardian_required'=>false,'consent'=>false,
  'user'=>77,'institutional'=>false
