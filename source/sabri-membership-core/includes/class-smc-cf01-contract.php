@@ -31,6 +31,9 @@ final class SMC_CF01_Contract {
 		add_action( 'user_register', array( __CLASS__, 'ensure_subject_uuid' ), 5, 1 );
 		add_filter( 'sabri_file00_platform_uuid_v1', array( __CLASS__, 'file04_platform_uuid' ), 10, 3 );
 		add_filter( 'sabri_file00_legacy_author_placeholder_v1', array( __CLASS__, 'file04_legacy_author_placeholder' ), 10, 2 );
+		add_filter( 'authenticate', array( __CLASS__, 'block_placeholder_login' ), 99, 3 );
+		add_filter( 'wp_authenticate_user', array( __CLASS__, 'block_placeholder_login' ), 99, 2 );
+		add_filter( 'determine_current_user', array( __CLASS__, 'block_placeholder_session' ), 99, 1 );
 	}
 
 	/**
@@ -73,6 +76,30 @@ final class SMC_CF01_Contract {
 	 * @param array $context Requested action, purpose, jurisdiction and trace ID.
 	 * @return array<string,mixed>
 	 */
+	/**
+	 * Internal File08 canonical subject lookup: read-only and exactly unique.
+	 * No authorization, relationship, clinical permission or role is granted.
+	 */
+	public static function resolve_user_id_by_subject_uuid( $subject_uuid ) {
+		if ( ! is_string( $subject_uuid ) || $subject_uuid !== trim( $subject_uuid ) ) { return 0; }
+		$subject_uuid = strtolower( $subject_uuid );
+		if ( ! self::valid_uuid( $subject_uuid ) ) { return 0; }
+		// File00 owns this internal usermeta key. Read at most two matches to
+		// detect collisions instead of arbitrarily choosing someone else's account.
+		$matches = get_users( array(
+			'fields'     => 'ids',
+			'number'     => 2,
+			'meta_key'   => '_smc_platform_uuid_v1',
+			'meta_value' => $subject_uuid,
+		) );
+		if ( ! is_array( $matches ) || 1 !== count( $matches ) || ! is_scalar( $matches[0] ) ) { return 0; }
+		$user_id = absint( $matches[0] );
+		if ( ! $user_id || ! get_userdata( $user_id ) ) { return 0; }
+		$stored = get_user_meta( $user_id, '_smc_platform_uuid_v1', true );
+		if ( ! self::valid_uuid( $stored ) || ! hash_equals( $subject_uuid, strtolower( $stored ) ) ) { return 0; }
+		return $user_id;
+	}
+
 	public static function membership_assertion( $user_id, $context = array() ) {
 		$user_id = absint( $user_id );
 		$context = is_array( $context ) ? $context : array();
@@ -176,9 +203,11 @@ final class SMC_CF01_Contract {
 	 * The filter never invents an identity outside File 00.
 	 */
 	public static function file04_platform_uuid( $existing, $user_id, $context = array() ) {
-		unset( $context );
-		if ( is_string( $existing ) && self::valid_uuid( strtolower( trim( $existing ) ) ) ) {
-			return strtolower( trim( $existing ) );
+		// The filter's prior value is untrusted. A public or other-module
+		// invocation cannot mint an unrelated member's canonical UUID.
+		unset( $existing );
+		if ( ! self::file04_migration_authorized( $context, false ) ) {
+			return '';
 		}
 		return self::ensure_subject_uuid( absint( $user_id ) );
 	}
@@ -188,15 +217,50 @@ final class SMC_CF01_Contract {
 	 * A single non-login service identity is created and owned by File 00 so
 	 * migration never misattributes unknown authors to a real member.
 	 */
-	public static function file04_legacy_author_placeholder( $existing, $request = array() ) {
-		if ( is_array( $existing ) && ! empty( $existing['verified'] ) ) {
-			return $existing;
+	private static function file04_migration_authorized( $context, $placeholder = false ) {
+		$context = is_array( $context ) ? $context : array();
+		if ( '04' !== (string) ( $context['file_number'] ?? '' )
+			|| absint( $context['legacy_id'] ?? 0 ) <= 0
+			|| ( ! $placeholder && 'legacy_publication_migration' !== (string) ( $context['purpose'] ?? '' ) )
+			|| ! function_exists( 'get_current_user_id' )
+			|| absint( get_current_user_id() ) <= 0
+			|| ! function_exists( 'current_user_can' )
+			|| ( ! current_user_can( 'sabri_file04_run_migrations' )
+				&& ! current_user_can( 'sabri_feed_run_migrations' ) ) ) {
+			return false;
 		}
+		return true;
+	}
+
+	/**
+	 * Independently reproduce File04's SHA256 of a canonically sorted,
+	 * JSON-encoded, three-field migration request. A 64-hex appearance alone
+	 * is not a proof that the request fields were bound.
+	 */
+	private static function file04_request_digest( $legacy_id, $legacy_author_id ) {
+		$payload = array(
+			'file_number' => '04',
+			'legacy_id' => absint( $legacy_id ),
+			'legacy_author_id' => absint( $legacy_author_id ),
+		);
+		ksort( $payload, SORT_STRING );
+		$json = wp_json_encode( $payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES );
+		return is_string( $json ) ? hash( 'sha256', $json ) : '';
+	}
+
+	public static function file04_legacy_author_placeholder( $existing, $request = array() ) {
+		// Untrusted upstream filter outputs never certify File00 authorship.
+		unset( $existing );
 		$request = is_array( $request ) ? $request : array();
 		$legacy_id = absint( $request['legacy_id'] ?? 0 );
 		$legacy_author_id = absint( $request['legacy_author_id'] ?? 0 );
 		$request_digest = strtolower( trim( (string) ( $request['request_digest'] ?? '' ) ) );
-		if ( $legacy_id <= 0 || 1 !== preg_match( '/^[a-f0-9]{64}$/', $request_digest ) ) {
+		$expected_digest = self::file04_request_digest( $legacy_id, $legacy_author_id );
+		if ( ! self::file04_migration_authorized( $request, true )
+			|| ! is_string( $request['request_digest'] ?? null )
+			|| 1 !== preg_match( '/^[a-f0-9]{64}$/D', $request_digest )
+			|| '' === $expected_digest
+			|| ! hash_equals( $expected_digest, $request_digest ) ) {
 			return array( 'verified' => false, 'provider_id' => 'file00_legacy_author_placeholder_v1' );
 		}
 		$user_id = self::ensure_legacy_author_placeholder_user();
@@ -221,10 +285,89 @@ final class SMC_CF01_Contract {
 		);
 	}
 
+	/**
+	 * A legacy-author sentinel is attribution metadata, never a principal.
+	 * Password authentication and session-cookie current-user resolution must
+	 * both fail closed, even when earlier DB writes left the markers missing.
+	 */
+	private static function is_disabled_legacy_author_identity( $user_id ) {
+		$user_id = absint( $user_id );
+		if ( $user_id <= 0 ) {
+			return false;
+		}
+		$user = get_userdata( $user_id );
+		$login = $user ? (string) ( $user->user_login ?? '' ) : '';
+		return 0 === strcasecmp( $login, 'sabri_legacy_author_placeholder' )
+			|| '1' === (string) get_user_meta( $user_id, '_smc_legacy_author_placeholder_v1', true )
+			|| '1' === (string) get_user_meta( $user_id, '_smc_login_disabled_v1', true );
+	}
+
+	/**
+	 * WordPress cookie auth / programmatic current-user resolution hard stop.
+	 * Preserve unrelated existing principal IDs and false/zero values.
+	 */
+	public static function block_placeholder_session( $user_id ) {
+		if ( is_numeric( $user_id ) && self::is_disabled_legacy_author_identity( absint( $user_id ) ) ) {
+			return 0;
+		}
+		return $user_id;
+	}
+
+	public static function block_placeholder_login( $user, $username = '', $password = '' ) {
+		unset( $username, $password );
+		if ( $user instanceof WP_User
+			&& ( self::is_disabled_legacy_author_identity( $user->ID )
+				|| 0 === strcasecmp( (string) ( $user->user_login ?? '' ), 'sabri_legacy_author_placeholder' ) ) ) {
+			return new WP_Error( 'smc_legacy_author_placeholder_login_denied',
+				__( 'This system attribution identity cannot sign in.', 'sabri-membership-core' ) );
+		}
+		return $user;
+	}
+
 	private static function ensure_legacy_author_placeholder_user() {
 		$login = 'sabri_legacy_author_placeholder';
 		$user_id = function_exists( 'username_exists' ) ? absint( username_exists( $login ) ) : 0;
 		if ( $user_id > 0 ) {
+			// Reserved login collision is not authority to relabel a real
+			// person as a non-login legacy attribution sentinel.
+			if ( ! get_userdata( $user_id )
+				|| '1' !== (string) get_user_meta( $user_id, '_smc_legacy_author_placeholder_v1', true )
+				|| '1' !== (string) get_user_meta( $user_id, '_smc_login_disabled_v1', true ) ) {
+				return 0;
+			}
+			// A failed create-audit followed by failed deletion must not be
+			// laundered into a verified identity on a subsequent request.
+			// Existing pre-upgrade sentinels need fresh recovery evidence.
+			if ( '1' !== (string) get_user_meta( $user_id, '_smc_legacy_author_placeholder_audited_v1', true ) ) {
+				if ( ! SMC_Security::audit( 'legacy_author_placeholder_recovered', $user_id, array( 'contract' => 'file04-authorship-v1' ) ) ) {
+					return 0;
+				}
+				update_user_meta( $user_id, '_smc_legacy_author_placeholder_audited_v1', 1 );
+				if ( '1' !== (string) get_user_meta( $user_id, '_smc_legacy_author_placeholder_audited_v1', true ) ) {
+					return 0;
+				}
+			}
+			// Prior File00 builds provisioned this attribution-only sentinel
+			// with the subscriber role. It must never retain WordPress roles
+			// or direct capabilities. An audited, persisted retirement is
+			// permitted only for the exact reserved and marked identity.
+			$existing_user = get_userdata( $user_id );
+			if ( $existing_user instanceof WP_User
+				&& ( ! empty( $existing_user->roles ) || ! empty( $existing_user->caps ) ) ) {
+				if ( ! method_exists( $existing_user, 'set_role' )
+					|| ! SMC_Security::audit( 'legacy_author_placeholder_role_retirement_requested', $user_id, array( 'contract' => 'file04-authorship-v1' ) ) ) {
+					return 0;
+				}
+				$existing_user->set_role( '' );
+				if ( function_exists( 'clean_user_cache' ) ) {
+					clean_user_cache( $user_id );
+				}
+				$existing_user = get_userdata( $user_id );
+				if ( ! ( $existing_user instanceof WP_User )
+					|| ! empty( $existing_user->roles ) || ! empty( $existing_user->caps ) ) {
+					return 0;
+				}
+			}
 			return $user_id;
 		}
 		if ( ! function_exists( 'wp_insert_user' ) ) {
@@ -237,22 +380,69 @@ final class SMC_CF01_Contract {
 				'user_pass'    => $password,
 				'display_name' => 'Legacy Author (Unknown)',
 				'nickname'     => 'Legacy Author',
-				'role'         => 'subscriber',
+				'role'         => '', // Explicitly no WordPress role; never default to subscriber.
 				'description'  => 'File 00 governed placeholder used only to preserve unknown/deleted legacy publication attribution during migration.',
+				// Install the no-login markers as early as WordPress allows,
+				// not after exposing a newly created subscriber principal.
+				'meta_input'   => array(
+					'_smc_legacy_author_placeholder_v1' => 1,
+					'_smc_login_disabled_v1'            => 1,
+				),
 			)
 		);
 		if ( is_wp_error( $created ) || absint( $created ) <= 0 ) {
 			return 0;
 		}
 		$user_id = absint( $created );
-		update_user_meta( $user_id, '_smc_legacy_author_placeholder_v1', 1 );
-		update_user_meta( $user_id, '_smc_login_disabled_v1', 1 );
-		if ( ! SMC_Security::audit( 'legacy_author_placeholder_created', $user_id, array( 'contract' => 'file04-authorship-v1' ) ) ) {
-			require_once ABSPATH . 'wp-admin/includes/user.php';
-			wp_delete_user( $user_id );
+		$record = get_userdata( $user_id );
+		// Never compensate by deleting a different principal if a provider
+		// returned a stale or ambiguous account ID.
+		if ( ! $record || (string) ( $record->user_login ?? '' ) !== $login ) {
 			return 0;
 		}
+		// WordPress plugins may filter or change roles during registration.
+		// Reject and compensate any unexpected privilege assignment.
+		if ( $record instanceof WP_User
+			&& ( ! empty( $record->roles ) || ! empty( $record->caps ) ) ) {
+			return self::rollback_unverified_legacy_author_placeholder( $user_id );
+		}
+		foreach ( array( '_smc_legacy_author_placeholder_v1', '_smc_login_disabled_v1' ) as $marker ) {
+			if ( '1' !== (string) get_user_meta( $user_id, $marker, true ) ) {
+				update_user_meta( $user_id, $marker, 1 );
+			}
+			// WordPress update_user_meta may report false for an unchanged
+			// value; the persisted readback, not that return value, decides.
+			if ( '1' !== (string) get_user_meta( $user_id, $marker, true ) ) {
+				return self::rollback_unverified_legacy_author_placeholder( $user_id );
+			}
+		}
+		if ( ! SMC_Security::audit( 'legacy_author_placeholder_created', $user_id, array( 'contract' => 'file04-authorship-v1' ) ) ) {
+			return self::rollback_unverified_legacy_author_placeholder( $user_id );
+		}
+		// Completion must be durable and distinguishable from an unaudited
+		// orphan left by a failed compensating delete.
+		update_user_meta( $user_id, '_smc_legacy_author_placeholder_audited_v1', 1 );
+		if ( '1' !== (string) get_user_meta( $user_id, '_smc_legacy_author_placeholder_audited_v1', true ) ) {
+			return self::rollback_unverified_legacy_author_placeholder( $user_id );
+		}
 		return $user_id;
+	}
+
+	/**
+	 * Best-effort compensation for a failed new-user creation saga. Never
+	 * return a verified File04 identity when persistence or audit failed.
+	 * Failure of wp_delete_user itself still needs an operator DB review.
+	 */
+	private static function rollback_unverified_legacy_author_placeholder( $user_id ) {
+		$user_id = absint( $user_id );
+		if ( $user_id > 0 && ! function_exists( 'wp_delete_user' )
+			&& defined( 'ABSPATH' ) && is_file( ABSPATH . 'wp-admin/includes/user.php' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/user.php';
+		}
+		if ( $user_id > 0 && function_exists( 'wp_delete_user' ) ) {
+			wp_delete_user( $user_id );
+		}
+		return 0;
 	}
 
 	/**
