@@ -73,6 +73,8 @@ const lenses=[
  ]),
  review('05 — age, guardian and revalidation',[
   ['age/guardian reconciliation',lifecycle.includes('recheck_ages')],
+  ['F00-CEN-03 current DOB overrides stale stored minor flag',contracts.includes('$live_age = self::age_context( $user_id );') && contracts.includes('$age_known =') && contracts.includes('! empty( $live_age[\'minor\'] )') && contracts.includes('&& $guardian_verified &&')],
+  ['F00-CEN-03 runtime regression wired into source QA',pkg.scripts.test.includes('qa/v12-current-age-guardian-runtime.php')],
   ['guardian succession consent',adv.includes('complete_guardian_succession')],
   ['critical identity revocation',adv.includes('critical_identity_change')&&adv.includes('revoke_all_sessions')],
   ['periodic verification bounded to one year',adv.includes('function reverification_interval_seconds') && adv.includes('min( YEAR_IN_SECONDS, $requested )')],
