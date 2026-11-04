@@ -108,6 +108,12 @@ $check('non-atomic dual failure must not verify incomplete account',empty($r['ve
 $check('dual failure fixture retains orphan to examine login safety',!!get_userdata(901));
 $check('reserved orphan without persisted marker cannot authenticate',
  is_wp_error(SMC_CF01_Contract::block_placeholder_login(new WP_User(901))));
+$check('session-cookie guard exists for orphaned reserved identity',method_exists('SMC_CF01_Contract','block_placeholder_session'));
+if(method_exists('SMC_CF01_Contract','block_placeholder_session')) {
+ $check('unmarked orphan cannot use inherited session cookie',SMC_CF01_Contract::block_placeholder_session(901)===0);
+ $check('normal unrelated session survives',SMC_CF01_Contract::block_placeholder_session(1001)===1001);
+}
+
 $check('unrelated non-reserved account remains untouched by reserved-login ban',
  SMC_CF01_Contract::block_placeholder_login(new WP_User(1001)) instanceof WP_User);
 
