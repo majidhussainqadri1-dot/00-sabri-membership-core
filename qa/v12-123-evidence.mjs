@@ -131,6 +131,8 @@ const staticEvidence=[
  {file:'qa/latest-central-contract.mjs',regex:/^PASS:\s+(F00-CEN-0[12])\b/gm,ids:['F00-CEN-01','F00-CEN-02']},
  {file:'qa/advanced-trust-contract.mjs',regex:/^PASS\s+EXT-(\d{3})\b/gm,
   ids:Array.from({length:20},(_,i)=>'F00-EXT-'+String(i+1).padStart(3,'0'))},
+ {file:'qa/v12-r80-source-implementation.mjs',regex:/^PASS\s+(F00-R\d{3})\s+explicit implementation source/gm,
+  ids:Array.from({length:80},(_,i)=>'F00-R'+String(i+11).padStart(3,'0'))},
 ];
 for(const entry of staticEvidence){
  try{
@@ -143,10 +145,27 @@ for(const entry of staticEvidence){
   }
  }catch(e){fail.push('Static contract execution failed: '+entry.file+': '+(e.message||String(e)).slice(0,160));}
 }
+// Promote R011–R090 from old group-only pointers to specifically identified,
+// locally checksum-verified PHP/UX implementation entrypoint evidence.
+const r80Report=JSON.parse(read('build/file00-v12-r80-source.json'));
+const specific=new Map((r80Report.rows||[]).map(r=>[r.id,r]));
+if(specific.size!==80 || (r80Report.summary||{}).source_entrypoints_verified!==80){
+ fail.push('80 per-R source implementation references not independently verified');
+}
 for(const row of rows){
+ if(specific.has(row.id)){
+  const exact=specific.get(row.id);
+  row.historical_group_source_evidence=row.source_evidence;
+  row.source_evidence=exact.evidence.map(e=>({
+   path:e.path,exists:true,sha256:e.sha256,source_signal:e.symbol,signal_type:e.source_kind
+  }));
+  row.source_granularity='requirement_specific_source_entrypoints';
+  row.current_source_signal_verified=exact.source_entrypoints_verified===true;
+  row.individual_static_check_present=true;
+ }
  row.static_contract_executed_and_passed=exercised.has(row.id);
  row.static_contract_evidence_source=row.static_contract_executed_and_passed
-    ? (row.id.startsWith('F00-EXT')?'qa/advanced-trust-contract.mjs':'qa/latest-central-contract.mjs'):null;
+    ? (row.id.startsWith('F00-EXT')?'qa/advanced-trust-contract.mjs':row.id.startsWith('F00-R')?'qa/v12-r80-source-implementation.mjs':'qa/latest-central-contract.mjs'):null;
  row.static_contract_result_scope='checkout_only_not_independent_CI_or_behavioral_acceptance';
 }
 let head='unknown';
