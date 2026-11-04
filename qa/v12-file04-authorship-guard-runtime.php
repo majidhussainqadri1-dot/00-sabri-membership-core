@@ -6,7 +6,9 @@
  */
 defined('ABSPATH') || define('ABSPATH', __DIR__.'/');
 $GLOBALS['users'] = array(
-  5=>(object)array('ID'=>5),77=>(object)array('ID'=>77),88=>(object)array('ID'=>88));
+  5=>(object)array('ID'=>5,'user_login'=>'sabri_legacy_author_placeholder'),
+  77=>(object)array('ID'=>77,'user_login'=>'normal_member_77'),
+  88=>(object)array('ID'=>88,'user_login'=>'normal_member_88'));
 $GLOBALS['user_meta'] = array(
   5=>array('_smc_platform_uuid_v1'=>'00000000-0000-4000-8000-000000000005'),
   77=>array('_smc_platform_uuid_v1'=>'00000000-0000-4000-8000-000000000077'),
@@ -76,6 +78,10 @@ $checkReservedEarly=SMC_CF01_Contract::block_placeholder_login(new WP_User(5));
 $test(is_wp_error($checkReservedEarly),'reserved-login user is blocked even without security meta markers');
 $checkNormalEarly=SMC_CF01_Contract::block_placeholder_login(new WP_User(77));
 $test($checkNormalEarly instanceof WP_User,'normal user never blocked solely due to reserved-login rule');
+
+$test(SMC_CF01_Contract::block_placeholder_session(5)===0,'unmarked reserved login cannot be current WordPress principal');
+$test(SMC_CF01_Contract::block_placeholder_session(77)===77,'unmarked normal member session preserved');
+
 $wrongContext=SMC_CF01_Contract::file04_platform_uuid('',77,array('file_number'=>'09','legacy_id'=>123,'purpose'=>'legacy_publication_migration'));
 $test($wrongContext==='','File04 UUID filter rejects wrong consumer');
 $wrongPurpose=SMC_CF01_Contract::file04_platform_uuid('',77,array('file_number'=>'04','legacy_id'=>123,'purpose'=>'public_profile'));
@@ -145,6 +151,8 @@ $test(is_array($hookPlaceholder)&&!empty($hookPlaceholder['verified'])
   &&$hookPlaceholder['legacy_id']===123
   &&$hookPlaceholder['legacy_author_id']===0,
   'registered File04 placeholder filter returns request-bound File00 owner receipt');
+$test(apply_filters('determine_current_user',5)===0,'registered current-user filter revokes reserved sentinel sessions');
+$test(apply_filters('determine_current_user',77)===77,'registered current-user filter preserves regular authenticated members');
 $hookLogin=apply_filters('authenticate',new WP_User(5),'sabri_legacy_author_placeholder','blocked');
 $test(is_wp_error($hookLogin),'registered authenticate filter denies placeholder sign-in');
 $hookNormal=apply_filters('wp_authenticate_user',new WP_User(77),'secret');
