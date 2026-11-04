@@ -93,6 +93,15 @@ $r=$invoke(array('audit_fail'=>true,'delete_fail'=>true));
 $check('failed deletion still denies verified receipt',empty($r['verified']));
 $check('retained orphan sentinel has login-disabled marker',get_user_meta(901,'_smc_login_disabled_v1',true)==='1'||get_user_meta(901,'_smc_login_disabled_v1',true)===1);
 $check('orphan with stored disabled marker cannot authenticate',is_wp_error(SMC_CF01_Contract::block_placeholder_login(new WP_User(901))));
+
+$r=$invoke(array('ignore_meta_input'=>true,'meta_fail'=>'_smc_login_disabled_v1','delete_fail'=>true));
+$check('non-atomic dual failure must not verify incomplete account',empty($r['verified']));
+$check('dual failure fixture retains orphan to examine login safety',!!get_userdata(901));
+$check('reserved orphan without persisted marker cannot authenticate',
+ is_wp_error(SMC_CF01_Contract::block_placeholder_login(new WP_User(901))));
+$check('unrelated non-reserved account remains untouched by reserved-login ban',
+ SMC_CF01_Contract::block_placeholder_login(new WP_User(1001)) instanceof WP_User);
+
 $retryWhileAuditDown=SMC_CF01_Contract::file04_legacy_author_placeholder(null,$req);
 $check('unaudited orphan cannot be reclassified as verified on retry',empty($retryWhileAuditDown['verified']));
 $GLOBALS['st']['fault']['audit_fail']=false;
