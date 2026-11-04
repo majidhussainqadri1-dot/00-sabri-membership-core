@@ -9,7 +9,7 @@ $GLOBALS['st'] = array();
 function reset_case($fault=array()) {
     $GLOBALS['st'] = array(
         'users'=>array(), 'meta'=>array(), 'fault'=>$fault,
-        'created'=>0, 'deleted'=>0, 'audits'=>array(), 'actor'=>42,
+        'created'=>0, 'deleted'=>0, 'audits'=>array(), 'actor'=>42, 'created_role'=>null,
     );
 }
 function absint($x){return abs((int)$x);}
@@ -21,6 +21,7 @@ function wp_generate_uuid4(){return '12345678-1234-4123-8123-123456789abc';}
 function wp_insert_user($args){
     if(!empty($GLOBALS['st']['fault']['insert']))return new WP_Error('insert_failure');
     $id=901;
+    $GLOBALS['st']['created_role']=$args['role']??null;
     $GLOBALS['st']['users'][$id]=(object)array('ID'=>$id,'user_login'=>$args['user_login']);
     $GLOBALS['st']['created']++;
     if(empty($GLOBALS['st']['fault']['ignore_meta_input'])){
@@ -70,6 +71,7 @@ $invoke=function($fault=array())use($req){reset_case($fault);return SMC_CF01_Con
 
 $r=$invoke();
 $check('healthy sentinel created and verified',is_array($r)&&!empty($r['verified'])&&$r['user_id']===901);
+$check('File04 non-login attribution sentinel is provisioned with no WordPress role', $GLOBALS['st']['created_role']==='');
 $check('both login and attribution markers persisted',get_user_meta(901,'_smc_login_disabled_v1',true)==='1'||get_user_meta(901,'_smc_login_disabled_v1',true)===1 ? get_user_meta(901,'_smc_legacy_author_placeholder_v1',true)==='1'||get_user_meta(901,'_smc_legacy_author_placeholder_v1',true)===1 : false);
 $check('verified successful create leaves existing user',!!get_userdata(901));
 $check('successful audit commitment is durably marked',get_user_meta(901,'_smc_legacy_author_placeholder_audited_v1',true)==='1'||get_user_meta(901,'_smc_legacy_author_placeholder_audited_v1',true)===1);
