@@ -55,7 +55,16 @@ if ( empty( $receipt['verified'] ) ) {
 		'marker_disabled' => $existing_id ? get_user_meta( $existing_id, '_smc_login_disabled_v1', true ) : null,
 		'marker_audited' => $existing_id ? get_user_meta( $existing_id, '_smc_legacy_author_placeholder_audited_v1', true ) : null,
 		'receipt' => $receipt,
+		'audit_error' => SMC_Security::last_audit_error(),
+		'last_actions' => $GLOBALS['wpdb']->get_col( "SELECT action FROM {$GLOBALS['wpdb']->prefix}smc_audit_log ORDER BY id DESC LIMIT 7" ),
 	) ) . "\n" );
+	$probe = wp_insert_user( array(
+		'user_login' => 'smc_v12_role_probe_20261104',
+		'user_email' => 'smc-v12-role-probe@example.test',
+		'user_pass' => wp_generate_password( 40, true, true ),
+		'role' => '',
+	) );
+	fwrite( STDERR, 'File04 diagnostic independent WordPress no-role user: ' . ( is_wp_error( $probe ) ? $probe->get_error_code() : ( 'created ' . absint( $probe ) ) ) . "\n" );
 }
 $check( is_array( $receipt ) && ! empty( $receipt['verified'] ) && ! empty( $receipt['placeholder'] ), 'creation yields an authorized File00 placeholder receipt' );
 $id   = absint( $receipt['user_id'] ?? 0 );
