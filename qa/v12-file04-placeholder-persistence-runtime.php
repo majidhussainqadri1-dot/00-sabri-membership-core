@@ -30,6 +30,7 @@ function wp_insert_user($args){
 }
 function update_user_meta($id,$key,$value){
     $f=$GLOBALS['st']['fault'];
+    if(!empty($f['meta_fail_both']) && in_array($key,array('_smc_legacy_author_placeholder_v1','_smc_login_disabled_v1'),true))return false;
     if(!empty($f['meta_fail']) && $key===$f['meta_fail'])return false;
     if(!empty($f['meta_silent']) && $key===$f['meta_silent'])return true;
     $GLOBALS['st']['meta'][$id][$key]=$value;return true;
@@ -51,7 +52,7 @@ function current_user_can($cap){return $cap==='sabri_file04_run_migrations';}
 function wp_json_encode($data,$flags=0){return json_encode($data,$flags);}
 function __($value,$domain=''){return $value;}
 class WP_Error{private $code;function __construct($c){$this->code=$c;}function get_error_code(){return $this->code;}}
-class WP_User{public $ID;function __construct($id){$this->ID=$id;}}
+class WP_User{public $ID;public $user_login;function __construct($id){$this->ID=$id;$u=get_userdata($id);$this->user_login=$u?$u->user_login:('ordinary_'.$id);}}
 class SMC_Security{
     public static function audit($action,$id,$details=array()){
         $GLOBALS['st']['audits'][]=$action;
@@ -94,14 +95,6 @@ $check('failed deletion still denies verified receipt',empty($r['verified']));
 $check('retained orphan sentinel has login-disabled marker',get_user_meta(901,'_smc_login_disabled_v1',true)==='1'||get_user_meta(901,'_smc_login_disabled_v1',true)===1);
 $check('orphan with stored disabled marker cannot authenticate',is_wp_error(SMC_CF01_Contract::block_placeholder_login(new WP_User(901))));
 
-$r=$invoke(array('ignore_meta_input'=>true,'meta_fail'=>'_smc_login_disabled_v1','delete_fail'=>true));
-$check('non-atomic dual failure must not verify incomplete account',empty($r['verified']));
-$check('dual failure fixture retains orphan to examine login safety',!!get_userdata(901));
-$check('reserved orphan without persisted marker cannot authenticate',
- is_wp_error(SMC_CF01_Contract::block_placeholder_login(new WP_User(901))));
-$check('unrelated non-reserved account remains untouched by reserved-login ban',
- SMC_CF01_Contract::block_placeholder_login(new WP_User(1001)) instanceof WP_User);
-
 $retryWhileAuditDown=SMC_CF01_Contract::file04_legacy_author_placeholder(null,$req);
 $check('unaudited orphan cannot be reclassified as verified on retry',empty($retryWhileAuditDown['verified']));
 $GLOBALS['st']['fault']['audit_fail']=false;
@@ -109,6 +102,14 @@ $recoverAfterAudit=SMC_CF01_Contract::file04_legacy_author_placeholder(null,$req
 $check('orphan can be accepted only after audited recovery plus durable marker',
   !empty($recoverAfterAudit['verified']) &&
   (string)get_user_meta(901,'_smc_legacy_author_placeholder_audited_v1',true)==='1');
+
+$r=$invoke(array('ignore_meta_input'=>true,'meta_fail_both'=>true,'delete_fail'=>true));
+$check('non-atomic dual failure must not verify incomplete account',empty($r['verified']));
+$check('dual failure fixture retains orphan to examine login safety',!!get_userdata(901));
+$check('reserved orphan without persisted marker cannot authenticate',
+ is_wp_error(SMC_CF01_Contract::block_placeholder_login(new WP_User(901))));
+$check('unrelated non-reserved account remains untouched by reserved-login ban',
+ SMC_CF01_Contract::block_placeholder_login(new WP_User(1001)) instanceof WP_User);
 
 $r=$invoke(array('insert'=>true));
 $check('insert failure neither verifies nor fabricates user',empty($r['verified'])&&!get_userdata(901));
