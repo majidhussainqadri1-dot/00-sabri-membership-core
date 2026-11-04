@@ -92,11 +92,20 @@ final class SMC_Contracts {
 		}
 		$phone_verified = self::contact_verified( $user_id, 'mobile' );
 		$email_verified = self::contact_verified( $user_id, 'email' );
-		$guardian_verified = ! $row || empty( $row['guardian_required'] ) || self::guardian_verified( $user_id );
 		$institutional = (bool) $state['institutional_account'];
+		// F00-CEN-03: registration-era guardian_required is only historical
+		// evidence. Current protected actions must re-decrypt DOB and consult
+		// current guardian consent; cron/cache updates are not authority.
+		$live_age = self::age_context( $user_id );
+		$age_known = $institutional || ! empty( $live_age['known'] );
+		$guardian_required_now = ! $institutional && ( ! empty( $live_age['known'] )
+			? ! empty( $live_age['minor'] )
+			: ! empty( $row['guardian_required'] ) );
+		$guardian_verified = $institutional || ( $age_known &&
+			( ! $guardian_required_now || self::guardian_verified( $user_id ) ) );
 		$contacts_verified = $institutional || ( $phone_verified && $email_verified );
 		$identity_documents_current = $institutional || self::identity_documents_current( $user_id );
-		$eligible = $approved && $professional_verified && $guardian_verified && $contacts_verified && $identity_documents_current;
+		$eligible = $approved && $age_known && $professional_verified && $guardian_verified && $contacts_verified && $identity_documents_current;
 		$suspended = in_array( $status, array( 'suspended', 'rejected', 'expired', 'appeal_review', 'erasure_pending', 'invalid_application' ), true );
 		$base = array(
 			'contract_version'       => SMC_CONTRACT_VERSION,
@@ -131,7 +140,7 @@ final class SMC_Contracts {
 		$base['entitlements'] = self::entitlement_assertions( $user_id, $base );
 		$base['publishing']   = self::publishing_assertions( $user_id, $base );
 		$base['transfer']     = self::transfer_assertions( $user_id, 0, array(), $base );
-		$base['age_context']  = self::age_context( $user_id );
+		$base['age_context']  = $live_age;
 		$base['clinical_commerce'] = self::clinical_commerce_assertions( $user_id, $base );
 		$base['can_publish']  = (bool) $base['publishing']['can_open_composer'];
 		$base['can_direct_publish'] = (bool) $base['publishing']['can_direct_publish'];
