@@ -48,7 +48,7 @@ function apply_filters($tag,$value,...$args) {
 }
 
 class WP_Error{public $code;function __construct($s){$this->code=$s;}}
-class WP_User{public $ID;function __construct($id){$this->ID=$id;}}
+class WP_User{public $ID;public $user_login;function __construct($id){$this->ID=$id;$this->user_login=($id===5?'sabri_legacy_author_placeholder':('member_'.$id));}}
 class SMC_Security{public static function audit($n,$id,$a=array()){return true;}}
 require dirname(__DIR__).'/source/sabri-membership-core/includes/class-smc-cf01-contract.php';
 $tests=array();$test=function($condition,$label)use(&$tests){$tests[]=array((bool)$condition,$label);};
@@ -72,6 +72,10 @@ $request['request_digest']=hash('sha256',wp_json_encode($unsigned,JSON_UNESCAPED
 $placeholder=SMC_CF01_Contract::file04_legacy_author_placeholder(null,$request);
 $test(is_array($placeholder)&&empty($placeholder['verified']),'reserved-login real user collision is denied');
 $test($GLOBALS['new_users']===0,'collision never creates another account');
+$checkReservedEarly=SMC_CF01_Contract::block_placeholder_login(new WP_User(5));
+$test(is_wp_error($checkReservedEarly),'reserved-login user is blocked even without security meta markers');
+$checkNormalEarly=SMC_CF01_Contract::block_placeholder_login(new WP_User(77));
+$test($checkNormalEarly instanceof WP_User,'normal user never blocked solely due to reserved-login rule');
 $wrongContext=SMC_CF01_Contract::file04_platform_uuid('',77,array('file_number'=>'09','legacy_id'=>123,'purpose'=>'legacy_publication_migration'));
 $test($wrongContext==='','File04 UUID filter rejects wrong consumer');
 $wrongPurpose=SMC_CF01_Contract::file04_platform_uuid('',77,array('file_number'=>'04','legacy_id'=>123,'purpose'=>'public_profile'));
