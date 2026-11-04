@@ -57,6 +57,7 @@ jobs:
           set -euo pipefail
           find source/sabri-membership-core -name '*.php' -print0 | xargs -0 -n1 php -l
           php -l qa/review80-wordpress-mysql.php
+          php -l qa/v12-file04-wordpress-attribution-role.php
           php -l qa/file02-account-contract-runtime-v1243.php
           php -l qa/file02-exact-consumer-compat.php
           npm test
@@ -92,6 +93,10 @@ jobs:
           ' --path=/tmp/wordpress
       - name: Real WordPress MariaDB regressions
         run: php /tmp/wp-cli.phar eval-file "$GITHUB_WORKSPACE/qa/review80-wordpress-mysql.php" --path=/tmp/wordpress
+      - name: Real WordPress File04 attribution-only role and recovery boundary
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file "$GITHUB_WORKSPACE/qa/v12-file04-wordpress-attribution-role.php" --path=/tmp/wordpress
       - name: Checkout exact merged File 02 1.3.3
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
