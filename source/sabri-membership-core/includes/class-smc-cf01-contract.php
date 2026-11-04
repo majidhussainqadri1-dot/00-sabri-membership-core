@@ -33,6 +33,7 @@ final class SMC_CF01_Contract {
 		add_filter( 'sabri_file00_legacy_author_placeholder_v1', array( __CLASS__, 'file04_legacy_author_placeholder' ), 10, 2 );
 		add_filter( 'authenticate', array( __CLASS__, 'block_placeholder_login' ), 99, 3 );
 		add_filter( 'wp_authenticate_user', array( __CLASS__, 'block_placeholder_login' ), 99, 2 );
+		add_filter( 'determine_current_user', array( __CLASS__, 'block_placeholder_session' ), 99, 1 );
 	}
 
 	/**
@@ -286,22 +287,39 @@ final class SMC_CF01_Contract {
 
 	/**
 	 * A legacy-author sentinel is attribution metadata, never a principal.
-	 * Both native and plugin authentication paths fail closed for this ID.
+	 * Password authentication and session-cookie current-user resolution must
+	 * both fail closed, even when earlier DB writes left the markers missing.
 	 */
+	private static function is_disabled_legacy_author_identity( $user_id ) {
+		$user_id = absint( $user_id );
+		if ( $user_id <= 0 ) {
+			return false;
+		}
+		$user = get_userdata( $user_id );
+		$login = $user ? (string) ( $user->user_login ?? '' ) : '';
+		return 0 === strcasecmp( $login, 'sabri_legacy_author_placeholder' )
+			|| '1' === (string) get_user_meta( $user_id, '_smc_legacy_author_placeholder_v1', true )
+			|| '1' === (string) get_user_meta( $user_id, '_smc_login_disabled_v1', true );
+	}
+
+	/**
+	 * WordPress cookie auth / programmatic current-user resolution hard stop.
+	 * Preserve unrelated existing principal IDs and false/zero values.
+	 */
+	public static function block_placeholder_session( $user_id ) {
+		if ( is_numeric( $user_id ) && self::is_disabled_legacy_author_identity( absint( $user_id ) ) ) {
+			return 0;
+		}
+		return $user_id;
+	}
+
 	public static function block_placeholder_login( $user, $username = '', $password = '' ) {
 		unset( $username, $password );
-		if ( $user instanceof WP_User ) {
-			// Never rely on usermeta alone: a failed two-marker write plus a
-			// failed compensating delete can leave a reserved-login orphan.
-			$record = get_userdata( $user->ID );
-			$login = (string) ( $user->user_login ?? ( $record->user_login ?? '' ) );
-			$reserved = 0 === strcasecmp( $login, 'sabri_legacy_author_placeholder' );
-			$marked = '1' === (string) get_user_meta( $user->ID, '_smc_legacy_author_placeholder_v1', true )
-				|| '1' === (string) get_user_meta( $user->ID, '_smc_login_disabled_v1', true );
-			if ( $reserved || $marked ) {
-				return new WP_Error( 'smc_legacy_author_placeholder_login_denied',
-					__( 'This system attribution identity cannot sign in.', 'sabri-membership-core' ) );
-			}
+		if ( $user instanceof WP_User
+			&& ( self::is_disabled_legacy_author_identity( $user->ID )
+				|| 0 === strcasecmp( (string) ( $user->user_login ?? '' ), 'sabri_legacy_author_placeholder' ) ) ) {
+			return new WP_Error( 'smc_legacy_author_placeholder_login_denied',
+				__( 'This system attribution identity cannot sign in.', 'sabri-membership-core' ) );
 		}
 		return $user;
 	}
