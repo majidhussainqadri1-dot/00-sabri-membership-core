@@ -98,6 +98,12 @@ final class SMC_Contracts {
 		// current guardian consent; cron/cache updates are not authority.
 		$live_age = self::age_context( $user_id );
 		$age_known = $institutional || ! empty( $live_age['known'] );
+		// A guardian may authorize an eligible minor's participation, but
+		// cannot override the higher of File00 and jurisdictional age floors.
+		// Professional functions remain adult-only, regardless of consent.
+		$age_eligible = $institutional || ( ! empty( $live_age['minimum_age_met'] )
+			&& ( empty( $live_age['minor'] )
+				|| ! array_intersect( array_map( 'sanitize_key', $requested_types ), smc_professional_types() ) ) );
 		$guardian_required_now = ! $institutional && ( ! empty( $live_age['known'] )
 			? ! empty( $live_age['minor'] )
 			: ! empty( $row['guardian_required'] ) );
@@ -105,7 +111,7 @@ final class SMC_Contracts {
 			( ! $guardian_required_now || self::guardian_verified( $user_id ) ) );
 		$contacts_verified = $institutional || ( $phone_verified && $email_verified );
 		$identity_documents_current = $institutional || self::identity_documents_current( $user_id );
-		$eligible = $approved && $age_known && $professional_verified && $guardian_verified && $contacts_verified && $identity_documents_current;
+		$eligible = $approved && $age_known && $age_eligible && $professional_verified && $guardian_verified && $contacts_verified && $identity_documents_current;
 		$suspended = in_array( $status, array( 'suspended', 'rejected', 'expired', 'appeal_review', 'erasure_pending', 'invalid_application' ), true );
 		$base = array(
 			'contract_version'       => SMC_CONTRACT_VERSION,
@@ -280,6 +286,7 @@ final class SMC_Contracts {
 		$app = smc_application( $user_id );
 		$out = array(
 			'known'             => false,
+			'minimum_age_met'   => false,
 			'age_band'          => 'unknown',
 			'minor'             => (bool) ( $app && ! empty( $app['guardian_required'] ) ),
 			'guardian_required' => (bool) ( $app && ! empty( $app['guardian_required'] ) ),
@@ -289,6 +296,8 @@ final class SMC_Contracts {
 			$age = is_wp_error( $dob ) ? false : smc_age_from_dob( $dob );
 			if ( false !== $age ) {
 				$out['known'] = true;
+				$minimum_age = smc_effective_minimum_age( $app['gender'] ?? '', $app['residence_country'] ?? '' );
+				$out['minimum_age_met'] = false !== $minimum_age && (int) $age >= (int) $minimum_age;
 				$out['age_band'] = (int) $age < 18 ? 'minor' : 'adult';
 				$out['minor'] = (int) $age < 18;
 				$out['guardian_required'] = $out['minor'];
