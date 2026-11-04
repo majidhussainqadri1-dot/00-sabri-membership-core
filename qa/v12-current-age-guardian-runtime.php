@@ -22,6 +22,7 @@ function smc_is_institutional_ai($id){return false;}
 function smc_institutional_ai_policy(){return array();}
 function smc_policy(){return array('version'=>'v12-fixture','base_services'=>array('membership','library'));}
 function smc_is_professional_type($t){return false;}
+function smc_professional_types(){return array('doctor','teacher','researcher','pharmacy','clinic','publisher');}
 function smc_account_types(){return array('patient'=>array());}
 function smc_sanitize_membership_types($types){return array_values(array_intersect((array)$types,array('patient')));}
 function smc_required_identity_documents(){return array();}
