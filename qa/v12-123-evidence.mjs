@@ -129,7 +129,7 @@ if(rows.length!==123||!idEquals(rows.map(r=>r.id),expected))fail.push('One or mo
 const exercised=new Set();
 const staticEvidence=[
  {file:'qa/latest-central-contract.mjs',regex:/^PASS:\s+(F00-CEN-0[12])\b/gm,ids:['F00-CEN-01','F00-CEN-02']},
- {file:'qa/v12-current-age-guardian-runtime.php',regex:/^(F00-CEN-03) current-age\/guardian runtime 7\/7 PASS$/gm,
+ {file:'qa/v12-current-age-guardian-runtime.php',regex:/^(F00-CEN-03) current-age\/guardian runtime 8\/8 PASS$/gm,
   ids:['F00-CEN-03']},
  {file:'qa/advanced-trust-contract.mjs',regex:/^PASS\s+EXT-(\d{3})\b/gm,
   ids:Array.from({length:20},(_,i)=>'F00-EXT-'+String(i+1).padStart(3,'0'))},
