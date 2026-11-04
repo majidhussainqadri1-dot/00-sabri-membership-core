@@ -17,6 +17,7 @@ function is_wp_error($v){ return false; }
 function smc_membership_state($uid){ return $GLOBALS['states'][(int)$uid]; }
 function smc_application($uid){ return $GLOBALS['apps'][(int)$uid] ?? false; }
 function smc_is_professional_type($type){ return in_array($type,['doctor','teacher','researcher'],true); }
+function smc_professional_types(){return ['doctor','teacher','researcher','pharmacy','clinic','publisher'];}
 function smc_age_from_dob($dob){ return $dob==='minor' ? 16 : ($dob==='adult' ? 25 : false); }
 function smc_is_founder($uid){ return false; }
 function smc_is_institutional_ai($uid){ return false; }
