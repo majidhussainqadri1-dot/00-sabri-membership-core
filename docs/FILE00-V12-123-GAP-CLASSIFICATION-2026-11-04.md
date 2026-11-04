@@ -83,7 +83,7 @@ Legend: `P` = signal present, behavior incomplete; `E` = evidence/release/govern
 | `F00-R047` | Privacy Export | P/CORE | Requirement-specific positive/negative role-state-data runtime cases | Pending |
 | `F00-R048` | Privacy Erasure | P/CORE | Requirement-specific positive/negative role-state-data runtime cases | Pending |
 | `F00-R049` | Tamper-Evident Audit | P/CORE | Requirement-specific positive/negative role-state-data runtime cases | Pending |
-| `F00-R050` | Migration، Rollback and Uninstall | P/CONSUMER | Exact current provider-consumer pinned runtime + real WP/plugin integration | Pending |
+| `F00-R050` | Migration، Rollback and Uninstall | P/CORE | Requirement-specific positive/negative role-state-data runtime cases | Pending |
 | `F00-R051` | File 02 — Authentication and Accounts Integration | P/CONSUMER | Exact current provider-consumer pinned runtime + real WP/plugin integration | Pending |
 | `F00-R052` | File 03 — Profiles and Doctors Integration | P/CONSUMER | Exact current provider-consumer pinned runtime + real WP/plugin integration | Pending |
 | `F00-R053` | Files 08 and 18 — Clinic, Appointments and Marketplace Integration | P/CONSUMER | Exact current provider-consumer pinned runtime + real WP/plugin integration | Pending |
@@ -123,7 +123,7 @@ Legend: `P` = signal present, behavior incomplete; `E` = evidence/release/govern
 | `F00-R087` | Repository and Package Structure | P/OPERATIONS | Exact installer/backup/upgrade/performance/release rehearsal | Pending |
 | `F00-R088` | Release Phases | P/OPERATIONS | Exact installer/backup/upgrade/performance/release rehearsal | Pending |
 | `F00-R089` | Current Runtime Evidence and Correction Lineage | P/OPERATIONS | Exact installer/backup/upgrade/performance/release rehearsal | Pending |
-| `F00-R090` | Operational Ownership and Service Levels | E/RELEASE | Independent QA/staging/restore/Founder evidence as applicable | Pending |
+| `F00-R090` | Operational Ownership and Service Levels | P/OPERATIONS | Exact installer/backup/upgrade/performance/release rehearsal | Pending |
 | `F00-R091` | Automated QA Baseline | E/RELEASE | Independent QA/staging/restore/Founder evidence as applicable | Pending |
 | `F00-R092` | Fresh Activation Tests | E/RELEASE | Independent QA/staging/restore/Founder evidence as applicable | Pending |
 | `F00-R093` | Upgrade and Migration Tests | E/RELEASE | Independent QA/staging/restore/Founder evidence as applicable | Pending |
