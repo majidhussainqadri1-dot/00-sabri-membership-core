@@ -40,38 +40,13 @@ ksort( $request, SORT_STRING );
 $request['request_digest'] = hash( 'sha256', wp_json_encode( $request, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES ) );
 
 $receipt = SMC_CF01_Contract::file04_legacy_author_placeholder( null, $request );
-if ( empty( $receipt['verified'] ) ) {
-	$existing_id = absint( username_exists( 'sabri_legacy_author_placeholder' ) );
-	$existing = $existing_id ? get_userdata( $existing_id ) : false;
-	fwrite( STDERR, 'File04 diagnostic (synthetic CI): ' . wp_json_encode( array(
-		'actor_id' => get_current_user_id(),
-		'can_migrate' => current_user_can( $capability ),
-		'request_digest' => $request['request_digest'],
-		'calculated_expected' => hash( 'sha256', wp_json_encode( array( 'file_number'=>'04', 'legacy_author_id'=>0, 'legacy_id'=>98001 ), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES ) ),
-		'account_exists' => (bool) $existing,
-		'roles' => $existing instanceof WP_User ? $existing->roles : array(),
-		'cap_keys' => $existing instanceof WP_User ? array_keys( (array) $existing->caps ) : array(),
-		'marker_attribution' => $existing_id ? get_user_meta( $existing_id, '_smc_legacy_author_placeholder_v1', true ) : null,
-		'marker_disabled' => $existing_id ? get_user_meta( $existing_id, '_smc_login_disabled_v1', true ) : null,
-		'marker_audited' => $existing_id ? get_user_meta( $existing_id, '_smc_legacy_author_placeholder_audited_v1', true ) : null,
-		'receipt' => $receipt,
-		'audit_error' => SMC_Security::last_audit_error(),
-		'last_actions' => $GLOBALS['wpdb']->get_col( "SELECT action FROM {$GLOBALS['wpdb']->prefix}smc_audit_log ORDER BY id DESC LIMIT 7" ),
-	) ) . "\n" );
-	$probe = wp_insert_user( array(
-		'user_login' => 'smc_v12_role_probe_20261104',
-		'user_email' => 'smc-v12-role-probe@example.test',
-		'user_pass' => wp_generate_password( 40, true, true ),
-		'role' => '',
-	) );
-	fwrite( STDERR, 'File04 diagnostic independent WordPress no-role user: ' . ( is_wp_error( $probe ) ? $probe->get_error_code() : ( 'created ' . absint( $probe ) ) ) . "\n" );
-}
 $check( is_array( $receipt ) && ! empty( $receipt['verified'] ) && ! empty( $receipt['placeholder'] ), 'creation yields an authorized File00 placeholder receipt' );
 $id   = absint( $receipt['user_id'] ?? 0 );
 $user = $id ? get_userdata( $id ) : false;
 $check( $user instanceof WP_User && 'sabri_legacy_author_placeholder' === $user->user_login, 'created WordPress identity has only the reserved login' );
 $check( $user instanceof WP_User && empty( $user->roles ) && empty( $user->caps ), 'fresh attribution account has zero roles and zero direct capabilities' );
 $check( $id > 0 && ! user_can( $id, 'read' ) && ! user_can( $id, 'edit_posts' ), 'fresh attribution account cannot inherit subscriber or editor powers' );
+$check( $id > 0 && ! smc_application( $id ), 'reserved File04 sentinel never enters File00 membership application lifecycle' );
 $check( $id > 0 && 0 === SMC_CF01_Contract::block_placeholder_session( $id ), 'cookie-current-user resolution denies attribution identity' );
 $check( $id > 0 && is_wp_error( SMC_CF01_Contract::block_placeholder_login( $user ) ), 'password authentication denies attribution identity' );
 
