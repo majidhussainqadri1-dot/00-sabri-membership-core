@@ -347,6 +347,27 @@ final class SMC_CF01_Contract {
 					return 0;
 				}
 			}
+			// Prior File00 builds provisioned this attribution-only sentinel
+			// with the subscriber role. It must never retain WordPress roles
+			// or direct capabilities. An audited, persisted retirement is
+			// permitted only for the exact reserved and marked identity.
+			$existing_user = get_userdata( $user_id );
+			if ( $existing_user instanceof WP_User
+				&& ( ! empty( $existing_user->roles ) || ! empty( $existing_user->caps ) ) ) {
+				if ( ! method_exists( $existing_user, 'set_role' )
+					|| ! SMC_Security::audit( 'legacy_author_placeholder_role_retirement_requested', $user_id, array( 'contract' => 'file04-authorship-v1' ) ) ) {
+					return 0;
+				}
+				$existing_user->set_role( '' );
+				if ( function_exists( 'clean_user_cache' ) ) {
+					clean_user_cache( $user_id );
+				}
+				$existing_user = get_userdata( $user_id );
+				if ( ! ( $existing_user instanceof WP_User )
+					|| ! empty( $existing_user->roles ) || ! empty( $existing_user->caps ) ) {
+					return 0;
+				}
+			}
 			return $user_id;
 		}
 		if ( ! function_exists( 'wp_insert_user' ) ) {
@@ -359,7 +380,7 @@ final class SMC_CF01_Contract {
 				'user_pass'    => $password,
 				'display_name' => 'Legacy Author (Unknown)',
 				'nickname'     => 'Legacy Author',
-				'role'         => 'subscriber',
+				'role'         => '', // Explicitly no WordPress role; never default to subscriber.
 				'description'  => 'File 00 governed placeholder used only to preserve unknown/deleted legacy publication attribution during migration.',
 				// Install the no-login markers as early as WordPress allows,
 				// not after exposing a newly created subscriber principal.
@@ -378,6 +399,12 @@ final class SMC_CF01_Contract {
 		// returned a stale or ambiguous account ID.
 		if ( ! $record || (string) ( $record->user_login ?? '' ) !== $login ) {
 			return 0;
+		}
+		// WordPress plugins may filter or change roles during registration.
+		// Reject and compensate any unexpected privilege assignment.
+		if ( $record instanceof WP_User
+			&& ( ! empty( $record->roles ) || ! empty( $record->caps ) ) ) {
+			return self::rollback_unverified_legacy_author_placeholder( $user_id );
 		}
 		foreach ( array( '_smc_legacy_author_placeholder_v1', '_smc_login_disabled_v1' ) as $marker ) {
 			if ( '1' !== (string) get_user_meta( $user_id, $marker, true ) ) {
