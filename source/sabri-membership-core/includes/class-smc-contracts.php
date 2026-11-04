@@ -32,6 +32,15 @@ final class SMC_Contracts {
 
 	public static function register_account( $user_id ) {
 		global $wpdb;
+		// File04's reserved legacy-author sentinel is attribution metadata,
+		// not an ordinary membership application. WordPress user_register
+		// fires even when wp_insert_user(role='') is used, and the generic
+		// importer would otherwise grant sabri_member_pending to it.
+		$registration_user = get_userdata( absint( $user_id ) );
+		if ( $registration_user
+			&& 0 === strcasecmp( (string) ( $registration_user->user_login ?? '' ), 'sabri_legacy_author_placeholder' ) ) {
+			return;
+		}
 		if ( smc_privacy_erasure_lock( $user_id ) || smc_application( $user_id ) ) {
 			return;
 		}
