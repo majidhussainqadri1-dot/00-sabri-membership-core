@@ -129,6 +129,8 @@ if(rows.length!==123||!idEquals(rows.map(r=>r.id),expected))fail.push('One or mo
 const exercised=new Set();
 const staticEvidence=[
  {file:'qa/latest-central-contract.mjs',regex:/^PASS:\s+(F00-CEN-0[12])\b/gm,ids:['F00-CEN-01','F00-CEN-02']},
+ {file:'qa/v12-current-age-guardian-runtime.php',regex:/^(F00-CEN-03) current-age\/guardian runtime 7\/7 PASS$/gm,
+  ids:['F00-CEN-03']},
  {file:'qa/advanced-trust-contract.mjs',regex:/^PASS\s+EXT-(\d{3})\b/gm,
   ids:Array.from({length:20},(_,i)=>'F00-EXT-'+String(i+1).padStart(3,'0'))},
  {file:'qa/v12-r80-source-implementation.mjs',regex:/^PASS\s+(F00-R\d{3})\s+explicit implementation source/gm,
@@ -136,7 +138,8 @@ const staticEvidence=[
 ];
 for(const entry of staticEvidence){
  try{
-  const stdout=execFileSync(process.execPath,[file(entry.file)],{cwd:root,encoding:'utf8',maxBuffer:1024*1024});
+  const runner=entry.file.endsWith('.php')?'php':process.execPath;
+  const stdout=execFileSync(runner,[file(entry.file)],{cwd:root,encoding:'utf8',maxBuffer:1024*1024});
   const matches=[...stdout.matchAll(entry.regex)].map(m=>entry.file.includes('advanced-trust')?'F00-EXT-'+m[1]:m[1]);
   const passed=new Set(matches);
   for(const id of entry.ids){
@@ -164,8 +167,14 @@ for(const row of rows){
   row.individual_static_check_present=true;
  }
  row.static_contract_executed_and_passed=exercised.has(row.id);
+ if(row.id==='F00-CEN-03'){
+  row.individual_static_check_present=true;
+  row.local_behavior_fixture_executed_passed=exercised.has(row.id);
+  row.local_behavior_fixture_ref='qa/v12-current-age-guardian-runtime.php';
+  row.local_behavior_fixture_scope='mock WordPress data path, not production/companion installation';
+ }
  row.static_contract_evidence_source=row.static_contract_executed_and_passed
-    ? (row.id.startsWith('F00-EXT')?'qa/advanced-trust-contract.mjs':row.id.startsWith('F00-R')?'qa/v12-r80-source-implementation.mjs':'qa/latest-central-contract.mjs'):null;
+    ? (row.id.startsWith('F00-EXT')?'qa/advanced-trust-contract.mjs':row.id.startsWith('F00-R')?'qa/v12-r80-source-implementation.mjs':row.id==='F00-CEN-03'?'qa/v12-current-age-guardian-runtime.php':'qa/latest-central-contract.mjs'):null;
  row.static_contract_result_scope='checkout_only_not_independent_CI_or_behavioral_acceptance';
 }
 let head='unknown';
@@ -181,6 +190,7 @@ const summary={
  requirement_specific_static_source_count:rows.filter(r=>r.source_granularity!=='historical_group_pointer_only'&&r.current_source_signal_verified).length,
  named_individual_static_assertion_source_count:count('individual_static_check_present'),
  requirement_named_static_checks_executed_passed:count('static_contract_executed_and_passed'),
+ individual_mock_behavior_fixtures_executed_passed:count('local_behavior_fixture_executed_passed'),
  per_family_source_signals:{
    historical_R_group_pointer:rows.filter(r=>r.id.startsWith('F00-R')&&r.current_source_signal_verified).length,
    central_static_tokens:rows.filter(r=>r.id.startsWith('F00-CEN')&&r.current_source_signal_verified).length,
