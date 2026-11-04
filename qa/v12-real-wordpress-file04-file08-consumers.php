@@ -72,7 +72,7 @@ if ( ! is_wp_error( $known_id ) && absint( $known_id ) > 0 ) {
 	$denied_ghost = SNFLA_Plan_Completion::authorship_preflight( $known_id, 991337 );
 	$check( is_wp_error( $denied_ghost ) && 'snfla_author_placeholder_contract_required' === $denied_ghost->get_error_code(),
 		'real File04 consumer denies deleted-author request without migration authority' );
-	if ( ! $had_cap ) { $role->add_cap( $cap ); }
+	$role->add_cap( $cap );
 
 	wp_set_current_user( 0 );
 	$guest = SNFLA_Plan_Completion::authorship_preflight( $known_id );
