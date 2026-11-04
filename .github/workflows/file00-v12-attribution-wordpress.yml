@@ -42,6 +42,25 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+      - name: Checkout immutable File04 current-main consumer source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: majidhussainqadri1-dot/04-sabri-news-feed-and-publishing
+          ref: bae1c70a168a09d7df09d634bd15050837e0b80a
+          path: _pinned_file04
+          persist-credentials: false
+      - name: Checkout immutable File08 PR29 consumer candidate
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: majidhussainqadri1-dot/08-worldwide-clinic-and-appointments-foundation
+          ref: 1a358ead5ed02938fe2ee0bcb45494d53b4ffa8d
+          path: _pinned_file08
+          persist-credentials: false
+      - name: Verify immutable companion source commits
+        run: |
+          set -euo pipefail
+          test "$(git -C _pinned_file04 rev-parse HEAD)" = "bae1c70a168a09d7df09d634bd15050837e0b80a"
+          test "$(git -C _pinned_file08 rev-parse HEAD)" = "1a358ead5ed02938fe2ee0bcb45494d53b4ffa8d"
       - name: Prepare PHP 8.3 and lint
         uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240
         with:
@@ -53,6 +72,7 @@ jobs:
         run: |
           set -euo pipefail
           php -l qa/v12-file04-wordpress-attribution-role.php
+          php -l qa/v12-real-wordpress-file04-file08-consumers.php
           php -l source/sabri-membership-core/includes/class-smc-cf01-contract.php
           (cd source/sabri-membership-core && sha256sum --check MANIFEST.sha256)
       - name: Install pinned WP-CLI and WordPress fixture
@@ -75,3 +95,9 @@ jobs:
         run: |
           set -euo pipefail
           php /tmp/wp-cli.phar eval-file "$GITHUB_WORKSPACE/qa/v12-file04-wordpress-attribution-role.php" --path=/tmp/wordpress
+      - name: Run real pinned File04 File08 consumer classes against WordPress and MariaDB
+        run: |
+          set -euo pipefail
+          export FILE04_SOURCE_ROOT="$GITHUB_WORKSPACE/_pinned_file04"
+          export FILE08_SOURCE_ROOT="$GITHUB_WORKSPACE/_pinned_file08"
+          php /tmp/wp-cli.phar eval-file "$GITHUB_WORKSPACE/qa/v12-real-wordpress-file04-file08-consumers.php" --path=/tmp/wordpress
