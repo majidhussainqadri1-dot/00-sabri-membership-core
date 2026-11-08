@@ -1,0 +1,25 @@
+name: File00 File06 Case Consent Provider Source QA
+on:
+  push:
+    branches: [ 'fix/file00-file06-case-consent-provider-20261108' ]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  consent-source:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc
+        with:
+          php-version: '8.3'
+          coverage: none
+      - name: Freeze exact source and lint
+        run: |
+          set -euo pipefail
+          echo "SOURCE_HEAD=$(git rev-parse HEAD)"
+          find source/sabri-membership-core qa -name '*.php' -type f -print0 | sort -z | xargs -0 -n1 php -l >/dev/null
+      - name: Verify exact plugin manifest
+        run: (cd source/sabri-membership-core && sha256sum --check MANIFEST.sha256)
+      - name: File00 subject case consent contract
+        run: php qa/file00-file06-consent-contract.php
