@@ -137,7 +137,7 @@ final class SMC_File06_Case_Consent {
 	}
 
 	public static function current_for_file06( $value, $verification_id, $evidence_ref, $research_public_id, $purpose ) {
-		$number = str_starts_with( (string) $verification_id, self::VERIFICATION_PREFIX )
+		$number = 0 === strpos( (string) $verification_id, self::VERIFICATION_PREFIX )
 			? substr( (string) $verification_id, strlen( self::VERIFICATION_PREFIX ) ) : '';
 		if ( ! ctype_digit( $number )
 			|| ! hash_equals( self::RECEIPT_PREFIX . $number, (string) $evidence_ref ) ) { return false; }
