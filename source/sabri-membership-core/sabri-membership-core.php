@@ -48,6 +48,7 @@ require_once SMC_PATH . 'includes/class-smc-lifecycle.php';
 require_once SMC_PATH . 'includes/class-smc-three-plan.php';
 require_once SMC_PATH . 'includes/class-smc-latest-central-2026.php';
 require_once SMC_PATH . 'includes/class-smc-advanced-trust-2026.php';
+require_once SMC_PATH . 'includes/class-smc-file06-case-consent.php';
 
 add_action(
 	'wp_ajax_smc_stage_identity_document',
@@ -131,6 +132,7 @@ add_action(
 			array( 'SMC_Contact_Delivery', 'init' ), array( 'SMC_Admin', 'init' ), array( 'SMC_Privacy', 'init' ),
 			array( 'SMC_Lifecycle', 'init' ), array( 'SMC_Three_Plan', 'init' ), array( 'SMC_Latest_Central_2026', 'init' ),
 			array( 'SMC_Advanced_Trust_2026', 'init' ),
+			array( 'SMC_File06_Case_Consent', 'init' ),
 		);
 		foreach ( $initializers as $initializer ) {
 			try { call_user_func( $initializer ); }
