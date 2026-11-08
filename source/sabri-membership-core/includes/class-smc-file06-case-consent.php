@@ -51,8 +51,13 @@ final class SMC_File06_Case_Consent {
 			// The first version does not infer a minor's separate case-study
 			// consent from platform membership/guardian registration.
 			$app = function_exists( 'smc_application' ) ? smc_application( $user_id ) : null;
-			$dob = is_array( $app ) ? (string) ( $app['date_of_birth'] ?? $app['dob'] ?? '' ) : '';
-			if ( ! $dob || ! function_exists( 'smc_age_from_dob' ) || smc_age_from_dob( $dob ) < 18 ) { return false; }
+			if ( ! is_array( $app ) || empty( $app['date_of_birth_enc'] )
+				|| ! class_exists( 'SMC_Security' ) || ! function_exists( 'smc_age_from_dob' ) ) { return false; }
+			$dob = SMC_Security::decrypt( (string) $app['date_of_birth_enc'], 'date-of-birth',
+				array( 'user_id' => $user_id ) );
+			if ( is_wp_error( $dob ) || ! is_string( $dob ) ) { return false; }
+			$age = smc_age_from_dob( $dob );
+			if ( false === $age || $age < 18 ) { return false; }
 			return true;
 		} catch ( Throwable $error ) { return false; }
 	}
