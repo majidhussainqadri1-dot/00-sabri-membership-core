@@ -11,8 +11,8 @@ if ($begin === false) { fwrite(STDERR, "File06 consent provider entry point chan
 $method = substr($consumer, $begin);
 $checks = array(
   'File06 verification hook is present' => strpos($method, "he_v12_consent_receipt_verification_v1") !== false,
-  'File06 provides policy evidence' => strpos($method, "'evidence_ref' => $receipt") !== false,
-  'File00 requires research UUID' => strpos($owner, "$data['research_public_id']") !== false,
+  'File06 provides policy evidence' => strpos($method, "'evidence_ref' =>") !== false,
+  'File00 requires research UUID' => strpos($owner, "research_public_id") !== false,
   'File06 currently omits required UUID' => strpos($method, "'research_public_id' =>") === false,
 );
 foreach ($checks as $name => $ok) {
