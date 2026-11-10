@@ -27,7 +27,7 @@ function apply_filters($name,$default,...$params){
 	return $default;
 }
 class File00DB {
-	public $prefix='wp_';public $last_error='';public $row;public $rows=null;public $lockAvailable=true;public $locksHeld=0;public $insert_id=0;public $failActivation=false;public $failCount=false;public $failInsert=false;public $lockErrorAfterAcquire=false;
+	public $prefix='wp_';public $last_error='';public $row;public $rows=null;public $lockAvailable=true;public $locksHeld=0;public $insert_id=0;public $failActivation=false;public $failCount=false;public $failInsert=false;public $lockErrorAfterAcquire=false;public $onAcquire=null;
 	public function prepare($query,...$params){return array('sql'=>$query,'args'=>$params);}
 	public function get_row($query,$format=null){
 		if($this->rows===null)return $this->row;
@@ -54,6 +54,7 @@ class File00DB {
 		if(strpos($sql,'GET_LOCK')!==false){
 			if(!$this->lockAvailable)return 0;
 			$this->locksHeld++;
+			if(is_callable($this->onAcquire))call_user_func($this->onAcquire);
 			if($this->lockErrorAfterAcquire)$this->last_error='simulated post-acquisition SQL error';
 			return 1;
 		}
@@ -254,5 +255,33 @@ must($reported instanceof WP_Error&&$reported->get_error_code()==='smc_file06_co
 	'Acquired lock with DB error fails closed');
 must($wpdb->locksHeld===0,'Acquired lock with DB error must be released');
 
+
+/*
+ * V12 red-first TOCTOU regressions: File06 policy, subject relation and
+ * membership eligibility may be revoked while MySQL GET_LOCK waits.
+ * Accept must re-check authority *after* the lock, before any write.
+ */
+$wpdb->lockErrorAfterAcquire=false;
+$wpdb->onAcquire=null;
+$baseRows=count($wpdb->rows);
+$cases=array(
+    array('name'=>'eligibility','key'=>'member_eligible','uuid'=>'66666666-6666-4666-8666-666666666666'),
+    array('name'=>'case relation','key'=>'relation_valid','uuid'=>'77777777-7777-4777-8777-777777777777'),
+    array('name'=>'approved policy','key'=>'policy_valid','uuid'=>'88888888-8888-4888-8888-888888888888'),
+);
+foreach($cases as $case){
+    $key=$case['key'];$uuidDuringWait=$case['uuid'];
+    $GLOBALS[$key]=true;
+    $wpdb->onAcquire=static function()use($key){$GLOBALS[$key]=false;};
+    $outcome=SMC_File06_Case_Consent::accept(case_request($uuidDuringWait));
+    must($outcome instanceof WP_Error && 'smc_file06_consent_changed'===$outcome->get_error_code(),
+        'After-lock revoked '.$case['name'].' rejects stale consent');
+    must(count($wpdb->rows)===$baseRows,
+        'After-lock revoked '.$case['name'].' writes no consent record');
+    must($wpdb->locksHeld===0,
+        'After-lock revoked '.$case['name'].' releases case lock');
+    $wpdb->onAcquire=null;
+    $GLOBALS[$key]=true;
+}
 
 echo "File00→File06 consent: {$GLOBALS['count']} isolated assertions PASS.\n";
