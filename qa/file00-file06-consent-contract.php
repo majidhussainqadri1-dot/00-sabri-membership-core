@@ -6,7 +6,7 @@ class WP_Error { private $code;public function __construct($c,$m='',$x=array()){
 class SMC_Contracts{public static function assertions($uid){return array('eligible'=>!empty($GLOBALS['member_eligible']),'suspended'=>false,'institutional_account'=>false);}}
 class SMC_Advanced_Trust_2026{public static function assurance_profile($uid){return array('identity_assurance_level'=>3,'authentication_assurance_level'=>1);}}
 class SMC_Authorization{public static function is_hard_blocked($uid){return false;}}
-class SMC_Security{public static function decrypt($value,$purpose,$context){return '1990-01-01';}}
+class SMC_Security{public static function decrypt($value,$purpose,$context){return '1990-01-01';}public static function audit($event,$actor,$details){return true;}}
 function smc_application($user_id){return array('date_of_birth_enc'=>'encrypted');}
 function smc_age_from_dob($v){return $GLOBALS['age'];}
 function absint($v){return abs((int)$v);}
@@ -27,12 +27,32 @@ function apply_filters($name,$default,...$params){
 	return $default;
 }
 class File00DB {
-	public $prefix='wp_';public $last_error='';public $row;public $rows=null;
+	public $prefix='wp_';public $last_error='';public $row;public $rows=null;public $lockAvailable=true;public $locksHeld=0;
 	public function prepare($query,...$params){return array('sql'=>$query,'args'=>$params);}
 	public function get_row($query,$format=null){
 		if($this->rows===null)return $this->row;
 		$id=(int)($query['args'][0]??0);
 		return $this->rows[$id]??null;
+	}
+	public function get_var($statement){
+		if(!is_array($statement))return null;
+		$sql=$statement['sql'];$args=$statement['args'];
+		if(strpos($sql,'GET_LOCK')!==false){
+			if(!$this->lockAvailable)return 0;
+			$this->locksHeld++;return 1;
+		}
+		if(strpos($sql,'RELEASE_LOCK')!==false){$this->locksHeld--;return 1;}
+		if(strpos($sql,'COUNT(*)')!==false){
+			$found=0;
+			foreach($this->rows as $row){
+				if($row['user_id']===(int)($args[0]??0)&&$row['purpose']===($args[1]??'')
+					&&$row['channel']===($args[2]??'')
+					&&$row['actor_reference_hash']===($args[3]??'')
+					&&$row['actor_type']==='self'&&empty($row['withdrawn_at']))$found++;
+			}
+			return $found;
+		}
+		return null;
 	}
 	public function query($statement){
 		if(!is_array($statement))return false;
@@ -123,5 +143,14 @@ must(SMC_File06_Case_Consent::current_for_file06(false,'smc-file06-v1:8','smc-f0
 must(empty($wpdb->rows[9]['withdrawn_at']),'Other case remains unaffected');
 must(empty($wpdb->rows[10]['withdrawn_at']),'Other member remains unaffected');
 must(($GLOBALS['last_action']??'')==='smc_file06_patient_consent_withdrawn_v1','Withdrawal event emitted');
+must($wpdb->locksHeld===0,'Case mutex released on successful withdrawal');
+$wpdb->lockAvailable=false;
+$busy=SMC_File06_Case_Consent::withdraw(new File00ConsentRequest(
+	array('research_public_id'=>'22222222-2222-4222-8222-222222222222','evidence_ref'=>'smc-f06-r9')
+));
+must($busy instanceof WP_Error&&$busy->get_error_code()==='smc_file06_consent_busy',
+	'Database lock refusal denies withdrawal safely');
+must(empty($wpdb->rows[9]['withdrawn_at']),'Lock refusal did not mutate case consent');
+must($wpdb->locksHeld===0,'Refused lock does not leak lock ownership');
 
 echo "File00→File06 consent: {$GLOBALS['count']} isolated assertions PASS.\n";
