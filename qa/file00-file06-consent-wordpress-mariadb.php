@@ -88,6 +88,22 @@ add_action( 'smc_file06_patient_consent_withdrawn_v1',
         $events[] = array( $uuid, $user, $receipt );
     }, 10, 3 );
 
+// Cross-site request forgery and case/receipt mismatches may not mutate rows.
+wp_set_current_user( $patient );
+$wrong_nonce = $make_request( $case_a, $first );
+$wrong_nonce->set_header( 'X-WP-Nonce', 'deliberately-invalid' );
+$csrf = SMC_File06_Case_Consent::withdraw( $wrong_nonce );
+$check( is_wp_error( $csrf ) &&
+    'smc_file06_consent_withdraw_auth' === $csrf->get_error_code(),
+    'invalid REST nonce cannot revoke a case' );
+$wrong_case = SMC_File06_Case_Consent::withdraw( $make_request( $case_b, $first ) );
+$check( is_wp_error( $wrong_case ) &&
+    'smc_file06_consent_withdraw_invalid' === $wrong_case->get_error_code(),
+    'one study-case UUID cannot revoke a different case receipt' );
+$check( null === $wpdb->get_var( $wpdb->prepare(
+    "SELECT withdrawn_at FROM {$table} WHERE id=%d", $first
+) ), 'invalid nonce and wrong-case attempts left consent unchanged' );
+
 wp_set_current_user( $unrelated_patient );
 $forged = SMC_File06_Case_Consent::withdraw( $make_request( $case_a, $first ) );
 $check( is_wp_error( $forged ) && 'smc_file06_consent_withdraw_invalid' === $forged->get_error_code(),
