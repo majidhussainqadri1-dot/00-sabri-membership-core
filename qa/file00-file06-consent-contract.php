@@ -27,7 +27,7 @@ function apply_filters($name,$default,...$params){
 	return $default;
 }
 class File00DB {
-	public $prefix='wp_';public $last_error='';public $row;public $rows=null;public $lockAvailable=true;public $locksHeld=0;public $insert_id=0;public $failActivation=false;public $failCount=false;public $failInsert=false;
+	public $prefix='wp_';public $last_error='';public $row;public $rows=null;public $lockAvailable=true;public $locksHeld=0;public $insert_id=0;public $failActivation=false;public $failCount=false;public $failInsert=false;public $lockErrorAfterAcquire=false;
 	public function prepare($query,...$params){return array('sql'=>$query,'args'=>$params);}
 	public function get_row($query,$format=null){
 		if($this->rows===null)return $this->row;
@@ -53,7 +53,9 @@ class File00DB {
 		$sql=$statement['sql'];$args=$statement['args'];
 		if(strpos($sql,'GET_LOCK')!==false){
 			if(!$this->lockAvailable)return 0;
-			$this->locksHeld++;return 1;
+			$this->locksHeld++;
+			if($this->lockErrorAfterAcquire)$this->last_error='simulated post-acquisition SQL error';
+			return 1;
 		}
 		if(strpos($sql,'RELEASE_LOCK')!==false){$this->locksHeld--;return 1;}
 		if(strpos($sql,'COUNT(*)')!==false){
@@ -233,12 +235,24 @@ must($pending['actor_type']==='pending'&&$wpdb->locksHeld===0,
 	'Failed activation remains non-authoritative and releases lock');
 $wpdb->failActivation=false;
 $wpdb->failCount=true;
+$GLOBALS['last_action']=null;
+$GLOBALS['reconciliation_option']=null;
 $cannotVerify=SMC_File06_Case_Consent::withdraw(new File00ConsentRequest(
 	array('research_public_id'=>$newUuid,'evidence_ref'=>$newRef)
 ));
 must($cannotVerify instanceof WP_Error&&$cannotVerify->get_error_code()==='smc_file06_consent_reconciliation_required',
 	'Failed post-revocation count cannot masquerade as verified success');
 must($wpdb->locksHeld===0,'Reconciliation failure still releases DB lock');
+must(($GLOBALS['reconciliation_option']??null)===1,
+	'Uncertain revocation raises persistent operator reconciliation flag');
+must(($GLOBALS['last_action']??null)==='smc_file06_patient_consent_withdrawn_v1',
+	'Uncertain revocation broadcasts downstream invalidation');
+$wpdb->failCount=false;
+$wpdb->lockErrorAfterAcquire=true;
+$reported=SMC_File06_Case_Consent::accept(case_request('55555555-5555-4555-8555-555555555555'));
+must($reported instanceof WP_Error&&$reported->get_error_code()==='smc_file06_consent_busy',
+	'Acquired lock with DB error fails closed');
+must($wpdb->locksHeld===0,'Acquired lock with DB error must be released');
 
 
 echo "File00→File06 consent: {$GLOBALS['count']} isolated assertions PASS.\n";
