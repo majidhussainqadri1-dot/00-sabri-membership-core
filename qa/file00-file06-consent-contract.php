@@ -27,9 +27,31 @@ function apply_filters($name,$default,...$params){
 	return $default;
 }
 class File00DB {
-	public $prefix='wp_';public $last_error='';public $row;
-	public function prepare($query,...$params){return $params;}
-	public function get_row($query,$format=null){return $this->row;}
+	public $prefix='wp_';public $last_error='';public $row;public $rows=null;
+	public function prepare($query,...$params){return array('sql'=>$query,'args'=>$params);}
+	public function get_row($query,$format=null){
+		if($this->rows===null)return $this->row;
+		$id=(int)($query['args'][0]??0);
+		return $this->rows[$id]??null;
+	}
+	public function query($statement){
+		if(!is_array($statement))return false;
+		$sql=$statement['sql'];$args=$statement['args'];$changed=0;
+		foreach($this->rows as $id=>&$row){
+			if($row['actor_type']!=='self'||!empty($row['withdrawn_at']))continue;
+			if(strpos($sql,'WHERE id=%d')!==false){
+				$match=$id===(int)($args[1]??0)&&$row['user_id']===(int)($args[2]??0);
+			}else{
+				$match=$row['user_id']===(int)($args[1]??0)
+					&&$row['purpose']===($args[2]??'')
+					&&$row['channel']===($args[3]??'')
+					&&$row['actor_reference_hash']===($args[4]??'');
+			}
+			if($match){$row['withdrawn_at']=(string)$args[0];$changed++;}
+		}
+		unset($row);
+		return $changed;
+	}
 }
 $wpdb=new File00DB();
 function must($ok,$m){$GLOBALS['count']++;if(!$ok){fwrite(STDERR,"FAILED {$m}\n");exit(1);}}
@@ -65,4 +87,41 @@ must(null===SMC_File06_Case_Consent::verify_for_file06(null,$data),'Suspended or
 $GLOBALS['member_eligible']=true;$wpdb->row['withdrawn_at']='2026-11-08 02:00:00';
 must(null===SMC_File06_Case_Consent::verify_for_file06(null,$data),'Withdrawn receipt rejects publication');
 must(SMC_File06_Case_Consent::current_for_file06(false,'smc-file06-v1:7','smc-f06-r7',$uuid,'patient-story-research')===false,'Revocation reflected in every current check');
+
+/* A concurrent duplicate must not survive a subject's case-specific withdrawal.
+ * Red regression: original implementation updates id=7 only; id=8 remains valid.
+ * Tests include isolation from an unrelated case and an unrelated user.
+ */
+function wp_verify_nonce($nonce,$action){return 1;}
+function is_user_logged_in(){return true;}
+function get_current_user_id(){return 17;}
+function current_time($format,$gmt=false){return '2026-11-10 01:00:00';}
+function rest_ensure_response($value){return $value;}
+function do_action($hook,...$args){$GLOBALS['last_action']=$hook;}
+function update_option($name,$value,$autoload=false){$GLOBALS['reconciliation_option']=$value;}
+class File00ConsentRequest {
+	private $data;
+	public function __construct($data){$this->data=$data;}
+	public function get_header($name){return 'valid-nonce';}
+	public function get_json_params(){return $this->data;}
+}
+$wpdb->row['withdrawn_at']=null;
+$first=$wpdb->row;
+$second=$first;$second['id']=8;
+$unrelated=$first;$unrelated['id']=9;
+$unrelated['actor_reference_hash']=hash_hmac('sha256','file06-case-v1|17|22222222-2222-4222-8222-222222222222','ci-salt');
+$otherMember=$first;$otherMember['id']=10;$otherMember['user_id']=18;
+$otherMember['actor_reference_hash']=hash_hmac('sha256','file06-case-v1|18|'.$uuid,'ci-salt');
+$wpdb->rows=array(7=>$first,8=>$second,9=>$unrelated,10=>$otherMember);
+must(is_array(SMC_File06_Case_Consent::verify_for_file06(null,array_merge($data,array('evidence_ref'=>'smc-f06-r8')))), 'Duplicate was previously active');
+$response=SMC_File06_Case_Consent::withdraw(new File00ConsentRequest(
+	array('research_public_id'=>$uuid,'evidence_ref'=>'smc-f06-r7')
+));
+must(is_array($response)&&($response['state']??'')==='withdrawn','Subject withdrawal committed');
+must(SMC_File06_Case_Consent::current_for_file06(false,'smc-file06-v1:7','smc-f06-r7',$uuid,'patient-story-research')===false,'Original receipt revoked');
+must(SMC_File06_Case_Consent::current_for_file06(false,'smc-file06-v1:8','smc-f06-r8',$uuid,'patient-story-research')===false,'Duplicate receipt revoked');
+must(empty($wpdb->rows[9]['withdrawn_at']),'Other case remains unaffected');
+must(empty($wpdb->rows[10]['withdrawn_at']),'Other member remains unaffected');
+must(($GLOBALS['last_action']??'')==='smc_file06_patient_consent_withdrawn_v1','Withdrawal event emitted');
+
 echo "File00→File06 consent: {$GLOBALS['count']} isolated assertions PASS.\n";
