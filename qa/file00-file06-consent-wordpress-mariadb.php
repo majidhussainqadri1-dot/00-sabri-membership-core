@@ -152,6 +152,163 @@ if ( $got_lock ) {
 }
 $other->close();
 
+
+// Real File00 eligibility/storage fixture with synthetic, named File02/File06
+// provider claims. It is NOT a live verified-patient or installed File06 test.
+$verified_user = wp_insert_user( array(
+    'user_login' => 'file06_consent_verified_ci',
+    'user_email' => 'file06-consent-verified@example.test',
+    'user_pass'  => wp_generate_password( 28, true, true ),
+    'role'       => 'subscriber',
+) );
+if ( is_wp_error( $verified_user ) || ! smc_application( $verified_user ) ) {
+    fwrite( STDERR, "Cannot register File00 real patient eligibility fixture\n" );
+    exit( 2 );
+}
+$verified_user = (int) $verified_user;
+$now = current_time( 'mysql', true );
+$dob = SMC_Security::encrypt( '1990-01-01', 'date-of-birth',
+    array( 'user_id' => $verified_user ) );
+$phone = '+923041234567';
+$encrypted_phone = SMC_Security::encrypt( $phone, 'membership-phone',
+    array( 'user_id' => $verified_user ) );
+$check( ! is_wp_error( $dob ) && ! is_wp_error( $encrypted_phone ),
+    'real File00 application encrypts patient age and contact evidence' );
+if ( is_wp_error( $dob ) || is_wp_error( $encrypted_phone ) ) { exit( 2 ); }
+$updated = $wpdb->update( $wpdb->prefix . 'smc_applications', array(
+    'status' => 'approved',
+    'date_of_birth_enc' => $dob,
+    'phone_e164_enc' => $encrypted_phone,
+    'gender' => 'male', 'residence_country' => 'PK',
+    'guardian_required' => 0,
+    'updated_at' => $now,
+), array( 'user_id' => $verified_user ) );
+$check( 1 === (int) $updated
+    && SMC_Contracts::upsert_role_grant( $verified_user, 'member', 'approved', 1, 1 ),
+    'synthetic approved File00 membership and role grant persist in real DB' );
+
+foreach ( array( 'email' => 'file06-consent-verified@example.test', 'mobile' => $phone ) as $channel => $target ) {
+    $blind = SMC_Security::blind_index( $target, 'contact-target' );
+    $inserted = ! is_wp_error( $blind ) && 1 === (int) $wpdb->insert(
+        $wpdb->prefix . 'smc_contact_otps', array(
+            'user_id' => $verified_user,
+            'channel' => $channel,
+            'target_hash' => $blind,
+            'code_lookup_hash' => hash( 'sha256', 'ci-' . $channel . $verified_user ),
+            'code_hash' => 'CI-protected-contact-receipt',
+            'attempts' => 0,
+            'expires_at' => gmdate( 'Y-m-d H:i:s', time() + 3600 ),
+            'delivery_receipt_hash' => hash( 'sha256', 'delivered-' . $channel ),
+            'delivered_at' => $now, 'verified_at' => $now, 'created_at' => $now,
+        )
+    );
+    $check( $inserted, 'File00 ' . $channel . ' current contact verification in real DB' );
+}
+foreach ( array_keys( smc_required_identity_documents() ) as $key ) {
+    $inserted = $wpdb->insert( $wpdb->prefix . 'smc_identity_documents', array(
+        'user_id' => $verified_user, 'document_key' => $key, 'version' => 1,
+        'label' => 'CI non-sensitive fixture', 'stored_name' => 'ci-' . $key . '-' . $verified_user,
+        'original_name' => 'ci-fixture.txt', 'mime_type' => 'text/plain',
+        'file_size' => 1, 'plain_sha256' => hash( 'sha256', $key ),
+        'scan_status' => 'passed', 'status' => 'approved',
+        'reviewed_by' => 1, 'reviewed_at' => $now, 'lease_id' => wp_generate_uuid4(),
+        'created_at' => $now, 'updated_at' => $now,
+    ) );
+    $check( 1 === (int) $inserted, 'File00 ' . $key . ' synthetic approved document metadata persists' );
+}
+$auth_fixture = static function ( $baseline, $subject ) use ( $verified_user ) {
+    if ( (int) $subject !== $verified_user ) { return $baseline; }
+    return array(
+        'contract_version' => '1.0.0', 'owner' => 'file02', 'level' => 2,
+        'method' => 'ci-current-session', 'verified_at' => time(),
+        'passkey_asserted' => false, 'hardware_backed' => false,
+    );
+};
+add_filter( 'smc_file02_authentication_assurance_v1', $auth_fixture, 10, 2 );
+$verified_case = '33333333-3333-4333-8333-333333333333';
+$policy_text = 'CI research-specific patient consent. Publication requires current verified case authorization.';
+$policy_active = true;
+$relation_active = true;
+add_filter( 'he_v12_file06_consent_policy_v1',
+    static function ( $value, $locale ) use ( &$policy_active, $policy_text ) {
+        if ( ! $policy_active ) { return null; }
+        return array(
+            'approved' => true, 'owner_file' => 'file-06',
+            'purpose' => 'patient-story-research', 'locale' => $locale,
+            'version' => 'ci-policy-1', 'text' => $policy_text,
+            'text_hash' => hash( 'sha256', $policy_text ),
+        );
+    }, 10, 2 );
+add_filter( 'he_v12_file06_patient_relation_v1',
+    static function ( $value, $subject, $uuid ) use ( $verified_user, $verified_case, &$relation_active ) {
+        if ( ! $relation_active || (int) $subject !== $verified_user || $uuid !== $verified_case ) { return null; }
+        return array(
+            'verified' => true, 'owner_file' => 'file-06',
+            'subject_user_id' => $verified_user, 'research_public_id' => $verified_case,
+            'relation_version' => 1, 'attested_by' => 5, 'approved_by' => 6,
+        );
+    }, 10, 3 );
+wp_set_current_user( $verified_user );
+$claims = SMC_Contracts::assertions( $verified_user );
+$profile = SMC_Advanced_Trust_2026::assurance_profile( $verified_user );
+$check( ! empty( $claims['eligible'] ) && empty( $claims['suspended'] )
+    && empty( $claims['institutional_account'] )
+    && (int) ( $profile['identity_assurance_level'] ?? 0 ) >= 3
+    && (int) ( $profile['authentication_assurance_level'] ?? 0 ) >= 1,
+    'real File00 member eligibility, documents and typed authentication claim allow adult case consent' );
+$make_accept = static function ( $case, $policy_text ) {
+    $request = new WP_REST_Request( 'POST', '/smc/v1/file06/case-consent' );
+    $request->set_header( 'Content-Type', 'application/json' );
+    $request->set_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
+    $request->set_body( wp_json_encode( array(
+        'research_public_id' => $case, 'accepted' => true, 'locale' => 'ur-PK',
+        'policy_version' => 'ci-policy-1', 'text_hash' => hash( 'sha256', $policy_text ),
+    ) ) );
+    return $request;
+};
+$accepted = SMC_File06_Case_Consent::accept( $make_accept( $verified_case, $policy_text ) );
+$accepted_data = is_wp_error( $accepted ) ? array() : $accepted->get_data();
+$reference = (string) ( $accepted_data['evidence_ref'] ?? '' );
+$check( 'accepted' === ( $accepted_data['state'] ?? '' ) && 0 === strpos( $reference, 'smc-f06-r' ),
+    'verified adult patient can accept case-specific policy in real WordPress' );
+$receipt_id = (int) substr( $reference, strlen( 'smc-f06-r' ) );
+$saved = $wpdb->get_row( $wpdb->prepare(
+    "SELECT actor_type,user_id,purpose,policy_version,withdrawn_at
+    FROM {$table} WHERE id=%d", $receipt_id
+), ARRAY_A );
+$check( is_array( $saved ) && 'self' === ( $saved['actor_type'] ?? '' )
+    && (int) $saved['user_id'] === $verified_user
+    && empty( $saved['withdrawn_at'] ),
+    'case-specific real DB receipt is auditable, subject-bound and activated' );
+$check( SMC_File06_Case_Consent::current_for_file06(
+    false, 'smc-file06-v1:' . $receipt_id, $reference,
+    $verified_case, 'patient-story-research' ) === true,
+    'current real File00 membership and synthetic File06 policy validate actual stored receipt' );
+$repeat = SMC_File06_Case_Consent::accept( $make_accept( $verified_case, $policy_text ) );
+$repeat_data = is_wp_error( $repeat ) ? array() : $repeat->get_data();
+$check( ( $repeat_data['evidence_ref'] ?? '' ) === $reference,
+    'repeated same-case acceptance reuses one immutable receipt in MariaDB' );
+$policy_active = false;
+$check( SMC_File06_Case_Consent::current_for_file06(
+    false, 'smc-file06-v1:' . $receipt_id, $reference,
+    $verified_case, 'patient-story-research' ) === false,
+    'revoked synthetic File06 policy immediately invalidates stored receipt' );
+$policy_active = true;
+$relation_active = false;
+$check( SMC_File06_Case_Consent::current_for_file06(
+    false, 'smc-file06-v1:' . $receipt_id, $reference,
+    $verified_case, 'patient-story-research' ) === false,
+    'revoked synthetic File06 patient relationship invalidates stored receipt' );
+$relation_active = true;
+$wpdb->update( $wpdb->prefix . 'smc_applications', array( 'status' => 'suspended' ),
+    array( 'user_id' => $verified_user ) );
+$check( SMC_File06_Case_Consent::current_for_file06(
+    false, 'smc-file06-v1:' . $receipt_id, $reference,
+    $verified_case, 'patient-story-research' ) === false,
+    'real File00 suspension blocks research consent on revalidation' );
+wp_set_current_user( 0 );
+remove_filter( 'smc_file02_authentication_assurance_v1', $auth_fixture, 10 );
+
 if ( $failures ) {
     fwrite( STDERR, 'File00/File06 real MariaDB: ' . $pass . ' PASS / ' . count( $failures ) . " FAIL\n" );
     exit( 1 );
