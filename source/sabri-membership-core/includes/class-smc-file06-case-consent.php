@@ -158,6 +158,31 @@ final class SMC_File06_Case_Consent {
 		) );
 	}
 
+	/**
+	 * Serialize the entire current-subject/case consent lifecycle across workers.
+	 * A database lock is mandatory: without it two simultaneous accept requests
+	 * can both see no active receipt, and a withdrawal of one ID leaves another.
+	 * Fail closed when the database cannot provide the lock.
+	 */
+	private static function case_lock( $user_id, $research_uuid ) {
+		global $wpdb;
+		$key = 'smc-f06:' . substr( hash( 'sha256',
+			(string) ( $wpdb->dbname ?? '' ) . '|' . (string) $wpdb->prefix . '|' .
+			absint( $user_id ) . '|' . $research_uuid ), 0, 52 );
+		$wpdb->last_error = '';
+		$held = $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, %d)', $key, 3 ) );
+		if ( '1' !== (string) $held || '' !== (string) $wpdb->last_error ) {
+			return self::problem( 'smc_file06_consent_busy',
+				'The case consent record is busy or cannot be safely locked. Retry later.', 503 );
+		}
+		return $key;
+	}
+
+	private static function release_case_lock( $key ) {
+		global $wpdb;
+		$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $key ) );
+	}
+
 	private static function authorized_request( $request ) {
 		return wp_verify_nonce( (string) $request->get_header('X-WP-Nonce'), 'wp_rest' )
 			&& is_user_logged_in() && self::assurance_ok( get_current_user_id() );
@@ -179,60 +204,66 @@ final class SMC_File06_Case_Consent {
 			|| ! self::relation( $uid, $uuid ) ) {
 			return self::problem( 'smc_file06_consent_unverified', 'Current File 06 subject match, approved policy and explicit acceptance are required.', 422 );
 		}
-		global $wpdb;
-		$hash = self::reference_hash( $uid, $uuid );
-		$wpdb->last_error = '';
-		$existing = $wpdb->get_row( $wpdb->prepare(
-			"SELECT id,policy_version,locale,text_hash FROM {$wpdb->prefix}smc_consents
-			WHERE user_id=%d AND purpose=%s AND channel=%s AND actor_type='self'
-			AND actor_reference_hash=%s AND withdrawn_at IS NULL ORDER BY id DESC LIMIT 1",
-			$uid, self::PURPOSE, self::CHANNEL, $hash
-		), ARRAY_A );
-		if ( '' !== (string) $wpdb->last_error ) {
-			return self::problem( 'smc_file06_consent_lookup_failed', 'The existing consent ledger could not be verified.', 503 );
-		}
-		if ( $existing ) {
-			if ( ! hash_equals( (string) $existing['policy_version'], $version )
-				|| ! hash_equals( (string) $existing['locale'], $locale )
-				|| ! hash_equals( (string) $existing['text_hash'], (string) $policy['text_hash'] ) ) {
-				return self::problem( 'smc_file06_consent_revision_required', 'Existing case consent requires revocation before a different policy is accepted.', 409 );
+		$lock_key = self::case_lock( $uid, $uuid );
+		if ( is_wp_error( $lock_key ) ) { return $lock_key; }
+		try {
+			global $wpdb;
+			$hash = self::reference_hash( $uid, $uuid );
+			$wpdb->last_error = '';
+			$existing = $wpdb->get_row( $wpdb->prepare(
+				"SELECT id,policy_version,locale,text_hash FROM {$wpdb->prefix}smc_consents
+				WHERE user_id=%d AND purpose=%s AND channel=%s AND actor_type='self'
+				AND actor_reference_hash=%s AND withdrawn_at IS NULL ORDER BY id DESC LIMIT 1",
+				$uid, self::PURPOSE, self::CHANNEL, $hash
+			), ARRAY_A );
+			if ( '' !== (string) $wpdb->last_error ) {
+				return self::problem( 'smc_file06_consent_lookup_failed', 'The existing consent ledger could not be verified.', 503 );
 			}
-			return rest_ensure_response( array( 'evidence_ref'=>self::RECEIPT_PREFIX . (int)$existing['id'],
-				'verification_id'=>self::VERIFICATION_PREFIX . (int)$existing['id'],
+			if ( $existing ) {
+				if ( ! hash_equals( (string) $existing['policy_version'], $version )
+					|| ! hash_equals( (string) $existing['locale'], $locale )
+					|| ! hash_equals( (string) $existing['text_hash'], (string) $policy['text_hash'] ) ) {
+					return self::problem( 'smc_file06_consent_revision_required', 'Existing case consent requires revocation before a different policy is accepted.', 409 );
+				}
+				return rest_ensure_response( array( 'evidence_ref'=>self::RECEIPT_PREFIX . (int)$existing['id'],
+					'verification_id'=>self::VERIFICATION_PREFIX . (int)$existing['id'],
+					'research_public_id'=>$uuid,'policy_version'=>$version,'locale'=>$locale,
+					'purpose'=>self::PURPOSE, 'state'=>'accepted' ) );
+			}
+			// Pending rows are untrusted. Only a durable audit turns pending into self.
+			$written = $wpdb->insert( $wpdb->prefix . 'smc_consents', array(
+				'user_id'=>$uid,'actor_type'=>'pending','actor_reference_hash'=>$hash,
+				'purpose'=>self::PURPOSE,'locale'=>$locale,'channel'=>self::CHANNEL,
+				'text_snapshot'=>(string)$policy['text'],'text_hash'=>(string)$policy['text_hash'],
+				'policy_version'=>$version,'accepted_at'=>current_time('mysql',true),'withdrawn_at'=>null,
+			) );
+			if ( 1 !== (int) $written || (int) $wpdb->insert_id < 1 ) {
+				return self::problem( 'smc_file06_consent_store_failed', 'The patient consent receipt was not saved.', 503 );
+			}
+			$id = (int) $wpdb->insert_id;
+			$audited = false;
+			try { $audited = SMC_Security::audit( 'file06_case_consent_accepted', $uid,
+				array( 'receipt_id'=>$id, 'case_hash'=>$hash, 'policy_version'=>$version ) ); }
+			catch ( Throwable $error ) { $audited = false; }
+			if ( ! $audited ) {
+				$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_consents SET withdrawn_at=%s
+					WHERE id=%d AND actor_type='pending'", current_time('mysql',true),$id ) );
+				return self::problem( 'smc_file06_consent_audit_failed', 'Consent could not be independently audited.', 503 );
+			}
+			$activated = $wpdb->query( $wpdb->prepare(
+				"UPDATE {$wpdb->prefix}smc_consents SET actor_type='self'
+				WHERE id=%d AND user_id=%d AND actor_type='pending' AND withdrawn_at IS NULL", $id,$uid
+			) );
+			if ( 1 !== (int)$activated ) {
+				return self::problem( 'smc_file06_consent_activation_failed', 'Consent acceptance was not durably activated.', 503 );
+			}
+			return rest_ensure_response( array( 'evidence_ref'=>self::RECEIPT_PREFIX . $id,
+				'verification_id'=>self::VERIFICATION_PREFIX . $id,
 				'research_public_id'=>$uuid,'policy_version'=>$version,'locale'=>$locale,
-				'purpose'=>self::PURPOSE, 'state'=>'accepted' ) );
+				'purpose'=>self::PURPOSE,'state'=>'accepted' ) );
+		} finally {
+			self::release_case_lock( $lock_key );
 		}
-		// Pending rows are untrusted. Only a durable audit turns pending into self.
-		$written = $wpdb->insert( $wpdb->prefix . 'smc_consents', array(
-			'user_id'=>$uid,'actor_type'=>'pending','actor_reference_hash'=>$hash,
-			'purpose'=>self::PURPOSE,'locale'=>$locale,'channel'=>self::CHANNEL,
-			'text_snapshot'=>(string)$policy['text'],'text_hash'=>(string)$policy['text_hash'],
-			'policy_version'=>$version,'accepted_at'=>current_time('mysql',true),'withdrawn_at'=>null,
-		) );
-		if ( 1 !== (int) $written || (int) $wpdb->insert_id < 1 ) {
-			return self::problem( 'smc_file06_consent_store_failed', 'The patient consent receipt was not saved.', 503 );
-		}
-		$id = (int) $wpdb->insert_id;
-		$audited = false;
-		try { $audited = SMC_Security::audit( 'file06_case_consent_accepted', $uid,
-			array( 'receipt_id'=>$id, 'case_hash'=>$hash, 'policy_version'=>$version ) ); }
-		catch ( Throwable $error ) { $audited = false; }
-		if ( ! $audited ) {
-			$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_consents SET withdrawn_at=%s
-				WHERE id=%d AND actor_type='pending'", current_time('mysql',true),$id ) );
-			return self::problem( 'smc_file06_consent_audit_failed', 'Consent could not be independently audited.', 503 );
-		}
-		$activated = $wpdb->query( $wpdb->prepare(
-			"UPDATE {$wpdb->prefix}smc_consents SET actor_type='self'
-			WHERE id=%d AND user_id=%d AND actor_type='pending' AND withdrawn_at IS NULL", $id,$uid
-		) );
-		if ( 1 !== (int)$activated ) {
-			return self::problem( 'smc_file06_consent_activation_failed', 'Consent acceptance was not durably activated.', 503 );
-		}
-		return rest_ensure_response( array( 'evidence_ref'=>self::RECEIPT_PREFIX . $id,
-			'verification_id'=>self::VERIFICATION_PREFIX . $id,
-			'research_public_id'=>$uuid,'policy_version'=>$version,'locale'=>$locale,
-			'purpose'=>self::PURPOSE,'state'=>'accepted' ) );
 	}
 
 	public static function withdraw( $request ) {
@@ -249,25 +280,57 @@ final class SMC_File06_Case_Consent {
 			|| ! hash_equals( self::reference_hash($user,$uuid), (string)$row['actor_reference_hash'] ) ) {
 			return self::problem( 'smc_file06_consent_withdraw_invalid', 'The subject-owned case receipt is not available.', 404 );
 		}
-		global $wpdb;
-		$withdrawn = $wpdb->query( $wpdb->prepare(
-			"UPDATE {$wpdb->prefix}smc_consents SET withdrawn_at=%s
-			WHERE id=%d AND user_id=%d AND actor_type='self' AND withdrawn_at IS NULL",
-			current_time('mysql',true),(int)$row['id'],$user
-		) );
-		if ( 1 !== (int)$withdrawn ) {
-			return self::problem( 'smc_file06_consent_withdraw_failed', 'The consent withdrawal was not committed.', 503 );
+		$lock_key = self::case_lock( $user, $uuid );
+		if ( is_wp_error( $lock_key ) ) { return $lock_key; }
+		try {
+			// Revalidate inside the lock: a competing request may have revoked
+			// the originally selected receipt before this worker obtained it.
+			$locked_row = self::receipt_row( $ref );
+			if ( ! $locked_row || (int)$locked_row['user_id'] !== $user ||
+				! hash_equals( self::reference_hash( $user, $uuid ),
+					(string)$locked_row['actor_reference_hash'] ) ) {
+				return self::problem( 'smc_file06_consent_withdraw_conflict',
+					'The current case consent is no longer available for withdrawal.', 409 );
+			}
+			$row = $locked_row;
+			global $wpdb;
+			$withdrawn = $wpdb->query( $wpdb->prepare(
+				"UPDATE {$wpdb->prefix}smc_consents SET withdrawn_at=%s
+				WHERE user_id=%d AND purpose=%s AND channel=%s AND actor_reference_hash=%s
+				AND actor_type='self' AND withdrawn_at IS NULL",
+				current_time('mysql',true),$user,self::PURPOSE,self::CHANNEL,
+				(string)$row['actor_reference_hash']
+			) );
+			if ( false === $withdrawn || (int)$withdrawn < 1 || '' !== (string)$wpdb->last_error ) {
+				return self::problem( 'smc_file06_consent_withdraw_failed', 'The consent withdrawal was not committed.', 503 );
+			}
+			// A successful revocation must cover every active receipt of this case.
+			// Verify the committed state before reporting success to File 06.
+			$wpdb->last_error = '';
+			$remaining = $wpdb->get_var( $wpdb->prepare(
+				"SELECT COUNT(*) FROM {$wpdb->prefix}smc_consents
+				WHERE user_id=%d AND purpose=%s AND channel=%s AND actor_reference_hash=%s
+				AND actor_type='self' AND withdrawn_at IS NULL",
+				$user,self::PURPOSE,self::CHANNEL,(string)$row['actor_reference_hash']
+			) );
+			if ( null === $remaining || '' !== (string)$wpdb->last_error || (int)$remaining !== 0 ) {
+				return self::problem( 'smc_file06_consent_reconciliation_required',
+					'Consent revocation could not be verified for all case receipts.', 503 );
+			}
+			$audited = false;
+			try { $audited = SMC_Security::audit( 'file06_case_consent_withdrawn', $user, array(
+				'receipt_id'=>(int)$row['id'], 'case_hash'=>$row['actor_reference_hash'],
+				'revoked_receipts'=>(int)$withdrawn ) ); }
+			catch ( Throwable $error ) { $audited = false; }
+			if ( ! $audited ) {
+				update_option( 'smc_file06_consent_reconciliation_required', 1, false );
+			}
+			// The File 06 public read guard already rejects this row immediately.
+			do_action( 'smc_file06_patient_consent_withdrawn_v1', $uuid, $user, $ref );
+			return rest_ensure_response( array( 'state'=>'withdrawn', 'research_public_id'=>$uuid,
+				'file06_revalidation_required'=>true, 'audit_reconciliation_required'=>!$audited ) );
+		} finally {
+			self::release_case_lock( $lock_key );
 		}
-		$audited = false;
-		try { $audited = SMC_Security::audit( 'file06_case_consent_withdrawn', $user, array(
-			'receipt_id'=>(int)$row['id'], 'case_hash'=>$row['actor_reference_hash'] ) ); }
-		catch ( Throwable $error ) { $audited = false; }
-		if ( ! $audited ) {
-			update_option( 'smc_file06_consent_reconciliation_required', 1, false );
-		}
-		// The File 06 public read guard already rejects this row immediately.
-		do_action( 'smc_file06_patient_consent_withdrawn_v1', $uuid, $user, $ref );
-		return rest_ensure_response( array( 'state'=>'withdrawn', 'research_public_id'=>$uuid,
-			'file06_revalidation_required'=>true, 'audit_reconciliation_required'=>!$audited ) );
 	}
 }
