@@ -120,6 +120,27 @@ jobs:
           set -euo pipefail
           php -l qa/file00-file06-pr14-real-source-wordpress.php
           php /tmp/wp-cli.phar eval-file "$GITHUB_WORKSPACE/qa/file00-file06-pr14-real-source-wordpress.php" --path=/tmp/wordpress
+      - name: Install complete pinned File06 plugin with actual File00
+        run: |
+          set -euo pipefail
+          cp -R _pinned_file06_pr14/homeopathy-encyclopedia /tmp/wordpress/wp-content/plugins/homeopathy-encyclopedia
+          php /tmp/wp-cli.phar plugin activate homeopathy-encyclopedia --path=/tmp/wordpress
+      - name: Real dual-plugin activation, schema and Filter-arity smoke
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval '
+            $fail=array();
+            if (!is_plugin_active("sabri-membership-core/sabri-membership-core.php")) $fail[]="File00 plugin not active";
+            if (!is_plugin_active("homeopathy-encyclopedia/homeopathy-encyclopedia.php")) $fail[]="File06 plugin not active";
+            if (!class_exists("HE_V12_Case_Consent_Owner") || !class_exists("SMC_File06_Case_Consent")) $fail[]="Owners absent";
+            if (!function_exists("he_contract_descriptor")) $fail[]="File06 contract not registered";
+            if (class_exists("HE_V2_Schema") && "active"!==HE_V2_Schema::runtime_status()) $fail[]="File06 schema not active";
+            if (!has_filter("he_v12_file06_patient_relation_v1",array("HE_V12_Case_Consent_Owner","relation_claim"))) $fail[]="Patient relation hook absent";
+            if (!has_filter("he_v12_file06_consent_policy_v1",array("HE_V12_Case_Consent_Owner","approved_policy"))) $fail[]="Policy hook absent";
+            if ($fail){fwrite(STDERR,implode("; ",$fail)."\n");exit(1);}
+            echo "PASS: Two complete plugins active; canonical File00/File06 providers installed.\n";
+          ' --path=/tmp/wordpress
+
 
   consent-pinned-file06:
     name: Pinned File06 v12 producer compatibility blocker
