@@ -288,6 +288,35 @@ $repeat = SMC_File06_Case_Consent::accept( $make_accept( $verified_case, $policy
 $repeat_data = is_wp_error( $repeat ) ? array() : $repeat->get_data();
 $check( ( $repeat_data['evidence_ref'] ?? '' ) === $reference,
     'repeated same-case acceptance reuses one immutable receipt in MariaDB' );
+// Independently held DB lock also prevents *acceptance*, not just withdrawal.
+$accept_lock = new mysqli( '127.0.0.1', 'wordpress', 'wordpress', 'wordpress', 3306 );
+$check( ! $accept_lock->connect_errno, 'real second MariaDB connection for acceptance contention' );
+if ( ! $accept_lock->connect_errno ) {
+    $accept_lock_name = 'smc-f06:' . substr( hash( 'sha256',
+        $wpdb->dbname . '|' . $wpdb->prefix . '|' . $verified_user . '|' . $verified_case ), 0, 52 );
+    $held_result = $accept_lock->query(
+        "SELECT GET_LOCK('" . $accept_lock->real_escape_string( $accept_lock_name ) . "',0) AS result"
+    );
+    $held = $held_result && 1 === (int) ( $held_result->fetch_assoc()['result'] ?? 0 );
+    $check( $held, 'real parallel case-acceptance DB lock acquired' );
+    if ( $held ) {
+        $busy_accept = SMC_File06_Case_Consent::accept( $make_accept( $verified_case, $policy_text ) );
+        $check( is_wp_error( $busy_accept )
+            && 'smc_file06_consent_busy' === $busy_accept->get_error_code(),
+            'case acceptance refuses independently held DB lock' );
+        $active_count = (int) $wpdb->get_var( $wpdb->prepare(
+            "SELECT COUNT(*) FROM {$table} WHERE user_id=%d AND purpose=%s AND channel=%s
+             AND actor_reference_hash=%s AND actor_type='self' AND withdrawn_at IS NULL",
+            $verified_user, 'patient-story-research', 'file06-case',
+            hash_hmac( 'sha256', 'file06-case-v1|' . $verified_user . '|' . $verified_case, wp_salt( 'auth' ) )
+        ) );
+        $check( 1 === $active_count, 'contended acceptance creates no second active receipt' );
+        $accept_lock->query(
+            "SELECT RELEASE_LOCK('" . $accept_lock->real_escape_string( $accept_lock_name ) . "')"
+        );
+    }
+    $accept_lock->close();
+}
 $policy_active = false;
 $check( SMC_File06_Case_Consent::current_for_file06(
     false, 'smc-file06-v1:' . $receipt_id, $reference,
