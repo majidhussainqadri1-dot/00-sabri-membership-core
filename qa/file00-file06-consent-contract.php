@@ -27,11 +27,25 @@ function apply_filters($name,$default,...$params){
 	return $default;
 }
 class File00DB {
-	public $prefix='wp_';public $last_error='';public $row;public $rows=null;public $lockAvailable=true;public $locksHeld=0;
+	public $prefix='wp_';public $last_error='';public $row;public $rows=null;public $lockAvailable=true;public $locksHeld=0;public $insert_id=0;public $failActivation=false;public $failCount=false;public $failInsert=false;
 	public function prepare($query,...$params){return array('sql'=>$query,'args'=>$params);}
 	public function get_row($query,$format=null){
 		if($this->rows===null)return $this->row;
-		$id=(int)($query['args'][0]??0);
+		$sql=$query['sql'];$args=$query['args'];
+		if(strpos($sql,'WHERE user_id=%d')!==false){
+			$matches=array_filter($this->rows,function($row)use($args){
+				return (int)$row['user_id']===(int)($args[0]??0)
+					&&$row['purpose']===($args[1]??'')
+					&&$row['channel']===($args[2]??'')
+					&&$row['actor_type']==='self'
+					&&$row['actor_reference_hash']===($args[3]??'')
+					&&empty($row['withdrawn_at']);
+			});
+			if(!$matches)return null;
+			krsort($matches,SORT_NUMERIC);
+			return reset($matches);
+		}
+		$id=(int)($args[0]??0);
 		return $this->rows[$id]??null;
 	}
 	public function get_var($statement){
@@ -43,6 +57,7 @@ class File00DB {
 		}
 		if(strpos($sql,'RELEASE_LOCK')!==false){$this->locksHeld--;return 1;}
 		if(strpos($sql,'COUNT(*)')!==false){
+			if($this->failCount)return null;
 			$found=0;
 			foreach($this->rows as $row){
 				if($row['user_id']===(int)($args[0]??0)&&$row['purpose']===($args[1]??'')
@@ -54,9 +69,32 @@ class File00DB {
 		}
 		return null;
 	}
+	public function insert($table,$data){
+		if($this->failInsert)return false;
+		$id=max(array_keys($this->rows))+1;
+		$this->insert_id=$id;
+		$this->rows[$id]=array_merge(array('id'=>$id),$data);
+		return 1;
+	}
 	public function query($statement){
 		if(!is_array($statement))return false;
 		$sql=$statement['sql'];$args=$statement['args'];$changed=0;
+		if(strpos($sql,"SET actor_type='self'")!==false){
+			if($this->failActivation)return 0;
+			$id=(int)($args[0]??0);$uid=(int)($args[1]??0);
+			if(isset($this->rows[$id])&&$this->rows[$id]['actor_type']==='pending'
+				&&$this->rows[$id]['user_id']===$uid&&empty($this->rows[$id]['withdrawn_at'])){
+				$this->rows[$id]['actor_type']='self';return 1;
+			}
+			return 0;
+		}
+		if(strpos($sql,"actor_type='pending'")!==false){
+			$id=(int)($args[1]??0);
+			if(isset($this->rows[$id])&&$this->rows[$id]['actor_type']==='pending'){
+				$this->rows[$id]['withdrawn_at']=(string)($args[0]??'');return 1;
+			}
+			return 0;
+		}
 		foreach($this->rows as $id=>&$row){
 			if($row['actor_type']!=='self'||!empty($row['withdrawn_at']))continue;
 			if(strpos($sql,'WHERE id=%d')!==false){
@@ -152,5 +190,55 @@ must($busy instanceof WP_Error&&$busy->get_error_code()==='smc_file06_consent_bu
 	'Database lock refusal denies withdrawal safely');
 must(empty($wpdb->rows[9]['withdrawn_at']),'Lock refusal did not mutate case consent');
 must($wpdb->locksHeld===0,'Refused lock does not leak lock ownership');
+
+/* Acceptance is serialized too: a second request reuses the exact active
+ * receipt. Database lock refusal must not insert even a pending record.
+ */
+function case_request($uuid){
+	return new File00ConsentRequest(array(
+		'research_public_id'=>$uuid,'accepted'=>true,
+		'policy_version'=>'case-policy-v1','locale'=>'ur-PK',
+		'text_hash'=>hash('sha256',str_repeat('case consent terms ',12))
+	));
+}
+$originalCount=count($wpdb->rows);
+$busyAccept=SMC_File06_Case_Consent::accept(case_request('22222222-2222-4222-8222-222222222222'));
+must($busyAccept instanceof WP_Error&&$busyAccept->get_error_code()==='smc_file06_consent_busy',
+	'Lock refusal denies accept without creating a pending receipt');
+must(count($wpdb->rows)===$originalCount,'Denied accept added no row');
+$wpdb->lockAvailable=true;
+$existing=SMC_File06_Case_Consent::accept(case_request('22222222-2222-4222-8222-222222222222'));
+must(is_array($existing)&&$existing['evidence_ref']==='smc-f06-r9',
+	'Under lock an existing active receipt is reused');
+must(count($wpdb->rows)===$originalCount&&$wpdb->locksHeld===0,
+	'Reused receipt is idempotent and lock released');
+$newUuid='33333333-3333-4333-8333-333333333333';
+$created=SMC_File06_Case_Consent::accept(case_request($newUuid));
+must(is_array($created)&&$created['state']==='accepted',
+	'Fresh consent creates a valid accepted receipt');
+$newRef=$created['evidence_ref'];
+$newId=(int)str_replace('smc-f06-r','',$newRef);
+must(($wpdb->rows[$newId]['actor_type']??'')==='self'&&$wpdb->locksHeld===0,
+	'New consent was activated after audit and lock released');
+$createdAgain=SMC_File06_Case_Consent::accept(case_request($newUuid));
+must($createdAgain['evidence_ref']===$newRef,
+	'Consecutive accept requests reuse identical active receipt');
+must(count($wpdb->rows)===$originalCount+1,'Idempotent repeat did not insert duplicate');
+$wpdb->failActivation=true;
+$noActivation=SMC_File06_Case_Consent::accept(case_request('44444444-4444-4444-8444-444444444444'));
+must($noActivation instanceof WP_Error&&$noActivation->get_error_code()==='smc_file06_consent_activation_failed',
+	'Failed DB activation returns an error, never a valid receipt');
+$pending=end($wpdb->rows);
+must($pending['actor_type']==='pending'&&$wpdb->locksHeld===0,
+	'Failed activation remains non-authoritative and releases lock');
+$wpdb->failActivation=false;
+$wpdb->failCount=true;
+$cannotVerify=SMC_File06_Case_Consent::withdraw(new File00ConsentRequest(
+	array('research_public_id'=>$newUuid,'evidence_ref'=>$newRef)
+));
+must($cannotVerify instanceof WP_Error&&$cannotVerify->get_error_code()==='smc_file06_consent_reconciliation_required',
+	'Failed post-revocation count cannot masquerade as verified success');
+must($wpdb->locksHeld===0,'Reconciliation failure still releases DB lock');
+
 
 echo "File00→File06 consent: {$GLOBALS['count']} isolated assertions PASS.\n";
