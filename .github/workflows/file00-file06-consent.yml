@@ -8,11 +8,15 @@ permissions:
 jobs:
   consent-source:
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['7.4', '8.3']
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc
         with:
-          php-version: '8.3'
+          php-version: ${{ matrix.php }}
           coverage: none
       - name: Freeze exact source and lint
         run: |
