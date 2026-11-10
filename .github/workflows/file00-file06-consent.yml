@@ -93,3 +93,28 @@ jobs:
         run: |
           set -euo pipefail
           php /tmp/wp-cli.phar eval-file "$GITHUB_WORKSPACE/qa/file00-file06-consent-wordpress-mariadb.php" --path=/tmp/wordpress
+
+  consent-pinned-file06:
+    name: Pinned File06 v12 producer compatibility blocker
+    runs-on: ubuntu-24.04
+    steps:
+      - name: File00 exact checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - name: Immutable File06 v12 consent producer
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: majidhussainqadri1-dot/06-homeopathy-encyclopedia-foundation
+          ref: 308cb09f9375057fe83e2738e002e74b9aa68bbe
+          path: _pinned_file06
+          persist-credentials: false
+      - name: Verify pinned source and fail-closed boundary
+        env:
+          FILE06_SOURCE_ROOT: ${{ github.workspace }}/_pinned_file06
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C _pinned_file06 rev-parse HEAD)" = 308cb09f9375057fe83e2738e002e74b9aa68bbe
+          php -l qa/file00-file06-pinned-protocol.php
+          php qa/file00-file06-pinned-protocol.php
