@@ -1,0 +1,168 @@
+name: File00 File06 Case Consent Provider Source QA
+on:
+  push:
+    branches: [ 'fix/file00-file06-case-consent-provider-20261108' ]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  consent-source:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['7.4', '8.3']
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+      - name: Freeze exact source and lint
+        run: |
+          set -euo pipefail
+          echo "SOURCE_HEAD=$(git rev-parse HEAD)"
+          find source/sabri-membership-core qa -name '*.php' -type f -print0 | sort -z | xargs -0 -n1 php -l >/dev/null
+      - name: Verify exact plugin manifest
+        run: (cd source/sabri-membership-core && sha256sum --check MANIFEST.sha256)
+      - name: File00 subject case consent contract
+        run: php qa/file00-file06-consent-contract.php
+
+  consent-mariadb:
+    name: File00/File06 real WordPress MariaDB consent revocation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_DATABASE: wordpress
+          MARIADB_USER: wordpress
+          MARIADB_PASSWORD: wordpress
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - name: Exact candidate checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - name: Immutable File06 v12 source checkout for real WordPress compatibility
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: majidhussainqadri1-dot/06-homeopathy-encyclopedia-foundation
+          ref: 308cb09f9375057fe83e2738e002e74b9aa68bbe
+          path: _pinned_file06
+          persist-credentials: false
+      - name: Verify exact File06 source identity
+        run: test "$(git -C _pinned_file06 rev-parse HEAD)" = 308cb09f9375057fe83e2738e002e74b9aa68bbe
+      - name: Immutable File06 PR14 positive provider checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: majidhussainqadri1-dot/06-homeopathy-encyclopedia-foundation
+          ref: bee1462c0591f7281d3cd8182c6d9563a16dc078
+          path: _pinned_file06_pr14
+          persist-credentials: false
+      - name: Freeze File06 PR14 companion SHA
+        run: test "$(git -C _pinned_file06_pr14 rev-parse HEAD)" = bee1462c0591f7281d3cd8182c6d9563a16dc078
+      - name: PHP 8.3 for real WordPress database
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240
+        with:
+          php-version: '8.3'
+          coverage: none
+          tools: none
+          extensions: mysqli, openssl, mbstring, json
+      - name: Verify exact source and test syntax
+        run: |
+          set -euo pipefail
+          echo "REPOSITORY_HEAD=$(git rev-parse HEAD)"
+          php -l qa/file00-file06-consent-wordpress-mariadb.php
+          (cd source/sabri-membership-core && sha256sum --check MANIFEST.sha256)
+      - name: Install disposable WordPress 7.0.1
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 https://github.com/wp-cli/wp-cli/releases/download/v2.12.0/wp-cli-2.12.0.phar -o /tmp/wp-cli.phar
+          php /tmp/wp-cli.phar core download --version=7.0.1 --path=/tmp/wordpress --force
+          php /tmp/wp-cli.phar config create --path=/tmp/wordpress --dbname=wordpress --dbuser=wordpress --dbpass=wordpress --dbhost=127.0.0.1:3306 --skip-check
+          php /tmp/wp-cli.phar config set SMC_MASTER_KEY 'base64:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=' --type=constant --path=/tmp/wordpress
+          php /tmp/wp-cli.phar config set SMC_MASTER_KEY_ID 'file06-consent-ci-key-v1' --type=constant --path=/tmp/wordpress
+          php /tmp/wp-cli.phar config set WP_ENVIRONMENT_TYPE 'staging' --type=constant --path=/tmp/wordpress
+          php /tmp/wp-cli.phar core install --path=/tmp/wordpress --url=http://file06-consent-ci.local --title='File00 File06 Consent CI' --admin_user=founder --admin_password='CI-Ephemeral-Only-Password!9' --admin_email=founder@example.test --skip-email
+      - name: Activate File00 candidate and reconcile exact schema
+        run: |
+          set -euo pipefail
+          cp -R source/sabri-membership-core /tmp/wordpress/wp-content/plugins/sabri-membership-core
+          php /tmp/wp-cli.phar plugin activate sabri-membership-core --path=/tmp/wordpress
+          php /tmp/wp-cli.phar eval '
+            SMC_Schema_Compat::reconcile_verification_queue_index();
+            SMC_Installer::maybe_upgrade();
+            if (SMC_DB_VERSION!==(string)get_option("smc_db_version","")) {fwrite(STDERR,"Schema migration incomplete\n");exit(42);}
+            if (is_wp_error(SMC_Security::ensure_key_ready())) {exit(43);}
+            if (is_wp_error(SMC_Installer::ensure_audit_infrastructure())) {exit(44);}
+            if (!class_exists("SMC_File06_Case_Consent")) {exit(45);}
+            echo "PASS real File00 DB version ".SMC_DB_VERSION."\n";
+          ' --path=/tmp/wordpress
+      - name: Exercise consent revocation against real MariaDB rows and named lock
+        env:
+          FILE06_SOURCE_ROOT: ${{ github.workspace }}/_pinned_file06
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file "$GITHUB_WORKSPACE/qa/file00-file06-consent-wordpress-mariadb.php" --path=/tmp/wordpress
+      - name: Actual PR14 policy and patient relation source ↔ File00 with real WPDB
+        env:
+          FILE06_PR14_SOURCE_ROOT: ${{ github.workspace }}/_pinned_file06_pr14
+        run: |
+          set -euo pipefail
+          php -l qa/file00-file06-pr14-real-source-wordpress.php
+          php /tmp/wp-cli.phar eval-file "$GITHUB_WORKSPACE/qa/file00-file06-pr14-real-source-wordpress.php" --path=/tmp/wordpress
+      - name: Install complete pinned File06 plugin with actual File00
+        run: |
+          set -euo pipefail
+          cp -R _pinned_file06_pr14/homeopathy-encyclopedia /tmp/wordpress/wp-content/plugins/homeopathy-encyclopedia
+          php /tmp/wp-cli.phar plugin activate homeopathy-encyclopedia --path=/tmp/wordpress
+      - name: Real dual-plugin activation, schema and Filter-arity smoke
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval '
+            $fail=array();
+            if (!is_plugin_active("sabri-membership-core/sabri-membership-core.php")) $fail[]="File00 plugin not active";
+            if (!is_plugin_active("homeopathy-encyclopedia/homeopathy-encyclopedia.php")) $fail[]="File06 plugin not active";
+            if (!class_exists("HE_V12_Case_Consent_Owner") || !class_exists("SMC_File06_Case_Consent")) $fail[]="Owners absent";
+            if (!function_exists("he_contract_descriptor")) $fail[]="File06 contract not registered";
+            if (class_exists("HE_V2_Schema") && "active"!==HE_V2_Schema::runtime_status()) $fail[]="File06 schema not active";
+            if (!has_filter("he_v12_file06_patient_relation_v1",array("HE_V12_Case_Consent_Owner","relation_claim"))) $fail[]="Patient relation hook absent";
+            if (!has_filter("he_v12_file06_consent_policy_v1",array("HE_V12_Case_Consent_Owner","approved_policy"))) $fail[]="Policy hook absent";
+            if ($fail){fwrite(STDERR,implode("; ",$fail)."\n");exit(1);}
+            echo "PASS: Two complete plugins active; canonical File00/File06 providers installed.\n";
+          ' --path=/tmp/wordpress
+
+
+  consent-pinned-file06:
+    name: Pinned File06 v12 producer compatibility blocker
+    runs-on: ubuntu-24.04
+    steps:
+      - name: File00 exact checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - name: Immutable File06 v12 consent producer
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: majidhussainqadri1-dot/06-homeopathy-encyclopedia-foundation
+          ref: 308cb09f9375057fe83e2738e002e74b9aa68bbe
+          path: _pinned_file06
+          persist-credentials: false
+      - name: Verify pinned source and fail-closed boundary
+        env:
+          FILE06_SOURCE_ROOT: ${{ github.workspace }}/_pinned_file06
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C _pinned_file06 rev-parse HEAD)" = 308cb09f9375057fe83e2738e002e74b9aa68bbe
+          php -l qa/file00-file06-pinned-protocol.php
+          php qa/file00-file06-pinned-protocol.php
