@@ -6,7 +6,7 @@ class WP_Error { private $code;public function __construct($c,$m='',$x=array()){
 class SMC_Contracts{public static function assertions($uid){return array('eligible'=>!empty($GLOBALS['member_eligible']),'suspended'=>false,'institutional_account'=>false);}}
 class SMC_Advanced_Trust_2026{public static function assurance_profile($uid){return array('identity_assurance_level'=>3,'authentication_assurance_level'=>1);}}
 class SMC_Authorization{public static function is_hard_blocked($uid){return false;}}
-class SMC_Security{public static function decrypt($value,$purpose,$context){return '1990-01-01';}public static function audit($event,$actor,$details){return true;}}
+class SMC_Security{public static function decrypt($value,$purpose,$context){return '1990-01-01';}public static function audit($event,$actor,$details){if($event==='file06_case_consent_accepted'&&!empty($GLOBALS['audit_revokes'])){$GLOBALS[$GLOBALS['audit_revokes']]=false;}return true;}}
 function smc_application($user_id){return array('date_of_birth_enc'=>'encrypted');}
 function smc_age_from_dob($v){return $GLOBALS['age'];}
 function absint($v){return abs((int)$v);}
@@ -281,6 +281,34 @@ foreach($cases as $case){
     must($wpdb->locksHeld===0,
         'After-lock revoked '.$case['name'].' releases case lock');
     $wpdb->onAcquire=null;
+    $GLOBALS[$key]=true;
+}
+
+
+/* Audit may invoke delayed I/O while subject eligibility or File06 source policy
+ * changes. A previously valid pre-audit claim must not activate a pending receipt.
+ */
+$wpdb->lockErrorAfterAcquire=false;
+$wpdb->onAcquire=null;
+foreach(array(
+    array('key'=>'policy_valid','uuid'=>'aaaaaaa1-aaaa-4aaa-8aaa-aaaaaaaaaaa1'),
+    array('key'=>'relation_valid','uuid'=>'aaaaaaa2-aaaa-4aaa-8aaa-aaaaaaaaaaa2'),
+    array('key'=>'member_eligible','uuid'=>'aaaaaaa3-aaaa-4aaa-8aaa-aaaaaaaaaaa3'),
+) as $test){
+    $key=$test['key'];$uuid=$test['uuid'];
+    $GLOBALS[$key]=true;
+    $GLOBALS['audit_revokes']=$key;
+    $oldCount=count($wpdb->rows);
+    $out=SMC_File06_Case_Consent::accept(case_request($uuid));
+    must($out instanceof WP_Error && 'smc_file06_consent_changed'===$out->get_error_code(),
+        'Post-audit revoked '.$key.' cannot activate a case receipt');
+    must(count($wpdb->rows)===$oldCount+1,
+        'Post-audit revoked '.$key.' persisted a non-authoritative pending record only');
+    $last=end($wpdb->rows);
+    must($last['actor_type']==='pending' && !empty($last['withdrawn_at']),
+        'Post-audit revoked '.$key.' invalidates pending row');
+    must($wpdb->locksHeld===0,'Post-audit revoked '.$key.' releases case lock');
+    $GLOBALS['audit_revokes']=null;
     $GLOBALS[$key]=true;
 }
 
