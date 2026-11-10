@@ -192,6 +192,24 @@ final class SMC_File06_Case_Consent {
 			&& is_user_logged_in() && self::assurance_ok( get_current_user_id() );
 	}
 
+	/**
+	 * The authoritative consent policy must still match both the subject and
+	 * policy shown in the explicit user action at each durable-write boundary.
+	 * Checking before an advisory lock or an audit call alone is not enough.
+	 */
+	private static function current_accept_policy( $request, $user_id, $uuid, $locale, $version, $text_hash ) {
+		if ( get_current_user_id() !== $user_id
+			|| ! self::authorized_request( $request )
+			|| ! self::relation( $user_id, $uuid ) ) { return null; }
+		$current = self::policy( $locale );
+		if ( ! $current
+			|| ! hash_equals( (string) $version, (string) $current['version'] )
+			|| ! hash_equals( (string) $text_hash, (string) $current['text_hash'] ) ) {
+			return null;
+		}
+		return $current;
+	}
+
 	public static function accept( $request ) {
 		if ( ! self::authorized_request( $request ) ) {
 			return self::problem( 'smc_file06_consent_authority', 'Verified adult patient identity and a current session are required.', 403 );
@@ -214,14 +232,9 @@ final class SMC_File06_Case_Consent {
 			// The policy and the subject relationship can change while GET_LOCK
 			// waits. Pre-lock assertions are not sufficient authorization.
 			// Re-evaluate all authoritative state while this case is serialized.
-			$current_policy = self::policy( $locale );
-			if ( get_current_user_id() !== $uid
-				|| ! self::authorized_request( $request )
-				|| ! self::relation( $uid, $uuid )
-				|| ! $current_policy
-				|| ! hash_equals( $version, (string) $current_policy['version'] )
-				|| ! hash_equals( (string) ( $data['text_hash'] ?? '' ),
-					(string) $current_policy['text_hash'] ) ) {
+			$current_policy = self::current_accept_policy( $request, $uid, $uuid, $locale,
+				$version, (string) ( $data['text_hash'] ?? '' ) );
+			if ( ! $current_policy ) {
 				return self::problem( 'smc_file06_consent_changed',
 					'Patient eligibility, subject authorization or policy changed. Reload and consent again.', 409 );
 			}
@@ -268,6 +281,23 @@ final class SMC_File06_Case_Consent {
 				$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}smc_consents SET withdrawn_at=%s
 					WHERE id=%d AND actor_type='pending'", current_time('mysql',true),$id ) );
 				return self::problem( 'smc_file06_consent_audit_failed', 'Consent could not be independently audited.', 503 );
+			}
+			// Audit callbacks may outlast the approved policy or the subject's
+			// current membership. A recorded audit event alone must never turn
+			// stale authority into an accepted active consent.
+			if ( ! self::current_accept_policy( $request, $uid, $uuid, $locale, $version,
+				(string) ( $data['text_hash'] ?? '' ) ) ) {
+				$wpdb->last_error = '';
+				$cancelled = $wpdb->query( $wpdb->prepare(
+					"UPDATE {$wpdb->prefix}smc_consents SET withdrawn_at=%s
+					WHERE id=%d AND user_id=%d AND actor_type='pending' AND withdrawn_at IS NULL",
+					current_time('mysql',true), $id, $uid ) );
+				if ( 1 !== (int) $cancelled || '' !== (string) $wpdb->last_error ) {
+					// Pending rows remain non-authoritative even if cleanup fails.
+					update_option( 'smc_file06_consent_reconciliation_required', 1, false );
+				}
+				return self::problem( 'smc_file06_consent_changed',
+					'Patient eligibility, subject authorization or policy changed. Reload and consent again.', 409 );
 			}
 			$activated = $wpdb->query( $wpdb->prepare(
 				"UPDATE {$wpdb->prefix}smc_consents SET actor_type='self'
