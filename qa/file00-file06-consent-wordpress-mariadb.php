@@ -317,6 +317,36 @@ if ( ! $accept_lock->connect_errno ) {
     }
     $accept_lock->close();
 }
+// Load the *actual pinned File06 v12 candidate producer* against File00
+// inside real WordPress. At this SHA the producer omits the mandatory case
+// research_public_id, so the correct security result is fail-closed.
+$file06_root = getenv( 'FILE06_SOURCE_ROOT' );
+$file06_class = $file06_root . '/homeopathy-encyclopedia/includes/class-he-v12-completion.php';
+if ( ! is_string( $file06_root ) || ! is_file( $file06_class ) ) {
+    fwrite( STDERR, "Pinned File06 real consent producer missing\n" );
+    exit( 2 );
+}
+require_once $file06_class;
+$explicit_owner_claim = apply_filters( 'he_v12_consent_receipt_verification_v1', null, array(
+    'evidence_ref' => $reference, 'policy_version' => 'ci-policy-1',
+    'locale' => 'ur-PK', 'purpose' => 'patient-story-research',
+    'research_public_id' => $verified_case,
+) );
+$check( is_array( $explicit_owner_claim )
+    && ( $explicit_owner_claim['authority'] ?? '' ) === 'file-00',
+    'real WordPress File00 verifies correct explicit case-bound File06 request' );
+$file06_candidate = HE_V12_Completion::consent_attestation( array(
+    'consent_version' => 'ci-policy-1', 'consent_locale' => 'ur-PK',
+    'consent_evidence_ref' => $reference,
+    'research_public_id' => $verified_case,
+), 41, true, 'successful-case' );
+$check( is_wp_error( $file06_candidate )
+    && 'he_v12_consent_independent_verification_required' === $file06_candidate->get_error_code(),
+    'pinned real File06 v12 producer omits UUID and safely cannot approve a case' );
+$check( 1 === (int) $wpdb->get_var( $wpdb->prepare(
+    "SELECT COUNT(*) FROM {$table} WHERE id=%d AND actor_type='self' AND withdrawn_at IS NULL",
+    $receipt_id
+) ), 'consumer mismatch did not mutate a valid File00 consent receipt' );
 $policy_active = false;
 $check( SMC_File06_Case_Consent::current_for_file06(
     false, 'smc-file06-v1:' . $receipt_id, $reference,
