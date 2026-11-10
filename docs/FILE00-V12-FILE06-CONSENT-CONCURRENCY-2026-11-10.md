@@ -35,10 +35,10 @@ The above describe **2 original source defects and 2 corrective hardening gaps**
 
 ### Real WordPress / MariaDB disposable CI database
 
-`qa/file00-file06-consent-wordpress-mariadb.php`, executed in a disposable WordPress 7.0.1 / MariaDB 11.4 environment, produced **11 PASS / 0 FAIL** on GitHub Actions workflow `42737996101` (real DB job ID `129571843751`). It tested:
+`qa/file00-file06-consent-wordpress-mariadb.php`, executed in a disposable WordPress 7.0.1 / MariaDB 11.4 environment, produced **14 PASS / 0 FAIL** on latest source+test CI workflow `42738620778` (real DB job ID `129573895067`). It tested:
 - two simultaneously active historical receipt rows,
 - actual `smc_consents` storage,
-- cross-patient authorization denial,
+- invalid REST nonce, case/receipt mismatch and cross-patient authorization denial,
 - subject-owned same-case bulk withdrawal with real DB locks,
 - retention of unrelated cases and users,
 - downstream invalidation event,
@@ -49,7 +49,7 @@ This test exercises **withdrawal and lock contention against real SQL**; the pos
 
 ### Other regression context
 
-The inherited File00 CF01/forty-round, exact release and pinned File04/File08 GitHub workflows were green on the earlier source-fix HEAD `28a25f2c4abfd3b8afc682014c9f191371d948c5`. Re-run/check at the **latest** source commit before any release decision, rather than treating older workflow success as exact-new-HEAD approval.
+The inherited File00 CF01/forty-round, exact release and pinned File04/File08 GitHub workflows were all green on exact source+test HEAD `42c55280cdb63d8f9d18d77e39b0854711c9ef26`. Re-run/check at the **latest** source commit before any release decision, rather than treating older workflow success as exact-new-HEAD approval.
 
 ## Open acceptance gates and risks
 
