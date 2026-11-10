@@ -1,5 +1,11 @@
 # File 00 v12 — PR #56 premerge decision and exact-source truth, 2026-11-10
 
+## 2026-11-10 additional real two-plugin activation result
+
+At File00 exact code+workflow commit `15f343e48209e089cabdf04e9747e95d3417306a`, the disposable WordPress 7.0.1 / MariaDB 11.4 job `42747566914` **PASSED** after installing/activating both complete plugin directories (File00 candidate and pinned File06 PR16 exact SHA `bee1462c0591f7281d3cd8182c6d9563a16dc078`). An independent WP-CLI runtime step verified both plugins active, `HE_V2_Schema::runtime_status() === 'active'`, File00/File06 owner classes and both active policy/relation hook registrations. The same job returned 36/36 File00 real DB and 12/12 PR16 genuine-source-class/real-WPDB consent assertions PASS.
+
+**This closes the isolated dual-plugin fresh-install/activation smoke requirement**, but does NOT prove full **File06 real canonical research-record subject-policy approval route → patient File00 explicit acceptance → File06 public read/write → withdrawal/cache purge** with both plugins active throughout. It also does not exercise upgrade from older persisted schema, migration rollback/backups, real independent human reviewers, staging or live.
+
 ## Decision summary
 
 **Current disposition: HOLD / DRAFT — DO NOT MERGE OR DEPLOY.**
@@ -48,7 +54,7 @@ The source-level 3-part File00↔File06 consent interface is **implemented in Fi
 - File00 PR55/56 inherited Release Gate, CF01, File04/File08 consumer tests need exact final SHA check after any modifications.
 
 **Outstanding hard release gates:**
-1. Real **dual-plugin** install/activation + File06 versioned schema and migrations on a disposable/staging WordPress system; no simulated case owner substitutes.
+1. **Fresh dual-plugin activation is now passed in disposable WP/MariaDB.** Still required: complete real File06 canonical research flow under both installed plugins, upgrading legacy persisted File06 schema/migrations, backup/restore, staging deployment and no simulated independent human owner evidence.
 2. Current File06 actual subject record allocation, policy approval, independently authorized reviewer, real patient verified File00 account, genuine consent acceptance, and public read/write + revocation/consumer cache invalidation against both plugins together.
 3. Exact source and dependency manifests/checksums, independent File02 authentication binding, role/guardian/erasure negative paths.
 4. PR55 and PR56 review + version-lineage reconciliation; File04 placeholder orphan recovery branch behavior; PR54 duplication avoidance.
