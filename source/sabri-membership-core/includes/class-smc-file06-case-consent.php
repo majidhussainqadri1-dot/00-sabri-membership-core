@@ -172,6 +172,10 @@ final class SMC_File06_Case_Consent {
 		$wpdb->last_error = '';
 		$held = $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, %d)', $key, 3 ) );
 		if ( '1' !== (string) $held || '' !== (string) $wpdb->last_error ) {
+			// Even when the query reports an error, a returned lock handle
+			// must be released; otherwise a persistent DB connection can
+			// retain a mutex the caller was told it did not acquire.
+			if ( '1' === (string) $held ) { self::release_case_lock( $key ); }
 			return self::problem( 'smc_file06_consent_busy',
 				'The case consent record is busy or cannot be safely locked. Retry later.', 503 );
 		}
@@ -314,6 +318,10 @@ final class SMC_File06_Case_Consent {
 				$user,self::PURPOSE,self::CHANNEL,(string)$row['actor_reference_hash']
 			) );
 			if ( null === $remaining || '' !== (string)$wpdb->last_error || (int)$remaining !== 0 ) {
+				// Writes may already have revoked some receipts. Never leave File 06
+				// caches unaware merely because the confirmation query failed.
+				update_option( 'smc_file06_consent_reconciliation_required', 1, false );
+				do_action( 'smc_file06_patient_consent_withdrawn_v1', $uuid, $user, $ref );
 				return self::problem( 'smc_file06_consent_reconciliation_required',
 					'Consent revocation could not be verified for all case receipts.', 503 );
 			}
