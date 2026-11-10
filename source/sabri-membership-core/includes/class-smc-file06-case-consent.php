@@ -211,6 +211,21 @@ final class SMC_File06_Case_Consent {
 		$lock_key = self::case_lock( $uid, $uuid );
 		if ( is_wp_error( $lock_key ) ) { return $lock_key; }
 		try {
+			// The policy and the subject relationship can change while GET_LOCK
+			// waits. Pre-lock assertions are not sufficient authorization.
+			// Re-evaluate all authoritative state while this case is serialized.
+			$current_policy = self::policy( $locale );
+			if ( get_current_user_id() !== $uid
+				|| ! self::authorized_request( $request )
+				|| ! self::relation( $uid, $uuid )
+				|| ! $current_policy
+				|| ! hash_equals( $version, (string) $current_policy['version'] )
+				|| ! hash_equals( (string) ( $data['text_hash'] ?? '' ),
+					(string) $current_policy['text_hash'] ) ) {
+				return self::problem( 'smc_file06_consent_changed',
+					'Patient eligibility, subject authorization or policy changed. Reload and consent again.', 409 );
+			}
+			$policy = $current_policy;
 			global $wpdb;
 			$hash = self::reference_hash( $uid, $uuid );
 			$wpdb->last_error = '';
