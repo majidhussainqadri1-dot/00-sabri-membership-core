@@ -11,6 +11,7 @@ define('SMC_VERSION', '1.2.44');
 $GLOBALS['smc_intake_user_exists'] = true;
 $GLOBALS['smc_intake_base'] = array();
 $GLOBALS['smc_intake_app'] = array();
+$GLOBALS['smc_intake_grants'] = array(array('membership_type'=>'doctor','status'=>'pending','expires_at'=>''));
 function absint($value) { return abs((int)$value); }
 function sanitize_key($value) { return strtolower(preg_replace('/[^a-z0-9_\-]/i','',(string)$value)); }
 function get_userdata($id) { return $GLOBALS['smc_intake_user_exists'] && 7 === (int)$id ? (object)array('ID'=>7) : false; }
@@ -20,7 +21,7 @@ function smc_application($id) { return 7 === (int)$id ? $GLOBALS['smc_intake_app
 function smc_age_from_dob($date) { if ('2010-01-01'===$date) return 16; if('invalid'===$date) return false; return 30; }
 function apply_filters($hook,$value,...$args) { return $value; }
 class WP_Error { public function __construct($code='',$msg='') {} }
-class SMC_Contracts { public static function assertions($id) { return 7===(int)$id ? $GLOBALS['smc_intake_base'] : array(); } }
+class SMC_Contracts { public static function assertions($id) { return 7===(int)$id ? $GLOBALS['smc_intake_base'] : array(); } public static function role_grants($id) { return 7===(int)$id ? $GLOBALS['smc_intake_grants'] : array(); } }
 class SMC_CF01_Contract { public static function ensure_subject_uuid($id) {return 7===(int)$id ? '123e4567-e89b-42d3-a456-426614174000' : ''; } }
 class SMC_Security { public static function decrypt($value,$purpose,$ctx=array()) { return $value; } }
 class File09IntakeDb {
