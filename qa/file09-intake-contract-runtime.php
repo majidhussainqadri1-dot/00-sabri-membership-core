@@ -74,13 +74,18 @@ $mutations=array(
     array('identity_documents_current',false,'missing identity docs denied'),
     array('phone_verified',false,'missing phone verification denied'),
     array('email_verified',false,'missing email verification denied'),
-    array('guardian_verified',false,'missing guardian verification denied'),
     array('requested_membership_types',array(),'unrequested doctor role denied')
 );
 foreach($mutations as $mutation) {
     $GLOBALS['smc_intake_base']=$base; $GLOBALS['smc_intake_base'][$mutation[0]]=$mutation[1];
     prove((SMC_File09_Intake_Contract::assertion(7,$request)['result']??'')==='deny',$mutation[2]);
 }
+$GLOBALS['smc_intake_base']=$base;
+$GLOBALS['smc_intake_app']=$app;
+$GLOBALS['smc_intake_app']['guardian_required']=true;
+$GLOBALS['smc_intake_base']['guardian_verified']=false;
+prove((SMC_File09_Intake_Contract::assertion(7,$request)['result']??'')==='deny','missing required guardian verification denied');
+$GLOBALS['smc_intake_app']=$app;
 $GLOBALS['smc_intake_base']=$base; $GLOBALS['smc_intake_base']['eligible']=true; $GLOBALS['smc_intake_base']['requested_membership_types']=array('member');
 prove((SMC_File09_Intake_Contract::assertion(7,$request)['result']??'')==='deny','global eligible true cannot grant unrequested File09 onboarding');
 $GLOBALS['smc_intake_base']=$base;
