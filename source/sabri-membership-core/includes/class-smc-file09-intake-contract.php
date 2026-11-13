@@ -91,6 +91,26 @@ final class SMC_File09_Intake_Contract {
             $result['reason_code'] = 'membership_not_approved_or_restricted';
             return $result;
         }
+        // The global eligible flag may be false for credential preverification,
+        // but it is also false under File 00's advanced containment, transition,
+        // reverification or continuity holds. Never bypass those owner controls.
+        if ( ! class_exists( 'SMC_MFA_Retirement' )
+            || ! is_callable( array( 'SMC_MFA_Retirement', 'advanced_trust_allows_without_mfa' ) ) ) {
+            $result['reason_code'] = 'advanced_trust_provider_unavailable';
+            return $result;
+        }
+        try {
+            $trust_allowed = SMC_MFA_Retirement::advanced_trust_allows_without_mfa( $user_id );
+        } catch ( Throwable $error ) {
+            unset( $error );
+            $result['reason_code'] = 'advanced_trust_provider_unavailable';
+            return $result;
+        }
+        if ( true !== $trust_allowed ) {
+            $result['result'] = 'deny';
+            $result['reason_code'] = 'advanced_trust_containment_or_reverification_hold';
+            return $result;
+        }
         // Role grants are independently owned by File 00. A pending doctor
         // request can apply; revoked/suspended grants cannot. No doctor role
         // is upgraded to approved, and no global eligibility is changed here.
