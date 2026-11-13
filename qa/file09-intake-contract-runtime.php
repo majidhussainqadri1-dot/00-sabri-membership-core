@@ -24,6 +24,7 @@ class WP_Error { public function __construct($code='',$msg='') {} }
 class SMC_Contracts { public static function assertions($id) { return 7===(int)$id ? $GLOBALS['smc_intake_base'] : array(); } public static function role_grants($id) { return 7===(int)$id ? $GLOBALS['smc_intake_grants'] : array(); } }
 class SMC_CF01_Contract { public static function ensure_subject_uuid($id) {return 7===(int)$id ? '123e4567-e89b-42d3-a456-426614174000' : ''; } }
 class SMC_Security { public static function decrypt($value,$purpose,$ctx=array()) { return $value; } }
+class SMC_MFA_Retirement { public static $advanced_ok=true; public static function advanced_trust_allows_without_mfa($id) { return self::$advanced_ok; } }
 class File09IntakeDb {
     public $prefix='wp_';
     public $last_error='';
@@ -104,6 +105,10 @@ $wpdb->canonical='';
 prove((SMC_File09_Intake_Contract::assertion(7,$request)['result']??'')!=='allow','missing canonical jurisdiction cannot silently grant');
 $wpdb->canonical='PK';$wpdb->fail=true;
 prove((SMC_File09_Intake_Contract::assertion(7,$request)['result']??'')!=='allow','database query error fails closed');
-$wpdb->fail=false;$GLOBALS['smc_intake_user_exists']=false;
+$wpdb->fail=false;
+SMC_MFA_Retirement::$advanced_ok=false;
+prove((SMC_File09_Intake_Contract::assertion(7,$request)['result']??'')==='deny','advanced trust containment or reverification hold cannot be bypassed by limited intake');
+SMC_MFA_Retirement::$advanced_ok=true;
+$GLOBALS['smc_intake_user_exists']=false;
 prove((SMC_File09_Intake_Contract::assertion(7,$request)['result']??'')!=='allow','missing principal fails closed');
 echo 'File 00 → File 09 dedicated intake contract: '.$passed." PASS, 0 FAIL\n";
