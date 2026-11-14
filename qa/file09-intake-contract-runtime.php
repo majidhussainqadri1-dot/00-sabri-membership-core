@@ -9,12 +9,15 @@ error_reporting(E_ALL);
 define('ABSPATH', __DIR__.'/');
 define('SMC_VERSION', '1.2.44');
 $GLOBALS['smc_intake_user_exists'] = true;
+$GLOBALS['smc_intake_current_user_id'] = 7;
 $GLOBALS['smc_intake_base'] = array();
 $GLOBALS['smc_intake_app'] = array();
 $GLOBALS['smc_intake_grants'] = array(array('membership_type'=>'doctor','status'=>'pending','expires_at'=>''));
 function absint($value) { return abs((int)$value); }
 function sanitize_key($value) { return strtolower(preg_replace('/[^a-z0-9_\-]/i','',(string)$value)); }
 function get_userdata($id) { return $GLOBALS['smc_intake_user_exists'] && 7 === (int)$id ? (object)array('ID'=>7) : false; }
+function get_current_user_id() { return (int)$GLOBALS['smc_intake_current_user_id']; }
+function is_user_logged_in() { return get_current_user_id() > 0; }
 function __($value,$domain='') { return $value; }
 function is_wp_error($value) { return $value instanceof WP_Error; }
 function smc_application($id) { return 7 === (int)$id ? $GLOBALS['smc_intake_app'] : false; }
@@ -111,4 +114,12 @@ prove((SMC_File09_Intake_Contract::assertion(7,$request)['result']??'')==='deny'
 SMC_MFA_Retirement::$advanced_ok=true;
 $GLOBALS['smc_intake_user_exists']=false;
 prove((SMC_File09_Intake_Contract::assertion(7,$request)['result']??'')!=='allow','missing principal fails closed');
+// RED-first: contract itself must bind to the current authenticated principal.
+$GLOBALS['smc_intake_user_exists']=true;
+$GLOBALS['smc_intake_current_user_id']=0;
+prove((SMC_File09_Intake_Contract::assertion(7,$request)['result']??'')!=='allow','anonymous caller cannot borrow an approved doctor's intake claim');
+$GLOBALS['smc_intake_current_user_id']=8;
+prove((SMC_File09_Intake_Contract::assertion(7,$request)['result']??'')!=='allow','another signed-in user cannot borrow doctor intake claim');
+$GLOBALS['smc_intake_current_user_id']=7;
+prove((SMC_File09_Intake_Contract::assertion(7,$request)['result']??'')==='allow','authenticated exact subject still receives intake-only permission');
 echo 'File 00 → File 09 dedicated intake contract: '.$passed." PASS, 0 FAIL\n";
