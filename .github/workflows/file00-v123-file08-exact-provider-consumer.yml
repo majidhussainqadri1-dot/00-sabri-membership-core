@@ -51,6 +51,8 @@ jobs:
           set -euo pipefail
           php -l source/sabri-membership-core/includes/class-smc-cf01-contract.php
           php -l source/sabri-membership-core/includes/functions.php
+          php qa/v123-advanced-trust-redgreen-runtime.php
+          php qa/v123-current-age-guardian-runtime.php
           php qa/v123-file08-inverse-subject-runtime.php
           (cd source/sabri-membership-core && sha256sum -c MANIFEST.sha256)
           (cd .external/file08 && php tests/t38-file00-subject-consumer-regressions.php)
