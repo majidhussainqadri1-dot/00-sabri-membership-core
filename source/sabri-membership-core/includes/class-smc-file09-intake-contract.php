@@ -70,6 +70,16 @@ final class SMC_File09_Intake_Contract {
             $result['reason_code'] = 'subject_unavailable';
             return $result;
         }
+        // This consumer-only permission is a self-service application, not a
+        // credential grant or an administrator impersonation capability.
+        // Binding must be checked by File 00 itself: a caller-supplied ID,
+        // anonymous request or different logged-in principal cannot borrow
+        // another member's otherwise valid doctor-intake assertion.
+        if ( ! function_exists( 'get_current_user_id' ) || ! function_exists( 'is_user_logged_in' )
+            || ! is_user_logged_in() || absint( get_current_user_id() ) !== $user_id ) {
+            $result['reason_code'] = 'authenticated_subject_mismatch';
+            return $result;
+        }
         try {
             $base = SMC_Contracts::assertions( $user_id );
             $app = smc_application( $user_id );
