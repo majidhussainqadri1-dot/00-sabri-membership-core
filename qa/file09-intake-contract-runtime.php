@@ -117,7 +117,7 @@ prove((SMC_File09_Intake_Contract::assertion(7,$request)['result']??'')!=='allow
 // RED-first: contract itself must bind to the current authenticated principal.
 $GLOBALS['smc_intake_user_exists']=true;
 $GLOBALS['smc_intake_current_user_id']=0;
-prove((SMC_File09_Intake_Contract::assertion(7,$request)['result']??'')!=='allow','anonymous caller cannot borrow an approved doctor's intake claim');
+prove((SMC_File09_Intake_Contract::assertion(7,$request)['result']??'')!=='allow','anonymous caller cannot borrow another user intake claim');
 $GLOBALS['smc_intake_current_user_id']=8;
 prove((SMC_File09_Intake_Contract::assertion(7,$request)['result']??'')!=='allow','another signed-in user cannot borrow doctor intake claim');
 $GLOBALS['smc_intake_current_user_id']=7;
