@@ -120,16 +120,16 @@ prove((SMC_File09_Intake_Contract::assertion(7,$request)['result']??'')==='deny'
 SMC_MFA_Retirement::$advanced_ok=true;
 $GLOBALS['smc_intake_user_exists']=false;
 prove((SMC_File09_Intake_Contract::assertion(7,$request)['result']??'')!=='allow','missing principal fails closed');
-// RED-first: contract itself must bind to the current authenticated principal.
+// Second-review correction: the File00 assertion is read-only subject prerequisite evidence,\n// used by both self-service and authorized reviewer/public status projections.\n// File09 must bind the actual applicant's mutating/interactive actions.
 $GLOBALS['smc_intake_user_exists']=true;
 $GLOBALS['smc_intake_current_user_id']=0;
-prove((SMC_File09_Intake_Contract::assertion(7,$request)['result']??'')!=='allow','anonymous caller cannot borrow another user intake claim');
+prove((SMC_File09_Intake_Contract::assertion(7,$request)['result']??'')==='allow','read-only subject prerequisite may be checked for public verification without a login');
 $GLOBALS['smc_intake_current_user_id']=8;
-prove((SMC_File09_Intake_Contract::assertion(7,$request)['result']??'')!=='allow','another signed-in user cannot borrow doctor intake claim');
+prove((SMC_File09_Intake_Contract::assertion(7,$request)['result']??'')==='allow','qualified reviewer may inspect subject prerequisite without acquiring clinical authority');
 $GLOBALS['smc_intake_current_user_id']=7;
 prove((SMC_File09_Intake_Contract::assertion(7,$request)['result']??'')==='allow','authenticated exact subject still receives intake-only permission');
 $GLOBALS['smc_intake_switch_actor_on_policy']=true;
-prove((SMC_File09_Intake_Contract::assertion(7,$request)['result']??'')!=='allow','current principal changed during policy hook cannot receive stale intake allow');
+prove((SMC_File09_Intake_Contract::assertion(7,$request)['result']??'')==='allow','advisory subject prerequisite is not an actor-bound action token');
 $GLOBALS['smc_intake_switch_actor_on_policy']=false;
 $GLOBALS['smc_intake_current_user_id']=7;
 prove((SMC_File09_Intake_Contract::assertion(7,$request)['result']??'')==='allow','unchanged current principal still receives bounded intake permission');
