@@ -9,17 +9,26 @@ error_reporting(E_ALL);
 define('ABSPATH', __DIR__.'/');
 define('SMC_VERSION', '1.2.44');
 $GLOBALS['smc_intake_user_exists'] = true;
+$GLOBALS['smc_intake_current_user_id'] = 7;
 $GLOBALS['smc_intake_base'] = array();
 $GLOBALS['smc_intake_app'] = array();
 $GLOBALS['smc_intake_grants'] = array(array('membership_type'=>'doctor','status'=>'pending','expires_at'=>''));
 function absint($value) { return abs((int)$value); }
 function sanitize_key($value) { return strtolower(preg_replace('/[^a-z0-9_\-]/i','',(string)$value)); }
 function get_userdata($id) { return $GLOBALS['smc_intake_user_exists'] && 7 === (int)$id ? (object)array('ID'=>7) : false; }
+function get_current_user_id() { return (int)$GLOBALS['smc_intake_current_user_id']; }
+function is_user_logged_in() { return get_current_user_id() > 0; }
 function __($value,$domain='') { return $value; }
 function is_wp_error($value) { return $value instanceof WP_Error; }
 function smc_application($id) { return 7 === (int)$id ? $GLOBALS['smc_intake_app'] : false; }
 function smc_age_from_dob($date) { if ('2010-01-01'===$date) return 16; if('invalid'===$date) return false; return 30; }
-function apply_filters($hook,$value,...$args) { return $value; }
+$GLOBALS['smc_intake_switch_actor_on_policy'] = false;
+function apply_filters($hook,$value,...$args) {
+    if ('smc_file09_intake_narrow' === $hook && !empty($GLOBALS['smc_intake_switch_actor_on_policy'])) {
+        $GLOBALS['smc_intake_current_user_id'] = 8; // simulate current-session/actor change during a downstream hook
+    }
+    return $value;
+}
 class WP_Error { public function __construct($code='',$msg='') {} }
 class SMC_Contracts { public static function assertions($id) { return 7===(int)$id ? $GLOBALS['smc_intake_base'] : array(); } public static function role_grants($id) { return 7===(int)$id ? $GLOBALS['smc_intake_grants'] : array(); } }
 class SMC_CF01_Contract { public static function ensure_subject_uuid($id) {return 7===(int)$id ? '123e4567-e89b-42d3-a456-426614174000' : ''; } }
@@ -111,4 +120,17 @@ prove((SMC_File09_Intake_Contract::assertion(7,$request)['result']??'')==='deny'
 SMC_MFA_Retirement::$advanced_ok=true;
 $GLOBALS['smc_intake_user_exists']=false;
 prove((SMC_File09_Intake_Contract::assertion(7,$request)['result']??'')!=='allow','missing principal fails closed');
+// Second-review correction: the File00 assertion is read-only subject prerequisite evidence,\n// used by both self-service and authorized reviewer/public status projections.\n// File09 must bind the actual applicant's mutating/interactive actions.
+$GLOBALS['smc_intake_user_exists']=true;
+$GLOBALS['smc_intake_current_user_id']=0;
+prove((SMC_File09_Intake_Contract::assertion(7,$request)['result']??'')==='allow','read-only subject prerequisite may be checked for public verification without a login');
+$GLOBALS['smc_intake_current_user_id']=8;
+prove((SMC_File09_Intake_Contract::assertion(7,$request)['result']??'')==='allow','qualified reviewer may inspect subject prerequisite without acquiring clinical authority');
+$GLOBALS['smc_intake_current_user_id']=7;
+prove((SMC_File09_Intake_Contract::assertion(7,$request)['result']??'')==='allow','authenticated exact subject still receives intake-only permission');
+$GLOBALS['smc_intake_switch_actor_on_policy']=true;
+prove((SMC_File09_Intake_Contract::assertion(7,$request)['result']??'')==='allow','advisory subject prerequisite is not an actor-bound action token');
+$GLOBALS['smc_intake_switch_actor_on_policy']=false;
+$GLOBALS['smc_intake_current_user_id']=7;
+prove((SMC_File09_Intake_Contract::assertion(7,$request)['result']??'')==='allow','unchanged current principal still receives bounded intake permission');
 echo 'File 00 → File 09 dedicated intake contract: '.$passed." PASS, 0 FAIL\n";

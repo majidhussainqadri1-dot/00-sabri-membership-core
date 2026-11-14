@@ -452,3 +452,18 @@ function smc_notify( $user_id, $type, $title, $body, $priority = 'high', $link =
 function smc_db_error( $message ) {
 	return new WP_Error( 'smc_database', $message );
 }
+
+/**
+ * File00's governed internal PHP consumer entry point for exact canonical
+ * platform subject UUID resolution (File08 FUT18 and approved dependants).
+ *
+ * An integer return is a verified identity mapping ONLY, not any access,
+ * guardianship, professional verification, appointment or medical permission.
+ * @return int A unique verified WordPress user ID, otherwise 0.
+ */
+if ( ! function_exists( 'smc_get_user_id_by_subject_uuid' ) ) {
+	function smc_get_user_id_by_subject_uuid( $subject_uuid ) {
+		return class_exists( 'SMC_CF01_Contract' )
+			? SMC_CF01_Contract::resolve_user_id_by_subject_uuid( $subject_uuid ) : 0;
+	}
+}

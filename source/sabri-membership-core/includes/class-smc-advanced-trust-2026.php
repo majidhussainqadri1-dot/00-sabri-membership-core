@@ -196,13 +196,63 @@ final class SMC_Advanced_Trust_2026 {
 		);
 	}
 
+	/**
+	 * Canonical annual ceiling: a filter or historical persisted due date
+	 * may shorten reverification, never postpone it beyond one year.
+	 */
+	private static function reverification_interval_seconds( $user_id ) {
+		$requested = absint( apply_filters( 'smc_reverification_interval_seconds', YEAR_IN_SECONDS, absint( $user_id ) ) );
+		if ( $requested <= 0 ) { $requested = YEAR_IN_SECONDS; }
+		return max( DAY_IN_SECONDS, min( YEAR_IN_SECONDS, $requested ) );
+	}
+
+	/**
+	 * A boolean filter is not a trusted service identity. System authorization
+	 * requires typed, short-lived, subject- and purpose-bound File 00 evidence.
+	 */
+	private static function system_reverification_authorized( $user_id, $source ) {
+		$user_id = absint( $user_id ); $source = sanitize_key( $source );
+		if ( $user_id <= 0 || '' === $source ) { return false; }
+		$claim = apply_filters( 'smc_system_reverification_authorization_v1', null, $user_id, $source );
+		if ( ! is_array( $claim ) ) { return false; }
+		$asserted_at = absint( $claim['asserted_at'] ?? 0 );
+		return 'file00' === sanitize_key( $claim['owner'] ?? '' )
+			&& '1.0.0' === (string) ( $claim['contract_version'] ?? '' )
+			&& true === ( $claim['authorized'] ?? false )
+			&& hash_equals( $source, sanitize_key( $claim['source'] ?? '' ) )
+			&& hash_equals( self::subject_reference( $user_id ), (string) ( $claim['subject'] ?? '' ) )
+			&& $asserted_at > 0 && $asserted_at <= time() + 60 && $asserted_at >= time() - 60;
+	}
+
+	/**
+	 * Reviewer privilege alone must never expose another person's sensitive
+	 * trust timeline. Demand typed File 00 provenance, purpose and step-up.
+	 */
+	private static function trust_timeline_cross_subject_authorized( $actor_id, $subject_user_id ) {
+		$actor_id = absint( $actor_id ); $subject_user_id = absint( $subject_user_id );
+		if ( $actor_id <= 0 || $subject_user_id <= 0
+			|| ! self::actor_meets_step_up( $actor_id, 'default', 'smc_manage_membership' ) ) {
+			return false;
+		}
+		$claim = apply_filters( 'smc_trust_timeline_access_v1', null, $actor_id, $subject_user_id );
+		if ( ! is_array( $claim ) ) { return false; }
+		$asserted_at = absint( $claim['asserted_at'] ?? 0 );
+		$purpose = sanitize_key( $claim['purpose'] ?? '' );
+		return 'file00' === sanitize_key( $claim['owner'] ?? '' )
+			&& '1.0.0' === (string) ( $claim['contract_version'] ?? '' )
+			&& true === ( $claim['authorized'] ?? false )
+			&& '' !== $purpose
+			&& hash_equals( self::subject_reference( $actor_id ), (string) ( $claim['actor_subject'] ?? '' ) )
+			&& hash_equals( self::subject_reference( $subject_user_id ), (string) ( $claim['subject'] ?? '' ) )
+			&& $asserted_at > 0 && $asserted_at <= time() + 60 && $asserted_at >= time() - 60;
+	}
+
 	/** F00-EXT-004 — Periodic reverification. */
 	public static function reverification_status( $user_id ) {
 		$user_id = absint( $user_id );
 		$state = get_user_meta( $user_id, self::REVERIFY_META, true );
 		$state = is_array( $state ) ? $state : array();
-		$interval = absint( apply_filters( 'smc_reverification_interval_seconds', YEAR_IN_SECONDS, $user_id ) );
-		$interval = max( DAY_IN_SECONDS, $interval );
+		$interval = self::reverification_interval_seconds( $user_id );
 		$verified_at = absint( $state['verified_at'] ?? 0 );
 		$applicable = $verified_at > 0;
 		$source = sanitize_key( $state['source'] ?? '' );
@@ -212,8 +262,16 @@ final class SMC_Advanced_Trust_2026 {
 			$verified_at = absint( $baseline['verified_at'] ?? 0 );
 			$source = sanitize_key( $baseline['source'] ?? '' );
 		}
-		$due_at = absint( $state['due_at'] ?? ( $verified_at ? $verified_at + $interval : 0 ) );
-		$current = ! $applicable || ( $verified_at > 0 && $due_at > time() );
+		$policy_due_at = $verified_at > 0 ? $verified_at + $interval : 0;
+		if ( $verified_at > 0 && array_key_exists( 'due_at', $state ) ) {
+			$stored_due_at = absint( $state['due_at'] );
+			// Never let old records or filter-provided values silently extend
+			// a verification lifetime beyond the current annual maximum.
+			$due_at = $stored_due_at > $verified_at ? min( $stored_due_at, $policy_due_at ) : $verified_at;
+		} else {
+			$due_at = $policy_due_at;
+		}
+		$current = ! $applicable || ( $verified_at > 0 && $verified_at <= time() + 60 && $due_at > time() );
 		return array(
 			'applicable' => (bool) $applicable,
 			'current' => (bool) $current,
@@ -264,12 +322,12 @@ final class SMC_Advanced_Trust_2026 {
 		if ( $user_id <= 0 || ! get_userdata( $user_id ) ) {
 			return new WP_Error( 'smc_reverify_subject', __( 'A valid membership subject is required.', 'sabri-membership-core' ) );
 		}
-		$authorized = $actor_id > 0 ? self::actor_meets_step_up( $actor_id, 'identity_change', 'smc_finalize_verification' ) : (bool) apply_filters( 'smc_system_reverification_authorized', false, $user_id, sanitize_key( $source ) );
+		$authorized = $actor_id > 0 ? self::actor_meets_step_up( $actor_id, 'identity_change', 'smc_finalize_verification' ) : self::system_reverification_authorized( $user_id, $source );
 		if ( ! $authorized ) {
 			return new WP_Error( 'smc_reverify_authorization', __( 'Reverification requires an authorized reviewer or explicitly authorized system adapter.', 'sabri-membership-core' ) );
 		}
 		$now = time();
-		$interval = max( DAY_IN_SECONDS, absint( apply_filters( 'smc_reverification_interval_seconds', YEAR_IN_SECONDS, $user_id ) ) );
+		$interval = self::reverification_interval_seconds( $user_id );
 		$state = array( 'verified_at' => $now, 'due_at' => $now + $interval, 'source' => sanitize_key( $source ), 'actor_id' => $actor_id );
 		if ( ! self::write_user_meta_verified( $user_id, self::REVERIFY_META, $state ) ) {
 			return new WP_Error( 'smc_reverify_store', __( 'Reverification could not be committed safely.', 'sabri-membership-core' ) );
@@ -1017,7 +1075,7 @@ final class SMC_Advanced_Trust_2026 {
 	public static function trust_timeline( $user_id, $limit = 50 ) {
 		$user_id = absint( $user_id ); $limit = max( 1, min( 100, absint( $limit ) ) );
 		$current = function_exists( 'get_current_user_id' ) ? absint( get_current_user_id() ) : 0;
-		if ( $current <= 0 || ( $current !== $user_id && ! current_user_can( 'smc_manage_membership' ) ) ) { return array(); }
+		if ( $current <= 0 || ( $current !== $user_id && ! self::trust_timeline_cross_subject_authorized( $current, $user_id ) ) ) { return array(); }
 		if ( ! class_exists( 'SMC_Security' ) ) { return array(); }
 		$subject_hash = SMC_Security::subject_hash( $user_id ); if ( '' === $subject_hash ) { return array(); }
 		global $wpdb; if ( ! isset( $wpdb ) || ! is_object( $wpdb ) ) { return array(); }
@@ -1032,6 +1090,13 @@ final class SMC_Advanced_Trust_2026 {
 		foreach ( (array) $rows as $row ) {
 			$action = sanitize_key( $row['action'] ?? '' ); if ( ! in_array( $action, $allowed_actions, true ) ) { continue; }
 			$out[] = array( 'id' => absint( $row['id'] ), 'action' => $action, 'created_at' => (string) $row['created_at'] );
+		}
+		// A DB query or hook may change the active WordPress principal after
+		// this read was initially authorized. Never expose an audit timeline
+		// across that actor switch; a fresh caller must re-request authorization.
+		if ( ! function_exists( 'get_current_user_id' )
+			|| absint( get_current_user_id() ) !== $current ) {
+			return array();
 		}
 		return $out;
 	}
@@ -1093,7 +1158,10 @@ final class SMC_Advanced_Trust_2026 {
 	private static function actor_is_current( $actor_id, $capability = '', $founder_or_admin = false ) {
 		$actor_id = absint( $actor_id );
 		if ( $actor_id <= 0 ) { return false; }
-		if ( function_exists( 'get_current_user_id' ) && get_current_user_id() > 0 && get_current_user_id() !== $actor_id ) { return false; }
+		// A supplied actor ID is never an authentication context. The current
+		// WordPress principal must exist and match exactly, including Founder
+		// and empty-capability flows. Anonymous/CLI requests fail closed.
+		if ( ! function_exists( 'get_current_user_id' ) || get_current_user_id() <= 0 || get_current_user_id() !== $actor_id ) { return false; }
 		if ( $founder_or_admin && function_exists( 'smc_is_founder' ) && smc_is_founder( $actor_id ) ) { return true; }
 		return '' === $capability || current_user_can( $capability );
 	}
