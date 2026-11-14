@@ -29,3 +29,29 @@ At SHA `d91a8a0c639a20e1f41ef78d791c6511434e6fbb`, **9/9 GitHub Actions workflow
 - Other outstanding PR/release/consumer risks: separately tracked, not invented as newly confirmed source defects.
 
 **Mandatory rule:** Do not mark this Live Resolved without exact deployed package, schema, migration and re-test evidence.
+
+---
+
+## Second adversarial pass — F00-V123-20261114-D02 (supersedes earlier interim count)
+
+**Distinct condition:** Even after the initial self-service principal gate, a downstream File00 policy hook could change the active WordPress principal before the assertion issued `allow`. The first gate alone did not prevent a stale permission from being returned under the new principal.
+
+- RED test and exact SHA: `a74a1e45b9739c92b776a7f1b63f58f8b32713a4`. Actual run `43551746687` failed at `FAIL: current principal changed during policy hook cannot receive stale intake allow`. This is not a synthetic syntax/test-harness failure.
+- Targeted owner-source correction: `d7d649d56230e66a14aa166dd6cde541cf10430b`. Immediately before constructing the positive subject/age claim, the provider rechecks current logged-in principal equality; if changed it returns `unknown` with no private subject claim.
+- Deterministic source-manifest SHA-256 after fix: `18c8c12ed7aec9d2efed4f1ee8278e79b2b0cf78c31667e56c0240760f39dad5`, committed at `919dea87f57f99c3d1947f7b8ded97f130299ef4`.
+- GREEN on this exact source commit: **9/9 File00 GitHub Actions completed SUCCESS** (PHP 7.4/8.3 source and inherited QA, WordPress/MySQL job, manifest and package gates).
+- Paired real-owner-class / File09 consumer candidate: File09 Draft PR #17 at SHA `3eef5c2e5baaa68b9bbaedda639ffa94e4a90d90`, cross-owner run `43551932262`: PHP 7.4 + PHP 8.3 cross-owner jobs SUCCESS, ordinary source suites SUCCESS, deterministic package SUCCESS. This is source/CI evidence, not installed staging.
+
+### Corrected combined count for this session
+| Item | Count / boundary |
+| --- | --- |
+| Distinct newly reproduced File00 source failure conditions | **2** (D01 anonymous/cross-principal; D02 post-hook actor switch) |
+| Source fixes on File00 Draft PR #59 | **2/2** |
+| Red-first regressions with independently observed failing GitHub jobs | **2/2** |
+| File00 exact-code CI at corrected source SHA | **9/9 SUCCESS** |
+| File09 paired PHP 7.4/8.3 provider-consumer jobs | **2/2 SUCCESS**, full workflow 5/5 jobs success |
+| Corrections merged to File00 main | **0** |
+| Verified corrections in deployed Hostinger version | **0** |
+| Unknown exact deployed version, DB/migration and staging | **UNVERIFIED** |
+
+**Boundary:** Two test angles were executed, but independent human security review and the full 123-item acceptance still remain required. Do not call the live issue resolved.
