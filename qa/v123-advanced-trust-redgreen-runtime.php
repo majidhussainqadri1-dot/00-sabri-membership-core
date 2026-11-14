@@ -40,7 +40,7 @@ class SMC_V12_WPDB {
     public $prefix='wp_';
     function prepare($sql,...$args) { return $sql; }
     function get_var($sql) { return false; } // No approval evidence in this mock.
-    function get_results($sql,$mode=null) { return array(array('id'=>1,'action'=>'contact_verified','created_at'=>'2026-11-01 00:00:00')); }
+    function get_results($sql,$mode=null) { if(!empty($GLOBALS['smc_v12_flip_principal_mid_query'])){$GLOBALS['smc_v12_actor']=2;} return array(array('id'=>1,'action'=>'contact_verified','created_at'=>'2026-11-01 00:00:00')); }
 }
 $wpdb = new SMC_V12_WPDB();
 require dirname(__DIR__) . '/source/sabri-membership-core/includes/class-smc-advanced-trust-2026.php';
@@ -97,6 +97,17 @@ $GLOBALS['smc_v12_actor']=1;
 $own=SMC_Advanced_Trust_2026::trust_timeline(1);
 $cases[]=array('own trust timeline remains readable without cross-subject grant',
   is_array($own)&&count($own)===1);
+
+// Independent review-2: WordPress current principal can change while a DB
+// callback executes. A previously checked self-only audit read must not
+// return another person's private history to the new current principal.
+$GLOBALS['smc_v12_flip_principal_mid_query']=true;
+$GLOBALS['smc_v12_actor']=1;
+$switched=SMC_Advanced_Trust_2026::trust_timeline(1);
+$cases[]=array('principal change during audit query cannot leak subject timeline',
+  is_array($switched)&&count($switched)===0);
+$GLOBALS['smc_v12_flip_principal_mid_query']=false;
+$GLOBALS['smc_v12_actor']=1;
 
 $failed=array_values(array_filter($cases,function($x){return !$x[1];}));
 if($failed) {
