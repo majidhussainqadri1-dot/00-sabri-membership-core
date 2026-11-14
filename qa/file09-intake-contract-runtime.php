@@ -22,7 +22,13 @@ function __($value,$domain='') { return $value; }
 function is_wp_error($value) { return $value instanceof WP_Error; }
 function smc_application($id) { return 7 === (int)$id ? $GLOBALS['smc_intake_app'] : false; }
 function smc_age_from_dob($date) { if ('2010-01-01'===$date) return 16; if('invalid'===$date) return false; return 30; }
-function apply_filters($hook,$value,...$args) { return $value; }
+$GLOBALS['smc_intake_switch_actor_on_policy'] = false;
+function apply_filters($hook,$value,...$args) {
+    if ('smc_file09_intake_narrow' === $hook && !empty($GLOBALS['smc_intake_switch_actor_on_policy'])) {
+        $GLOBALS['smc_intake_current_user_id'] = 8; // simulate current-session/actor change during a downstream hook
+    }
+    return $value;
+}
 class WP_Error { public function __construct($code='',$msg='') {} }
 class SMC_Contracts { public static function assertions($id) { return 7===(int)$id ? $GLOBALS['smc_intake_base'] : array(); } public static function role_grants($id) { return 7===(int)$id ? $GLOBALS['smc_intake_grants'] : array(); } }
 class SMC_CF01_Contract { public static function ensure_subject_uuid($id) {return 7===(int)$id ? '123e4567-e89b-42d3-a456-426614174000' : ''; } }
@@ -122,4 +128,9 @@ $GLOBALS['smc_intake_current_user_id']=8;
 prove((SMC_File09_Intake_Contract::assertion(7,$request)['result']??'')!=='allow','another signed-in user cannot borrow doctor intake claim');
 $GLOBALS['smc_intake_current_user_id']=7;
 prove((SMC_File09_Intake_Contract::assertion(7,$request)['result']??'')==='allow','authenticated exact subject still receives intake-only permission');
+$GLOBALS['smc_intake_switch_actor_on_policy']=true;
+prove((SMC_File09_Intake_Contract::assertion(7,$request)['result']??'')!=='allow','current principal changed during policy hook cannot receive stale intake allow');
+$GLOBALS['smc_intake_switch_actor_on_policy']=false;
+$GLOBALS['smc_intake_current_user_id']=7;
+prove((SMC_File09_Intake_Contract::assertion(7,$request)['result']??'')==='allow','unchanged current principal still receives bounded intake permission');
 echo 'File 00 → File 09 dedicated intake contract: '.$passed." PASS, 0 FAIL\n";
