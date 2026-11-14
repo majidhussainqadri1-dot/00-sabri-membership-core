@@ -1091,6 +1091,13 @@ final class SMC_Advanced_Trust_2026 {
 			$action = sanitize_key( $row['action'] ?? '' ); if ( ! in_array( $action, $allowed_actions, true ) ) { continue; }
 			$out[] = array( 'id' => absint( $row['id'] ), 'action' => $action, 'created_at' => (string) $row['created_at'] );
 		}
+		// A DB query or hook may change the active WordPress principal after
+		// this read was initially authorized. Never expose an audit timeline
+		// across that actor switch; a fresh caller must re-request authorization.
+		if ( ! function_exists( 'get_current_user_id' )
+			|| absint( get_current_user_id() ) !== $current ) {
+			return array();
+		}
 		return $out;
 	}
 
