@@ -70,16 +70,6 @@ final class SMC_File09_Intake_Contract {
             $result['reason_code'] = 'subject_unavailable';
             return $result;
         }
-        // This consumer-only permission is a self-service application, not a
-        // credential grant or an administrator impersonation capability.
-        // Binding must be checked by File 00 itself: a caller-supplied ID,
-        // anonymous request or different logged-in principal cannot borrow
-        // another member's otherwise valid doctor-intake assertion.
-        if ( ! function_exists( 'get_current_user_id' ) || ! function_exists( 'is_user_logged_in' )
-            || ! is_user_logged_in() || absint( get_current_user_id() ) !== $user_id ) {
-            $result['reason_code'] = 'authenticated_subject_mismatch';
-            return $result;
-        }
         try {
             $base = SMC_Contracts::assertions( $user_id );
             $app = smc_application( $user_id );
@@ -226,14 +216,6 @@ final class SMC_File09_Intake_Contract {
         $uuid = SMC_CF01_Contract::ensure_subject_uuid( $user_id );
         if ( ! is_string( $uuid ) || 1 !== preg_match( '/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/iD', $uuid ) ) {
             $result['reason_code'] = 'subject_uuid_unavailable';
-            return $result;
-        }
-        // A downstream owner-policy hook may change the current WordPress
-        // principal after the initial gate. Recheck immediately before issuing
-        // a successful assertion so neither stale actor context nor another
-        // user's UUID/age information can escape on a switched session.
-        if ( ! is_user_logged_in() || absint( get_current_user_id() ) !== $user_id ) {
-            $result['reason_code'] = 'authenticated_subject_changed';
             return $result;
         }
         $result['subject'] = array(
