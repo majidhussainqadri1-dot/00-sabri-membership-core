@@ -26,6 +26,7 @@ final class SMC_Contracts {
 		add_filter( 'user_has_cap', array( __CLASS__, 'filter_capabilities' ), 90, 4 );
 		add_filter( 'spd_can_view_profile', array( __CLASS__, 'filter_profile_visibility' ), 10, 3 );
 		add_filter( 'smc_assertions_v1', array( __CLASS__, 'filter_assertions' ), 10, 2 );
+		add_filter( 'smc_profile_age_guardian_claim_v1', array( __CLASS__, 'profile_age_guardian_claim' ), 10, 3 );
 		add_action( 'updated_user_meta', array( __CLASS__, 'contact_changed' ), 10, 4 );
 		add_action( 'added_user_meta', array( __CLASS__, 'contact_changed' ), 10, 4 );
 	}
@@ -264,6 +265,50 @@ final class SMC_Contracts {
 				$hash
 			)
 		);
+	}
+
+	/**
+	 * Independent, purpose-bound profile age assurance for File 03.
+	 *
+	 * File 00 calls smc_public_profile_opt_in while composing assertions().
+	 * Never call assertions() from this provider: that would recurse. Only
+	 * the canonical encrypted-DOB-derived age_context is consulted.
+	 * This is an internal filter projection, never a public REST disclosure.
+	 */
+	public static function profile_age_guardian_claim( $previous, $user_id, $consumer_contract = '' ) {
+		unset( $previous, $consumer_contract );
+		$user_id = absint( $user_id );
+		$now = time();
+		$claim = array(
+			'owner' => 'file00',
+			'purpose' => 'public_profile_age_assurance',
+			'contract_version' => SMC_CONTRACT_VERSION,
+			'user_id' => $user_id,
+			'generated_at' => gmdate( 'c', $now ),
+			'valid_until' => gmdate( 'c', $now + 120 ),
+			'known' => false,
+			'age_band' => 'unknown',
+			'is_minor' => true,
+			'guardian_required' => true,
+			'guardian_verified' => false,
+		);
+		if ( ! $user_id || ! get_userdata( $user_id ) || smc_privacy_erasure_lock( $user_id ) ) {
+			return $claim;
+		}
+		$age = self::age_context( $user_id );
+		if ( ! is_array( $age ) || true !== ( $age['known'] ?? null )
+			|| ! in_array( $age['age_band'] ?? '', array( 'adult', 'minor' ), true )
+			|| ! is_bool( $age['minor'] ?? null )
+			|| ! is_bool( $age['guardian_required'] ?? null )
+			|| $age['guardian_required'] !== $age['minor'] ) {
+			return $claim;
+		}
+		$claim['known'] = true;
+		$claim['age_band'] = $age['age_band'];
+		$claim['is_minor'] = $age['minor'];
+		$claim['guardian_required'] = $age['guardian_required'];
+		$claim['guardian_verified'] = ! $age['minor'] || self::guardian_verified( $user_id );
+		return $claim;
 	}
 
 	private static function age_context( $user_id ) {
