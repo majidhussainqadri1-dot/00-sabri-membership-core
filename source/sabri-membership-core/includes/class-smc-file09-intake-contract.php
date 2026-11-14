@@ -228,6 +228,14 @@ final class SMC_File09_Intake_Contract {
             $result['reason_code'] = 'subject_uuid_unavailable';
             return $result;
         }
+        // A downstream owner-policy hook may change the current WordPress
+        // principal after the initial gate. Recheck immediately before issuing
+        // a successful assertion so neither stale actor context nor another
+        // user's UUID/age information can escape on a switched session.
+        if ( ! is_user_logged_in() || absint( get_current_user_id() ) !== $user_id ) {
+            $result['reason_code'] = 'authenticated_subject_changed';
+            return $result;
+        }
         $result['subject'] = array(
             'platform_uuid'  => strtolower( $uuid ),
             'record_version' => absint( $app['row_version'] ),
