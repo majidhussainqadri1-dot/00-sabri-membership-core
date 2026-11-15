@@ -4,14 +4,14 @@ const provider=fs.readFileSync('source/sabri-membership-core/includes/class-smc-
 const functions=fs.readFileSync('source/sabri-membership-core/includes/functions.php','utf8');
 const readme=fs.readFileSync('source/sabri-membership-core/README.txt','utf8');
 const wf=fs.readFileSync('.github/workflows/file02-account-contract-current.yml','utf8');
-assert(main.includes('Version: 1.2.44') && main.includes("define( 'SMC_VERSION', '1.2.44' )"));
+assert(main.includes('Version: 1.2.46') && main.includes("define( 'SMC_VERSION', '1.2.46' )"));
 assert(main.includes("define( 'SMC_DB_VERSION', '1.4.5' )") && main.includes("define( 'SMC_CONTRACT_VERSION', '1.2.3' )") && main.includes("define( 'SMC_AUTHENTICATION_CONTRACT_V11_VERSION', '1.1.0' )"));
 assert(provider.includes('$allowed_types   = array_keys( smc_account_types() );'));
 for (const t of ['member','patient','student','doctor','teacher','researcher','pharmacy','clinic','publisher']) assert(functions.includes(`'${t}'`),`canonical type missing: ${t}`);
 assert(!provider.includes("'clinic_staff'") && !provider.includes("'institution_representative'"));
-assert(readme.includes('Stable tag: 1.2.44') && readme.includes('= 1.2.44 =') && readme.includes('= 1.2.43 ='));
+assert(readme.includes('Stable tag: 1.2.46') && readme.includes('= 1.2.46 =') && readme.includes('= 1.2.43 ='));
 assert(wf.includes('950f4bd3f63e08304e3afafa501196919223ab20') && wf.includes("FILE02_VERSION: '1.2.4'"));
-assert(fs.existsSync('RELEASE-1.2.44.md') && fs.existsSync('RELEASE-1.2.43.md'));
+assert(fs.existsSync('RELEASE-1.2.46.md') && fs.existsSync('RELEASE-1.2.44.md') && fs.existsSync('RELEASE-1.2.43.md'));
 assert(!fs.existsSync('.github/workflows/tmp-account-taxonomy-parity-apply.yml'));
 assert(!fs.existsSync('tools/apply-file00-1244.py'));
-console.log('File 00 1.2.44 taxonomy/release regression PASS.');
+console.log('File 00 historical 1.2.44 taxonomy and current 1.2.46 identity PASS.');

@@ -7,7 +7,7 @@
  */
 error_reporting(E_ALL);
 define('ABSPATH', __DIR__.'/');
-define('SMC_VERSION', '1.2.44');
+define('SMC_VERSION', '1.2.46');
 $GLOBALS['smc_intake_user_exists'] = true;
 $GLOBALS['smc_intake_base'] = array();
 $GLOBALS['smc_intake_app'] = array();
