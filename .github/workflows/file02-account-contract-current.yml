@@ -80,4 +80,4 @@ jobs:
           npm ci --ignore-scripts
           npm run verify
           git diff --check
-          test -f dist/00-sabri-membership-core-1.2.44.zip
+          test -f dist/00-sabri-membership-core-1.2.45.zip
