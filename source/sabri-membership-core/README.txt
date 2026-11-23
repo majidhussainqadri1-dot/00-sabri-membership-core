@@ -18,7 +18,7 @@ File 00 owns:
 * membership state transitions and reviewer governance;
 * versioned membership and communication assertions;
 * advanced identity/trust claims, containment, continuity and revocation epochs;
-* the privacy-minimal CF-01 membership-assurance provider contract;
+* the privacy-minimal CF-01 membership-assurance provider contract, canonical inverse UUID lookup, and File 04's owner-marked non-login legacy-author placeholder;
 * privacy export, erasure, retention holds, and tamper-evident audit records.
 
 Founder change-control dated 10 August 2026 retires File 00 two-factor authentication. File 00 no longer owns or requires authenticator/TOTP enrollment, recovery codes, a user-entered MFA session challenge, authenticator replacement, or lost-factor recovery. Normal sign-in and password/account recovery remain with File 02. Historical audit evidence is preserved while obsolete File 00 factor material is retired after the protected DB/audit migration is healthy.

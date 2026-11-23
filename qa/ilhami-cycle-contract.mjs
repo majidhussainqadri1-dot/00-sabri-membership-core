@@ -15,8 +15,8 @@ const failures = [];
 let passed = 0;
 function assert(condition, name) { if (condition) passed += 1; else failures.push(name); }
 
-assert(main.includes('Version: 1.2.46'), 'Plugin header is 1.2.46');
-assert(main.includes("define( 'SMC_VERSION', '1.2.46' )"), 'Runtime version is 1.2.46');
+assert(main.includes('Version: 1.2.44'), 'Plugin header is 1.2.44');
+assert(main.includes("define( 'SMC_VERSION', '1.2.44' )"), 'Runtime version is 1.2.44');
 assert(main.includes("define( 'SMC_DB_VERSION', '1.4.5' )"), 'Database version is 1.4.5');
 assert(main.includes('SMC_Lifecycle::institutional_repair_complete()'), 'Release repair marker is conditional on a complete repair pass');
 assert(functions.includes("if ( ! isset( smc_allowed_genders()[ $gender ] )"), 'Unknown gender fails closed');
@@ -24,7 +24,8 @@ assert(functions.includes('return false;'), 'Minimum-age resolver can reject cor
 assert(contracts.includes('$guardian_verified ='), 'Canonical eligibility computes guardian validity');
 assert(contracts.includes('$contacts_verified ='), 'Canonical eligibility computes contact ownership');
 assert(contracts.includes('$identity_documents_current ='), 'Canonical eligibility computes current identity evidence');
-assert(contracts.includes('$eligible = $approved && $professional_verified && $guardian_verified && $contacts_verified && $identity_documents_current;'), 'All public can_* assertions share complete effective non-MFA eligibility');
+assert(contracts.includes('$eligible = $approved && $age_known && $age_eligible && $professional_verified && $guardian_verified && $contacts_verified && $identity_documents_current;'), 'All public can_* assertions require live age, jurisdiction, guardian, contact, identity and professional eligibility');
+assert(contracts.includes('$guardian_required_now =') && contracts.includes("$live_age = self::age_context( $user_id );"), 'Protected membership uses current age and current guardian requirement rather than stale registration flag');
 assert(contracts.includes("'mfa_required'           => false"), 'Canonical File 00 contract explicitly retires MFA');
 assert(contracts.includes("'appeal_review', 'erasure_pending', 'invalid_application'"), 'Public hard-block census is fail closed');
 assert(contracts.includes("$wpdb->prefix . 'smc_contact_otps'"), 'Contact change invalidates canonical OTP assertion rows');

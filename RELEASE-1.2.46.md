@@ -3,6 +3,10 @@
 **Status:** DRAFT SOURCE CANDIDATE, NOT STAGING-ACCEPTED OR LIVE-VERIFIED.
 
 ## Scope
+- Integrates the V12.3 current-age/guardian eligibility correction with the independent File 03 age claim; the old registration-era guardian flag is not authorization evidence.
+- Adds File 00-owned inverse platform UUID resolution, erasure-lock denial, and the File 04 non-login placeholder provider bound to owner metadata.
+- Hardens trust-timeline cross-subject authorization with the exact trust_timeline_read purpose and step-up action.
+- Adds the 123-requirement inventory/source evidence, twenty-round review record, and exact File02/File03/File04/File08 consumer checks.
 - New unique plugin release identity: `1.2.46`, distinct from the previously documented `1.2.44` and other unmerged 1.2.45 proposals package. Never silently overwrite a deployed `1.2.44` package.
 - File 00 canonical ownership remains unchanged: identity, encrypted DOB, age/guardian policy, membership eligibility, revocation and erasure locks.
 - Add independent read-only `smc_profile_age_guardian_claim_v1` for File 03’s `smc_public_profile_opt_in` consumer, called without recursively reentering `SMC_Contracts::assertions()`.
@@ -17,6 +21,12 @@
 | SMC_DB_VERSION | `1.4.5` (unchanged) |
 | SMC_CONTRACT_VERSION | `1.2.3` (unchanged) |
 | Cross-file purpose-bound claim | `smc_profile_age_guardian_claim_v1` (additive) |
+
+## Review and CI gates
+1. The legacy eligibility runtime fixture now supplies current encrypted-DOB-equivalent test data; it must not be weakened to bypass the current age policy.
+2. File04 must accept only the exact File00 placeholder provider identity and verify UUID-to-user reverse mapping.
+3. File08 reverse UUID lookup must fail closed for duplicates, missing users and privacy-erasure locks.
+4. File03's age assurance provider must remain independent of recursive membership assertions and must not disclose DOB or numeric age.
 
 ## Required hard gates
 1. Exact candidate SHA freeze and plugin MANIFEST.sha256 parity. CI must compile, verify current source digests, build a deterministic `1.2.46` ZIP and prove checksum and archive contents.

@@ -26,3 +26,10 @@
 The connected WordPress/Jetpack site remains disconnected and a WPVibe connection attempt returned HTTP 530. Neither identifies a proven host root cause. Real installed files, DB, migrations, logs, browser paths, backup restore, rollback, independent approval and live re-test are not verifiable from GitHub.
 
 **Exact deployed code ابھی unverified ہے؛ repository-based diagnosis provisional ہے۔**
+
+## V12.3 integrated review candidate — 2026-11-23
+- Source candidate: 1.2.46 (not merged, not deployed).
+- DB version: 1.4.5; contract: 1.2.3.
+- Integrated scope: current age/guardian eligibility, File03 age assurance, File04 owner-marked legacy-author placeholder, CF-01 inverse UUID lookup, File08 consumer contract, advanced-trust actor binding and purpose restriction.
+- Twenty review rounds documented; final CI and Staging/Live gates remain separate.
+- Live deployed package, DB and migration state: UNVERIFIED.
