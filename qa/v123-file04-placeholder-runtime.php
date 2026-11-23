@@ -9,6 +9,7 @@ $GLOBALS['f00_actions']=array(); $GLOBALS['f00_filters']=array(); $GLOBALS['f00_
 $GLOBALS['f00_logged_in']=true; $GLOBALS['f00_caps']=array('manage_options'=>true,'sabri_feed_run_migrations'=>true);
 $GLOBALS['f00_fail_audit']=''; $GLOBALS['f00_erasure_locked']=array();
 function absint($v){return abs((int)$v);} function sanitize_key($v){return strtolower(preg_replace('/[^a-z0-9_-]/','',(string)$v));}
+function __( $text, $domain = null ) { unset( $domain ); return $text; }
 function is_wp_error($v){return $v instanceof WP_Error;} function is_user_logged_in(){return !empty($GLOBALS['f00_logged_in']);}
 function current_user_can($cap){return !empty($GLOBALS['f00_caps'][$cap]);}
 function smc_privacy_erasure_lock($id){return !empty($GLOBALS['f00_erasure_locked'][(int)$id]);}
