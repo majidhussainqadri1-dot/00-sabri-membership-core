@@ -14,11 +14,11 @@ const required = [
   "legacy_author_placeholder_created",
   "smc_legacy_author_placeholder_login_denied",
   "purpose' => 'file04_legacy_publication_migration'",
-  "'provider_id' => 'file00_legacy_author_placeholder_v1'",
 ];
 for (const needle of required) {
   if (!contract.includes(needle)) throw new Error('Missing File 04 authorship contract control: '+needle);
 }
+if (!/['"]provider_id['"]\s*=>\s*['"]file00_legacy_author_placeholder_v1['"]/.test(contract)) throw new Error('Placeholder provider identity must be exact.');
 if (!membership.includes("_smc_legacy_author_placeholder_v1")) throw new Error('File00 membership registration must exclude its owner-marked placeholder.');
 if (!contract.includes('public static function is_legacy_author_placeholder') || !helpers.includes('smc_is_legacy_author_placeholder')) throw new Error('File00 must expose its owner-checked placeholder predicate.');
 if (!contract.includes("! function_exists( 'smc_privacy_erasure_lock' )")) throw new Error('File00 UUID and placeholder identity projections must fail closed without the privacy-lock provider.');
