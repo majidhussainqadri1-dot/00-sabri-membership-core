@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 define('ABSPATH', __DIR__ . '/');
-define('SMC_CONTRACT_VERSION', '1.2.1');
+define('SMC_CONTRACT_VERSION', '1.2.3');
 define('ARRAY_A', 'ARRAY_A');
 
 $GLOBALS['states'] = [];
@@ -16,7 +16,10 @@ function apply_filters($tag,$value,...$args){ return $value; }
 function is_wp_error($v){ return false; }
 function smc_membership_state($uid){ return $GLOBALS['states'][(int)$uid]; }
 function smc_application($uid){ return $GLOBALS['apps'][(int)$uid] ?? false; }
-function smc_is_professional_type($type){ return in_array($type,['doctor','teacher','researcher'],true); }
+function smc_professional_types(){ return ['doctor','teacher','researcher','pharmacy','clinic','publisher']; }
+function smc_is_professional_type($type){ return in_array(sanitize_key($type),smc_professional_types(),true); }
+function smc_age_from_dob($dob){ if($dob==='adult')return 30; if($dob==='minor')return 16; return false; }
+function smc_effective_minimum_age($gender,$country=''){ return 'female'===strtolower((string)$gender)?12:15; }
 function smc_is_founder($uid){ return false; }
 function smc_is_institutional_ai($uid){ return false; }
 function smc_institutional_ai_policy(){ return ['low_risk_auto_publish'=>false]; }
@@ -73,7 +76,7 @@ function seed_user(int $id, bool $institutional=false, bool $guardianRequired=fa
     'application_exists'=>true,'institutional_account'=>$institutional,'account_class'=>$institutional?'administrator':'member',
     'membership_type'=>'member','status'=>'approved','approved'=>true
   ];
-  $GLOBALS['apps'][$id]=['user_id'=>$id,'membership_type'=>'member','guardian_required'=>$guardianRequired?1:0,'profile_visibility'=>'private','phone_e164_enc'=>'+923001234567'];
+  $GLOBALS['apps'][$id]=['user_id'=>$id,'membership_type'=>'member','guardian_required'=>$guardianRequired?1:0,'date_of_birth_enc'=>$guardianRequired?'minor':'adult','gender'=>'male','residence_country'=>'PK','profile_visibility'=>'private','phone_e164_enc'=>'+923001234567'];
   $GLOBALS['users'][$id]=(object)['roles'=>[],'user_email'=>'user'.$id.'@example.test'];
   if(!$institutional){ $GLOBALS['documents'][$id]=['government_id'=>true]; }
 }

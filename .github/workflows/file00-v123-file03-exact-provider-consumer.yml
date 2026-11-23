@@ -1,0 +1,86 @@
+name: File00 V12.3 File03 Exact Age Provider Consumer
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FILE03_REF: ecfe9d2d66f8ed09c83a51bec9e0d41f70c48bcd
+  FILE03_VERSION: '1.2.0-rc19'
+
+jobs:
+  real-wordpress-age-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_DATABASE: wordpress
+          MARIADB_USER: wordpress
+          MARIADB_PASSWORD: wordpress
+          MARIADB_ROOT_PASSWORD: root
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - name: Checkout exact File00 candidate
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          path: file00
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Checkout exact File03 consumer
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: majidhussainqadri1-dot/03-sabri-profiles-and-doctors
+          path: file03
+          ref: ${{ env.FILE03_REF }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Prove immutable inputs
+        run: |
+          set -euo pipefail
+          test "$(git -C file00 rev-parse HEAD)" = '${{ github.event.pull_request.head.sha || github.sha }}'
+          test "$(git -C file03 rev-parse HEAD)" = "$FILE03_REF"
+          grep -Fq "Version: 1.2.46" file00/source/sabri-membership-core/sabri-membership-core.php
+          grep -Fq "Version: ${FILE03_VERSION}" file03/sabri-profiles-doctors.php
+      - name: Setup PHP 8.3
+        uses: shivammathur/setup-php@2.37.2
+        with:
+          php-version: '8.3'
+          coverage: none
+          extensions: mysqli,openssl,mbstring,json
+          tools: none
+      - name: Install disposable WordPress 7.0.1 and exact plugin trees
+        run: |
+          set -euo pipefail
+          curl -fsSL https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar -o /tmp/wp
+          chmod +x /tmp/wp
+          /tmp/wp core download --version=7.0.1 --path=/tmp/wordpress --quiet
+          /tmp/wp config create --path=/tmp/wordpress --dbname=wordpress --dbuser=wordpress --dbpass=wordpress --dbhost=127.0.0.1:3306 --skip-check --quiet
+          /tmp/wp config set SMC_MASTER_KEY 'file00-file03-disposable-ci-master-key-2026' --type=constant --path=/tmp/wordpress
+          /tmp/wp config set SMC_MASTER_KEY_ID 'file00-file03-ci-key-v1' --type=constant --path=/tmp/wordpress
+          /tmp/wp config set WP_ENVIRONMENT_TYPE 'staging' --type=constant --path=/tmp/wordpress
+          /tmp/wp core install --path=/tmp/wordpress --url=http://age-contract.local --title='File00 File03 Age CI' --admin_user=founder --admin_password='CI-Only-Password!9' --admin_email=founder@example.test --skip-email --quiet
+          cp -R file00/source/sabri-membership-core /tmp/wordpress/wp-content/plugins/sabri-membership-core
+          mkdir -p /tmp/wordpress/wp-content/plugins/sabri-profiles-doctors
+          rsync -a --exclude='.git' --exclude='.github' --exclude='tests' --exclude='tools' file03/ /tmp/wordpress/wp-content/plugins/sabri-profiles-doctors/
+      - name: Activate File00 and complete deferred migration
+        run: |
+          set -euo pipefail
+          /tmp/wp plugin activate sabri-membership-core --path=/tmp/wordpress
+          /tmp/wp eval 'wp_set_current_user(1); do_action("admin_init"); if((string)get_option("smc_db_version","")!==SMC_DB_VERSION || SMC_Completion::safe_mode()){fwrite(STDERR,"FAIL File00 schema/bootstrap\n");exit(1);} echo "PASS File00 readiness\n";' --path=/tmp/wordpress
+      - name: Activate exact File03 consumer and assert schemas
+        run: |
+          set -euo pipefail
+          /tmp/wp plugin activate sabri-profiles-doctors --path=/tmp/wordpress
+          /tmp/wp eval 'if(!class_exists("SPD_Membership_Adapter") || !SPD_Schema_Guard::base_ready() || !SPD_Schema_Guard::central_ready() || !SPD_Schema_Guard::future_ready()){fwrite(STDERR,"FAIL File03 schema/adapter\n");exit(1);} if(!has_filter("smc_profile_age_guardian_claim_v1")){fwrite(STDERR,"FAIL File00 age provider absent\n");exit(1);} echo "PASS File00/File03 provider wiring\n";' --path=/tmp/wordpress
+      - name: Run real adult/minor/unknown/erasure cross-file age acceptance
+        run: /tmp/wp eval-file file03/tests/file00-age-crossfile-wordpress.php --path=/tmp/wordpress

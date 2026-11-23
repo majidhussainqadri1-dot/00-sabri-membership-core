@@ -1,12 +1,18 @@
 # File 00 — Sabri Membership Core
 
-Current repository corrective candidate: runtime `1.2.44`, public membership contract `1.2.3`, database schema `1.4.5`, `smc.authentication-account` `1.1.0`.
+**Current V12.3 source-only corrective candidate:** `1.2.46` (File03 independent age assurance), public membership contract `1.2.3`, DB schema `1.4.5`. This identity is distinct from historical `1.2.44` and other unmerged `1.2.45` proposals.
 
-The 1.2.44 candidate binds the active authentication-account provider directly to File 00's canonical account taxonomy and exact-pins the corrected File 02 1.2.4 source candidate for cross-repository compatibility testing. It preserves Founder-approved File 00 MFA retirement and introduces no new DB schema or public membership-contract shape.
+## Ownership and compatibility
+
+File 00 alone owns membership eligibility, encrypted date of birth, age/guardian policy, profile-age assurance, identity, role verification, erasure locks and membership claims. The File 03 consumer obtains a read-only purpose-bound assertion from `smc_profile_age_guardian_claim_v1`. File 00 never recursively calls its full membership assertions from that filter, never exposes the raw DOB or exact age, and does not grant clinical authorization.
+
+The source candidate retains the previously merged File02 1.2.4 compatibility boundary and the Founder-approved retirement of File00-owned MFA; File02 remains the authentication authority. No schema migration is introduced by 1.2.46. See `RELEASE-1.2.46.md`.
+
+## Repository verification
 
 ```bash
 npm ci --ignore-scripts
 npm run verify
 ```
 
-Repository tests/package/CI are source evidence only. Staging, deployed and operational states require separate exact evidence; GitHub success must not be treated as live resolution.
+**NO-GO for deployment without actual host evidence.** Repository CI, package and frozen SHA are not Staging/Live truth. First capture installed plugin versions/files/checksums, DB/options, migration and logs, then review cross-file parity, Staging acceptance, backup restore, rollback, Founder approval and Live re-test. Historical statuses and PRs must not be substituted for deployed evidence.

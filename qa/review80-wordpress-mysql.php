@@ -13,7 +13,7 @@ $check = static function ( $ok, $label ) use ( &$failures, &$passed ) {
 	$failures[] = $label; echo "FAIL {$label}\n";
 };
 
-$check( defined( 'SMC_VERSION' ) && '1.2.44' === SMC_VERSION, 'runtime 1.2.44' );
+$check( defined( 'SMC_VERSION' ) && '1.2.46' === SMC_VERSION, 'runtime 1.2.46' );
 $check( defined( 'SMC_DB_VERSION' ) && '1.4.5' === SMC_DB_VERSION, 'DB contract 1.4.5' );
 $check( defined( 'SMC_CONTRACT_VERSION' ) && '1.2.3' === SMC_CONTRACT_VERSION, 'public contract 1.2.3' );
 $key = SMC_Security::ensure_key_ready();
@@ -99,6 +99,50 @@ if ( ! is_wp_error( $minor_user ) ) {
 		$check( ! empty( $a['age_context']['minor'] ) && 'minor' === ( $a['age_context']['age_band'] ?? '' ) && ! array_key_exists( 'age_years', (array) $a['age_context'] ), 'minor age projection has no exact age' );
 		$c = (array) ( $a['clinical_commerce'] ?? array() );
 		$check( empty( $c['marketplace_direct_deal_allowed'] ) && empty( $c['emergency_online_case_allowed'] ) && ! empty( $c['appointment_requires_guardian_context'] ), 'minor clinical-commerce restrictions fail closed' );
+	}
+}
+
+// V12.3 File03: independent, subject-bound age/guardian claim must work
+// while File00 is active, without relying on nested membership assertions.
+$check( (bool) has_filter( 'smc_profile_age_guardian_claim_v1' ), 'File03 age-assurance contract registered by File00' );
+if ( ! is_wp_error( $minor_user ) ) {
+	$minor_age_claim = apply_filters( 'smc_profile_age_guardian_claim_v1', null, $minor_user, '1.4.0' );
+	$check( is_array( $minor_age_claim ) && 'file00' === ( $minor_age_claim['owner'] ?? '' )
+		&& 'public_profile_age_assurance' === ( $minor_age_claim['purpose'] ?? '' )
+		&& (int) ( $minor_age_claim['user_id'] ?? 0 ) === (int) $minor_user
+		&& true === ( $minor_age_claim['known'] ?? null )
+		&& true === ( $minor_age_claim['is_minor'] ?? null )
+		&& true === ( $minor_age_claim['guardian_required'] ?? null )
+		&& ! array_key_exists( 'age', $minor_age_claim )
+		&& ! array_key_exists( 'date_of_birth', $minor_age_claim ), 'File03 purpose-bound minor claim excludes raw age/DOB' );
+}
+if ( ! is_wp_error( $auth_user ) ) {
+	$unknown_age_claim = apply_filters( 'smc_profile_age_guardian_claim_v1', null, $auth_user, '1.4.0' );
+	$check( is_array( $unknown_age_claim ) && false === ( $unknown_age_claim['known'] ?? null )
+		&& true === ( $unknown_age_claim['is_minor'] ?? null ), 'File03 unknown age remains fail closed' );
+}
+$adult_age_user = wp_insert_user( array(
+	'user_login' => 'review80_age_' . wp_generate_password( 6, false, false ),
+	'user_email' => 'review80-age-' . wp_generate_password( 6, false, false ) . '@example.test',
+	'user_pass' => wp_generate_password( 28, true, true ),
+	'role' => 'subscriber',
+) );
+$check( ! is_wp_error( $adult_age_user ) && (bool) smc_application( $adult_age_user ), 'File03 adult age fixture registered' );
+if ( ! is_wp_error( $adult_age_user ) ) {
+	$encrypted_age_dob = SMC_Security::encrypt( gmdate( 'Y-m-d', strtotime( '-35 years' ) ), 'date-of-birth', array( 'user_id'=>(int) $adult_age_user ) );
+	$check( ! is_wp_error( $encrypted_age_dob ), 'File03 adult age fixture encrypted' );
+	if ( ! is_wp_error( $encrypted_age_dob ) ) {
+		$wpdb->update( $wpdb->prefix . 'smc_applications',
+			array( 'date_of_birth_enc'=>$encrypted_age_dob, 'guardian_required'=>0, 'updated_at'=>current_time( 'mysql', true ) ),
+			array( 'user_id'=>(int) $adult_age_user ) );
+		$adult_age_claim = apply_filters( 'smc_profile_age_guardian_claim_v1', null, $adult_age_user, '1.4.0' );
+		$check( is_array( $adult_age_claim ) && true === ( $adult_age_claim['known'] ?? null )
+			&& false === ( $adult_age_claim['is_minor'] ?? null )
+			&& 'adult' === ( $adult_age_claim['age_band'] ?? '' )
+			&& false === ( $adult_age_claim['guardian_required'] ?? null )
+			&& false !== strtotime( (string) ( $adult_age_claim['valid_until'] ?? '' ) )
+			&& strtotime( (string) $adult_age_claim['valid_until'] ) > time(),
+			'File03 current adult claim is fresh and privacy-minimized' );
 	}
 }
 
