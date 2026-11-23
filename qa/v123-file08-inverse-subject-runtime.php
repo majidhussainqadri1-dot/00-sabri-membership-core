@@ -11,10 +11,8 @@ $GLOBALS['meta'] = array(
 );
 $GLOBALS['forced_matches'] = null;
 $GLOBALS['mutation_count'] = 0;
-$GLOBALS['erasure_locked'] = array();
 function absint( $value ) { return abs( (int) $value ); }
 function get_userdata( $id ) { return isset( $GLOBALS['users'][(int)$id] ) ? $GLOBALS['users'][(int)$id] : false; }
-function smc_privacy_erasure_lock( $id ) { return ! empty( $GLOBALS['erasure_locked'][(int)$id] ); }
 function get_user_meta( $id, $key, $single = true ) {
     return isset( $GLOBALS['meta'][(int)$id][$key] ) ? $GLOBALS['meta'][(int)$id][$key] : '';
 }
@@ -61,9 +59,9 @@ $GLOBALS['forced_matches']=null;
 $GLOBALS['meta'][88]['_smc_platform_uuid_v1']=$uuid;
 $check( smc_get_user_id_by_subject_uuid($uuid)===0,'duplicate canonical meta refuses ambiguous account' );
 $GLOBALS['meta'][88]['_smc_platform_uuid_v1']='00000000-0000-4000-8000-000000000088';
-$GLOBALS['erasure_locked'][77]=true;
+$GLOBALS['meta'][77]['_smc_privacy_erasure_lock']=array('locked_at'=>'2026-11-23T00:00:00Z');
 $check( smc_get_user_id_by_subject_uuid($uuid)===0,'privacy erasure lock prevents new identity resolution' );
-$GLOBALS['erasure_locked'][77]=false;
+unset($GLOBALS['meta'][77]['_smc_privacy_erasure_lock']);
 $check( $GLOBALS['mutation_count']===0,'lookup never created or mutated a subject' );
 echo 'File00 T38 subject resolver runtime fixtures PASS '.$count.'/'.$count.
     " (standalone PHP fixtures, not staging DB or installed consumer parity)\n";
