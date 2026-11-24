@@ -16,3 +16,7 @@ npm run verify
 ```
 
 **NO-GO for deployment without actual host evidence.** Repository CI, package and frozen SHA are not Staging/Live truth. First capture installed plugin versions/files/checksums, DB/options, migration and logs, then review cross-file parity, Staging acceptance, backup restore, rollback, Founder approval and Live re-test. Historical statuses and PRs must not be substituted for deployed evidence.
+
+
+## Integrated V12.3 candidate 1.2.47
+This source candidate consolidates current DOB/minimum-age and guardian revalidation, the nonrecursive File03 age-assurance contract, advanced-trust hardening, and canonical subject UUID resolution. It is a draft source candidate only: exact-head CI, paired File03 integration, staging, deployment parity and live verification must be completed on the final SHA before acceptance.
