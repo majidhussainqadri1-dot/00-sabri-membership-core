@@ -4,8 +4,9 @@ define('ABSPATH', __DIR__ . '/');
 define('MINUTE_IN_SECONDS', 60);
 define('DAY_IN_SECONDS', 86400);
 define('YEAR_IN_SECONDS', 31536000);
-define('SMC_VERSION', '1.2.42');
-$meta=[]; $options=[]; $actions=[]; $filters=[]; $current_user_id=1;
+define('SMC_VERSION', '1.2.47');
+define('SMC_DB_VERSION', '1.4.5');
+$meta=[]; $options=['smc_db_version'=>'1.4.5']; $actions=[]; $filters=[]; $current_user_id=1;
 class WP_Error { public $code; public function __construct($c,$m=''){ $this->code=$c; } }
 function is_wp_error($v){ return $v instanceof WP_Error; }
 function __($s,$d=null){ return $s; }
@@ -33,7 +34,22 @@ function delete_option($key){ global $options; unset($options[$key]); return tru
 function get_users($args=[]){ return []; }
 function smc_is_founder($id){ return in_array((int)$id,[1,2],true); }
 function smc_is_institutional_ai($id){ return (int)$id===99; }
-class WPDBRevocationStub { public $prefix='wp_'; public $users='wp_users'; public $approved_at; public function __construct(){ $this->approved_at=gmdate('Y-m-d H:i:s'); } public function prepare($q,...$a){ return $q; } public function get_var($q){ if(strpos($q,'GET_LOCK')!==false||strpos($q,'RELEASE_LOCK')!==false) return 1; if(strpos($q,'smc_role_grants')!==false||strpos($q,'smc_applications')!==false) return $this->approved_at; return 1; } public function get_col($q){ return []; } }
+class WPDBRevocationStub {
+  public $prefix='wp_'; public $users='wp_users'; public $approved_at; public $last_error='';
+  public function __construct(){ $this->approved_at=gmdate('Y-m-d H:i:s'); }
+  public function prepare($q,...$a){ foreach($a as $v){$r=is_int($v)?(string)$v:"'".addslashes((string)$v)."'";$q=preg_replace('/%[sd]/',$r,$q,1);} return $q; }
+  public function get_var($q){
+    if(strpos($q,'GET_LOCK')!==false||strpos($q,'RELEASE_LOCK')!==false) return 1;
+    if(strpos($q,'SHOW TABLES LIKE')!==false){ if(strpos($q,'smc_role_grants')!==false)return $this->prefix.'smc_role_grants'; if(strpos($q,'smc_applications')!==false)return $this->prefix.'smc_applications'; return false; }
+    if(strpos($q,'SELECT approved_at')!==false||strpos($q,'SELECT COALESCE')!==false) return $this->approved_at;
+    return 1;
+  }
+  public function get_results($q,$format=null){
+    if(strpos($q,'SHOW COLUMNS FROM')===0){$names=strpos($q,'smc_role_grants')!==false?['user_id','status','approved_at']:['user_id','status','decided_at','updated_at','created_at'];return array_map(static function($n){return ['Field'=>$n];},$names);}
+    return [];
+  }
+  public function get_col($q){ return []; }
+}
 $wpdb=new WPDBRevocationStub();
 class SMC_Security {
   public static $audits=[];
