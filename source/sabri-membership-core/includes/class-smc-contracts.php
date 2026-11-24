@@ -32,6 +32,15 @@ final class SMC_Contracts {
 
 	public static function register_account( $user_id ) {
 		global $wpdb;
+		// File04's reserved legacy-author sentinel is attribution metadata,
+		// not an ordinary membership application. WordPress user_register
+		// fires even when wp_insert_user(role='') is used, and the generic
+		// importer would otherwise grant sabri_member_pending to it.
+		$registration_user = get_userdata( absint( $user_id ) );
+		if ( $registration_user
+			&& 0 === strcasecmp( (string) ( $registration_user->user_login ?? '' ), 'sabri_legacy_author_placeholder' ) ) {
+			return;
+		}
 		if ( smc_privacy_erasure_lock( $user_id ) || smc_application( $user_id ) ) {
 			return;
 		}
@@ -92,11 +101,26 @@ final class SMC_Contracts {
 		}
 		$phone_verified = self::contact_verified( $user_id, 'mobile' );
 		$email_verified = self::contact_verified( $user_id, 'email' );
-		$guardian_verified = ! $row || empty( $row['guardian_required'] ) || self::guardian_verified( $user_id );
 		$institutional = (bool) $state['institutional_account'];
+		// F00-CEN-03: registration-era guardian_required is only historical
+		// evidence. Current protected actions must re-decrypt DOB and consult
+		// current guardian consent; cron/cache updates are not authority.
+		$live_age = self::age_context( $user_id );
+		$age_known = $institutional || ! empty( $live_age['known'] );
+		// A guardian may authorize an eligible minor's participation, but
+		// cannot override the higher of File00 and jurisdictional age floors.
+		// Professional functions remain adult-only, regardless of consent.
+		$age_eligible = $institutional || ( ! empty( $live_age['minimum_age_met'] )
+			&& ( empty( $live_age['minor'] )
+				|| ! array_intersect( array_map( 'sanitize_key', $requested_types ), smc_professional_types() ) ) );
+		$guardian_required_now = ! $institutional && ( ! empty( $live_age['known'] )
+			? ! empty( $live_age['minor'] )
+			: ! empty( $row['guardian_required'] ) );
+		$guardian_verified = $institutional || ( $age_known &&
+			( ! $guardian_required_now || self::guardian_verified( $user_id ) ) );
 		$contacts_verified = $institutional || ( $phone_verified && $email_verified );
 		$identity_documents_current = $institutional || self::identity_documents_current( $user_id );
-		$eligible = $approved && $professional_verified && $guardian_verified && $contacts_verified && $identity_documents_current;
+		$eligible = $approved && $age_known && $age_eligible && $professional_verified && $guardian_verified && $contacts_verified && $identity_documents_current;
 		$suspended = in_array( $status, array( 'suspended', 'rejected', 'expired', 'appeal_review', 'erasure_pending', 'invalid_application' ), true );
 		$base = array(
 			'contract_version'       => SMC_CONTRACT_VERSION,
@@ -131,7 +155,7 @@ final class SMC_Contracts {
 		$base['entitlements'] = self::entitlement_assertions( $user_id, $base );
 		$base['publishing']   = self::publishing_assertions( $user_id, $base );
 		$base['transfer']     = self::transfer_assertions( $user_id, 0, array(), $base );
-		$base['age_context']  = self::age_context( $user_id );
+		$base['age_context']  = $live_age;
 		$base['clinical_commerce'] = self::clinical_commerce_assertions( $user_id, $base );
 		$base['can_publish']  = (bool) $base['publishing']['can_open_composer'];
 		$base['can_direct_publish'] = (bool) $base['publishing']['can_direct_publish'];
@@ -271,6 +295,7 @@ final class SMC_Contracts {
 		$app = smc_application( $user_id );
 		$out = array(
 			'known'             => false,
+			'minimum_age_met'   => false,
 			'age_band'          => 'unknown',
 			'minor'             => (bool) ( $app && ! empty( $app['guardian_required'] ) ),
 			'guardian_required' => (bool) ( $app && ! empty( $app['guardian_required'] ) ),
@@ -280,6 +305,8 @@ final class SMC_Contracts {
 			$age = is_wp_error( $dob ) ? false : smc_age_from_dob( $dob );
 			if ( false !== $age ) {
 				$out['known'] = true;
+				$minimum_age = smc_effective_minimum_age( $app['gender'] ?? '', $app['residence_country'] ?? '' );
+				$out['minimum_age_met'] = false !== $minimum_age && (int) $age >= (int) $minimum_age;
 				$out['age_band'] = (int) $age < 18 ? 'minor' : 'adult';
 				$out['minor'] = (int) $age < 18;
 				$out['guardian_required'] = $out['minor'];
