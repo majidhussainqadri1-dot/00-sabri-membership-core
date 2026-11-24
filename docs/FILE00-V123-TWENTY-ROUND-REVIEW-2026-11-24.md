@@ -73,3 +73,19 @@ Status: **AUDIT EVIDENCE / NOT RELEASE ACCEPTANCE. No production source files ch
 - Migration State: UNVERIFIED
 - Live Verification Status: NOT VERIFIED
 - Review branch contains evidence/reporting only; no runtime release or deployment authorization.
+
+## Additional exact-head CI evidence and QA fixture correction (2026-11-24)
+The PR #59 head observed before the fixture correction (`c645213c83d3037b66489935e2e18f9ee431f2e1`) had 10 workflow runs: 6 success and 4 failure. The failures were:
+- File02 PHP 8.3 exact-head compatibility: package identity/repository hygiene step failed; PHP 7.4 companion job passed.
+- 1.2.44 exact-head release gate: static release gate failed; activation/migration and later stages were skipped.
+- Forty-round contract suite: PHP 7.4 and PHP 8.3 both stopped at the inherited eligibility runtime fixture.
+- Exact-head npm verify: stopped at the same inherited eligibility runtime fixture.
+The common runtime failure was the stale test fixture `qa/ilhami-eligibility-runtime.php`: it seeded an approved ordinary account without a DOB field, while the PR #59 candidate correctly requires a current, decryptable DOB and minimum-age result before eligibility. This was a test-fixture omission, not evidence that the production age gate should be removed.
+A test-only correction was pushed to the PR #59 branch in commit `4d882627dde199604fc4fab48531aa0a063c80a6`: fixture now supplies an adult DOB, a 16-year-old male DOB for the guardian case, the approved V12.3 baseline age floors (male 15/female 12), and the professional-type helper. **The corrected head has not yet produced a fresh CI run in the evidence available at this review.** Do not count the old failed runs as fixed until fresh exact-head CI passes.
+PR #61 head `f4204593d1a4e4ecd7ce12d0e1bc7174da33b246` has 9/9 successful workflows, but remains a Draft and does not establish merged, staging or live acceptance.
+
+### Updated correction accounting
+- Confirmed File00 production-code defects newly fixed by this audit: 0.
+- Test-fixture defect corrected on PR #59 branch: 1 (awaiting fresh CI).
+- Old PR #59 exact-head CI failures: 4 workflows; common eligibility fixture failure corrected in source branch, package/release gates remain to be freshly rerun and independently diagnosed.
+- Runtime source, DB schema and migration changes on this audit branch: 0.
