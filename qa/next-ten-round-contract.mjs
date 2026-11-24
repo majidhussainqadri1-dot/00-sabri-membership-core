@@ -32,10 +32,10 @@ check(authorization.includes("new_status IN ('rejected','suspended')"), 'appeal 
 check(authorization.includes("array( 'smc_assign_review', 'smc_review_transition' )"), 'appeal guard covers both claim and decision actions');
 check(authorization.includes('self::enforce_appeal_reviewer_independence();'), 'admin authorization invokes appeal independence guard');
 
-check(main.includes('Version: 1.2.44') && main.includes("define( 'SMC_VERSION', '1.2.44' );"), 'current runtime identity is 1.2.44');
-check(pkg.version === '1.2.44' && pkg.scripts?.verify?.includes('00-sabri-membership-core-1.2.44.zip'), 'package and deterministic verify identity are 1.2.44');
-check(readme.includes('Stable tag: 1.2.44') && readme.includes('= 1.2.44 =') && readme.includes(`= ${historical1243} =`) && readme.includes('= 1.2.42 =') && readme.includes('= 1.2.41 ='), 'WordPress current metadata is 1.2.44 and 1.2.44/1.2.42/1.2.41 history is retained');
-check(fs.existsSync('RELEASE-1.2.44.md') && fs.existsSync(`RELEASE-${historical1243}.md`) && fs.existsSync('RELEASE-1.2.42.md') && fs.existsSync('RELEASE-1.2.41.md'), 'current and historical release records exist');
+check(main.includes('Version: 1.2.47') && main.includes("define( 'SMC_VERSION', '1.2.47' );"), 'current runtime identity is 1.2.47');
+check(pkg.version === '1.2.47' && pkg.scripts?.verify?.includes('00-sabri-membership-core-1.2.47.zip'), 'package and deterministic verify identity are 1.2.47');
+check(readme.includes('Stable tag: 1.2.47') && readme.includes('= 1.2.47 =') && readme.includes(`= ${historical1243} =`) && readme.includes('= 1.2.42 =') && readme.includes('= 1.2.41 ='), 'WordPress current metadata is 1.2.47 and 1.2.47/1.2.42/1.2.41 history is retained');
+check(fs.existsSync('RELEASE-1.2.47.md') && fs.existsSync('RELEASE-1.2.44.md') && fs.existsSync(`RELEASE-${historical1243}.md`) && fs.existsSync('RELEASE-1.2.42.md') && fs.existsSync('RELEASE-1.2.41.md'), 'current and historical release records exist');
 check(master.includes('Supplemental ten-round corrective review — 1.2.41'), 'master-plan index retains supplemental ten-round corrective release');
 check(master.includes('Canonical account-taxonomy provider parity correction — 1.2.44'), 'master-plan index records current canonical taxonomy/provider correction');
 check(master.includes(`Live-proven File 02 activation contract correction — ${historical1243}`), 'master-plan index preserves historical File 02 activation correction provenance');
