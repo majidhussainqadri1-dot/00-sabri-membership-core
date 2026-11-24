@@ -1,6 +1,7 @@
 <?php
 error_reporting(E_ALL);
 define('ABSPATH', __DIR__ . '/');
+define('ARRAY_A', 'ARRAY_A');
 define('MINUTE_IN_SECONDS', 60);
 define('DAY_IN_SECONDS', 86400);
 define('YEAR_IN_SECONDS', 31536000);
