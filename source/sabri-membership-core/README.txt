@@ -187,3 +187,12 @@ Local source and GitHub checks do not authorize production. Test fresh activatio
 
 = 1.2.25 =
 * Authenticated admin-post CSRF compatibility hotfix: a valid WordPress session nonce became the authoritative gate for logged-in File 00 actions. Optional Origin/Referer mismatch remained audit-visible while public guardian verification kept a strict origin check after nonce validation.
+
+
+= 1.2.47 =
+* Integrated current DOB, sex-specific and jurisdictional minimum-age, and current guardian-consent revalidation.
+* Added nonrecursive, short-lived File03 age assurance with exact consumer-contract validation and no DOB/exact-age disclosure.
+* Hardened advanced-trust reverification ceiling, system authorization, cross-subject trust timeline and current-actor checks.
+* Added read-only canonical UUID-to-user resolution and reserved legacy-author sentinel isolation.
+* No database schema or migration change; DB target remains 1.4.5 and membership contract remains 1.2.3.
+* Source candidate only; no staging or live acceptance implied.
