@@ -1,7 +1,7 @@
 <?php
 error_reporting(E_ALL);
-define('ABSPATH', __DIR__.'/'); define('MINUTE_IN_SECONDS',60); define('DAY_IN_SECONDS',86400); define('YEAR_IN_SECONDS',31536000); define('ARRAY_A','ARRAY_A'); define('SMC_VERSION','1.2.42');
-$meta=[];$options=[];$filters=[];$actions=[];$current_user_id=1;$fail_meta_key='';$fail_audit='';$fail_revoke=false;
+define('ABSPATH', __DIR__.'/'); define('MINUTE_IN_SECONDS',60); define('DAY_IN_SECONDS',86400); define('YEAR_IN_SECONDS',31536000); define('ARRAY_A','ARRAY_A'); define('SMC_VERSION','1.2.47'); define('SMC_DB_VERSION','1.4.5');
+$meta=[];$options=['smc_db_version'=>'1.4.5'];$filters=[];$actions=[];$current_user_id=1;$fail_meta_key='';$fail_audit='';$fail_revoke=false;
 class WP_Error{public $code; function __construct($c,$m=''){$this->code=$c;}}
 function is_wp_error($v){return $v instanceof WP_Error;} function __($s,$d=null){return $s;} function absint($v){return abs((int)$v);} function sanitize_key($v){return strtolower(preg_replace('/[^a-z0-9_\-]/','',(string)$v));} function sanitize_text_field($v){return trim(strip_tags((string)$v));}
 function get_userdata($id){return $id>0?(object)['ID'=>$id]:false;} function get_user_meta($id,$key='',$single=false){global $meta;return $key===''?($meta[$id]??[]):($meta[$id][$key]??($single?'':[]));}
@@ -11,7 +11,22 @@ function apply_filters($tag,$value,...$args){global $filters;return isset($filte
 function wp_generate_uuid4(){static $i=0;return sprintf('00000000-0000-4000-8000-%012d',++$i);} function wp_salt($s='auth'){return 'salt';} function wp_json_encode($v,$f=0){return json_encode($v,$f);}
 function get_option($k,$d=false){global $options;return $options[$k]??$d;} function update_option($k,$v,$autoload=false){global $options;$options[$k]=$v;return true;} function add_option($k,$v,$dep='',$autoload='yes'){global $options;if(array_key_exists($k,$options))return false;$options[$k]=$v;return true;} function delete_option($k){global $options;unset($options[$k]);return true;}
 function smc_is_founder($id){return in_array((int)$id,[1,2],true);} function smc_is_institutional_ai($id){return (int)$id===99;}
-class WPDBStub{public $users='wp_users';public $prefix='wp_';public $approved_at;public $lock_calls=0;function __construct(){$this->approved_at=gmdate('Y-m-d H:i:s');}function prepare($q,...$a){return $q;}public $ids=[];function get_col($q){return $this->ids;}function get_var($q){if(strpos($q,'GET_LOCK')!==false||strpos($q,'RELEASE_LOCK')!==false){$this->lock_calls++;return 1;}if(strpos($q,'smc_role_grants')!==false||strpos($q,'smc_applications')!==false)return $this->approved_at;return 2;}function get_results($q,$mode){return [['id'=>1,'action'=>'membership_reverified','created_at'=>'2026-08-07 00:00:00']];}}
+class WPDBStub{
+ public $users='wp_users';public $prefix='wp_';public $approved_at;public $lock_calls=0;public $last_error='';public $ids=[];
+ function __construct(){$this->approved_at=gmdate('Y-m-d H:i:s');}
+ function prepare($q,...$a){foreach($a as $v){$r=is_int($v)?(string)$v:"'".addslashes((string)$v)."'";$q=preg_replace('/%[sd]/',$r,$q,1);}return $q;}
+ function get_col($q){return $this->ids;}
+ function get_var($q){
+  if(strpos($q,'GET_LOCK')!==false||strpos($q,'RELEASE_LOCK')!==false){$this->lock_calls++;return 1;}
+  if(strpos($q,'SHOW TABLES LIKE')!==false){if(strpos($q,'smc_role_grants')!==false)return $this->prefix.'smc_role_grants';if(strpos($q,'smc_applications')!==false)return $this->prefix.'smc_applications';return false;}
+  if(strpos($q,'SELECT approved_at')!==false||strpos($q,'SELECT COALESCE')!==false)return $this->approved_at;
+  return 2;
+ }
+ function get_results($q,$mode){
+  if(strpos($q,'SHOW COLUMNS FROM')===0){$names=strpos($q,'smc_role_grants')!==false?['user_id','status','approved_at']:['user_id','status','decided_at','updated_at','created_at'];return array_map(static function($n){return ['Field'=>$n];},$names);}
+  return [['id'=>1,'action'=>'membership_reverified','created_at'=>'2026-08-07 00:00:00']];
+ }
+}
 $wpdb=new WPDBStub();
 class SMC_Security{static function revoke_all_sessions($id,$reason=''){global $fail_revoke;return !$fail_revoke;} static function audit($a,$id=0,$d=[]){global $fail_audit;return $fail_audit!==$a;} static function subject_hash($id){return hash('sha256','s'.$id);} static function blind_index($v,$p){return hash_hmac('sha256',$p.'|'.$v,'k');}}
 class SMC_Contracts{static function assertions($id){return ['application_exists'=>false,'status'=>'not_enrolled','approved'=>true,'suspended'=>false,'eligible'=>true,'identity_documents_current'=>true,'phone_verified'=>true,'email_verified'=>true,'guardian_verified'=>true,'professional_verified'=>true,'public_profile_allowed'=>true];} static function guardian_verified($id){return true;}}
