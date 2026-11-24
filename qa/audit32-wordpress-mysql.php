@@ -127,6 +127,49 @@ $encrypted = SMC_Security::encrypt( 'audit32-secret', 'integration-smoke', array
 $decrypted = is_wp_error( $encrypted ) ? $encrypted : SMC_Security::decrypt( $encrypted, 'integration-smoke', array( 'user_id' => $user_id ) );
 $check( ! is_wp_error( $encrypted ) && 'audit32-secret' === $decrypted, 'SMC3 encryption/decryption works in real WordPress runtime' );
 
+$claim_hook = 'smc_profile_age_guardian_claim_v1';
+$check( false !== has_filter( $claim_hook ), 'independent File03 age provider is registered' );
+$unsupported = apply_filters( $claim_hook, null, $user_id, '1.3.9' );
+$check( is_array( $unsupported ) && false === ( $unsupported['known'] ?? null ) && '' === ( $unsupported['consumer_contract'] ?? 'missing' ), 'unsupported File03 consumer contract fails closed' );
+
+$adult_dob = gmdate( 'Y-m-d', strtotime( '-35 years' ) );
+$adult_cipher = SMC_Security::encrypt( $adult_dob, 'date-of-birth', array( 'user_id' => $user_id ) );
+$adult_saved = ! is_wp_error( $adult_cipher ) && 1 === $wpdb->update(
+	$wpdb->prefix . 'smc_applications',
+	array( 'date_of_birth_enc' => $adult_cipher, 'gender' => 'male', 'residence_country' => 'PK', 'guardian_required' => 0 ),
+	array( 'user_id' => $user_id )
+);
+$adult_claim = $adult_saved ? apply_filters( $claim_hook, null, $user_id, '1.4.0' ) : array();
+$check( ! empty( $adult_claim['known'] ) && 'adult' === ( $adult_claim['age_band'] ?? '' )
+	&& 'file03' === ( $adult_claim['consumer'] ?? '' ) && '1.4.0' === ( $adult_claim['consumer_contract'] ?? '' )
+	&& ! array_key_exists( 'age', $adult_claim ) && ! array_key_exists( 'date_of_birth', $adult_claim ),
+	'adult projection is purpose/audience-version scoped and excludes exact age and DOB' );
+
+$minor_dob = gmdate( 'Y-m-d', strtotime( '-16 years' ) );
+$minor_cipher = SMC_Security::encrypt( $minor_dob, 'date-of-birth', array( 'user_id' => $user_id ) );
+$minor_saved = ! is_wp_error( $minor_cipher ) && 1 === $wpdb->update(
+	$wpdb->prefix . 'smc_applications',
+	array( 'date_of_birth_enc' => $minor_cipher, 'gender' => 'male', 'residence_country' => 'PK', 'guardian_required' => 1 ),
+	array( 'user_id' => $user_id )
+);
+$minor_claim = $minor_saved ? apply_filters( $claim_hook, null, $user_id, '1.4.0' ) : array();
+$check( ! empty( $minor_claim['known'] ) && 'minor' === ( $minor_claim['age_band'] ?? '' )
+	&& ! empty( $minor_claim['guardian_required'] ) && ! empty( $minor_claim['guardian_verified'] ),
+	'eligible minor projection requires and reflects the current verified guardian generation' );
+
+$unknown_saved = 1 === $wpdb->update(
+	$wpdb->prefix . 'smc_applications',
+	array( 'date_of_birth_enc' => '', 'guardian_required' => 1 ),
+	array( 'user_id' => $user_id )
+);
+$unknown_claim = $unknown_saved ? apply_filters( $claim_hook, null, $user_id, '1.4.0' ) : array();
+$check( false === ( $unknown_claim['known'] ?? null ) && 'unknown' === ( $unknown_claim['age_band'] ?? '' ),
+	'missing DOB never becomes an adult assertion' );
+
+update_user_meta( $user_id, '_smc_privacy_erasure_lock', array( 'locked_at' => gmdate( 'c' ) ) );
+$erased_claim = apply_filters( $claim_hook, null, $user_id, '1.4.0' );
+$check( false === ( $erased_claim['known'] ?? null ), 'privacy-erasure lock revokes age assurance' );
+
 $chain = SMC_Security::verify_audit_chain();
 $check( is_array( $chain ) && ! empty( $chain['valid'] ), 'tamper-evident audit chain verifies after real MySQL writes' );
 
