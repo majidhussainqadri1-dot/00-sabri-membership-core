@@ -11,12 +11,13 @@ $GLOBALS['contacts'] = [];
 $GLOBALS['guardians'] = [];
 $GLOBALS['documents'] = [];
 function absint($v){ return abs((int)$v); }
-function sanitize_key($v){ return strtolower(preg_replace('/[^a-z0-9_\-]/i','',(string)$v)); }
+function sanitize_key($v){ return strtolower(preg_replace('/[^a-z0-9_\\-]/i','',(string)$v)); }
 function apply_filters($tag,$value,...$args){ return $value; }
 function is_wp_error($v){ return false; }
 function smc_membership_state($uid){ return $GLOBALS['states'][(int)$uid]; }
 function smc_application($uid){ return $GLOBALS['apps'][(int)$uid] ?? false; }
 function smc_is_professional_type($type){ return in_array($type,['doctor','teacher','researcher'],true); }
+function smc_professional_types(){ return ['doctor','teacher','researcher']; }
 function smc_is_founder($uid){ return false; }
 function smc_is_institutional_ai($uid){ return false; }
 function smc_institutional_ai_policy(){ return ['low_risk_auto_publish'=>false]; }
@@ -33,6 +34,19 @@ function smc_sanitize_membership_types($types){
   foreach((array)$types as $type){ $type=sanitize_key($type); if(in_array($type,$allowed,true)) $clean[]=$type; }
   return array_values(array_unique($clean));
 }
+/* Mirror the approved V12.3 age floors for this isolated contract fixture:
+ * male 15, female 12. Jurisdictional overrides are tested separately. */
+function smc_effective_minimum_age($gender,$country){
+  $floors=['male'=>15,'female'=>12];
+  return $floors[$gender] ?? false;
+}
+function smc_age_from_dob($dob){
+  if(!is_string($dob) || !preg_match('/^\\d{4}-\\d{2}-\\d{2}$/',$dob)) return false;
+  $birth=DateTimeImmutable::createFromFormat('!Y-m-d',$dob,new DateTimeZone('UTC'));
+  if(!$birth || $birth->format('Y-m-d')!==$dob) return false;
+  $today=new DateTimeImmutable('today',new DateTimeZone('UTC'));
+  return $birth->diff($today)->y;
+}
 function get_userdata($uid){ return $GLOBALS['users'][(int)$uid] ?? false; }
 function get_user_meta($uid,$key,$single=true){ return ''; }
 function user_can($user,$cap){ return false; }
@@ -47,7 +61,7 @@ class SMC_Security {
 }
 class FakeWpdb {
   public string $prefix='wp_';
-  public function esc_like($value){ return addcslashes((string)$value, '_%\\'); }
+  public function esc_like($value){ return addcslashes((string)$value, '_%\\\\'); }
   public function prepare($q,...$args){ return ['q'=>$q,'args'=>$args]; }
   public function get_var($prepared){
     $q=$prepared['q']; $a=$prepared['args'];
@@ -73,18 +87,25 @@ function seed_user(int $id, bool $institutional=false, bool $guardianRequired=fa
     'application_exists'=>true,'institutional_account'=>$institutional,'account_class'=>$institutional?'administrator':'member',
     'membership_type'=>'member','status'=>'approved','approved'=>true
   ];
-  $GLOBALS['apps'][$id]=['user_id'=>$id,'membership_type'=>'member','guardian_required'=>$guardianRequired?1:0,'profile_visibility'=>'private','phone_e164_enc'=>'+923001234567'];
+  // Supply canonical encrypted-DOB fixture input. The test SMC_Security adapter
+  // returns the plaintext test date; production encryption remains unchanged.
+  $dob = $guardianRequired ? '2010-01-01' : '1990-01-01';
+  $GLOBALS['apps'][$id]=[
+    'user_id'=>$id,'membership_type'=>'member','guardian_required'=>$guardianRequired?1:0,
+    'profile_visibility'=>'private','phone_e164_enc'=>'+923001234567',
+    'date_of_birth_enc'=>$dob,'gender'=>'male','residence_country'=>'PK'
+  ];
   $GLOBALS['users'][$id]=(object)['roles'=>[],'user_email'=>'user'.$id.'@example.test'];
   if(!$institutional){ $GLOBALS['documents'][$id]=['government_id'=>true]; }
 }
-function expect(bool $condition,string $label): void { if(!$condition){fwrite(STDERR,$label."\n");exit(1);} }
+function expect(bool $condition,string $label): void { if(!$condition){fwrite(STDERR,$label."\\n");exit(1);} }
 
 seed_user(1,false,false);
 $a=SMC_Contracts::assertions(1);
 expect($a['eligible']===false && $a['can_message']===false,'Ordinary approved account without verified contacts must remain ineligible.');
 $GLOBALS['contacts'][1]=['email'=>true,'mobile'=>true];
 $a=SMC_Contracts::assertions(1);
-expect($a['eligible']===true && $a['can_message']===true,'Ordinary account becomes eligible only after both contacts and current identity evidence.');
+expect($a['eligible']===true && $a['can_message']===true,'Ordinary adult account becomes eligible only after current age, both contacts and identity evidence.');
 unset($GLOBALS['documents'][1]);
 $a=SMC_Contracts::assertions(1);
 expect($a['eligible']===false,'Ordinary account without current approved identity evidence must remain ineligible.');
@@ -94,11 +115,11 @@ $a=SMC_Contracts::assertions(2);
 expect($a['eligible']===false,'Minor account without verified guardian must remain ineligible.');
 $GLOBALS['guardians'][2]='verified';
 $a=SMC_Contracts::assertions(2);
-expect($a['eligible']===true,'Verified guardian completes effective eligibility.');
+expect($a['eligible']===true,'Verified guardian completes eligibility for a 16-year-old male above the V12.3 minimum age.');
 seed_user(3,true,false);
 $a=SMC_Contracts::assertions(3);
 expect($a['eligible']===true,'Institutional account retains the explicit contact and identity-document exemption.');
 $GLOBALS['states'][1]['status']='invalid_application'; $GLOBALS['states'][1]['approved']=false;
 $a=SMC_Contracts::assertions(1);
 expect($a['suspended']===true && $a['eligible']===false,'Corrupt application state is a public hard block.');
-echo "Ilhami eligibility runtime: 7 PASS, 0 FAIL\n";
+echo "Ilhami eligibility runtime: 7 PASS, 0 FAIL\\n";
