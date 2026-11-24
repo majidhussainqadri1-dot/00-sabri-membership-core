@@ -26,3 +26,7 @@
 The connected WordPress/Jetpack site remains disconnected and a WPVibe connection attempt returned HTTP 530. Neither identifies a proven host root cause. Real installed files, DB, migrations, logs, browser paths, backup restore, rollback, independent approval and live re-test are not verifiable from GitHub.
 
 **Exact deployed code ابھی unverified ہے؛ repository-based diagnosis provisional ہے۔**
+
+
+## Integrated candidate 1.2.47 — source-only
+The 1.2.47 branch consolidates the previously separate 1.2.44 source-change candidate and 1.2.46 File03 age-provider candidate. It includes current-age/minimum-age/guardian checks, audience-version-scoped File03 age claims, advanced-trust reverification/timeline/actor hardening, canonical UUID lookup, and legacy-author sentinel isolation. The database target remains 1.4.5 and contract version remains 1.2.3. This branch is not merged, staging-accepted or live-verified.
