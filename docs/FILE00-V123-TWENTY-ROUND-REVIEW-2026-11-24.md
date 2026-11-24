@@ -126,3 +126,6 @@ File03 PR #43 now pins File00 exact candidate SHA edfb91abdcbf6870d3981bba4e2230
 - Confirmed new production defects fixed in the integrated candidate: source changes address age/guardian revalidation, advanced-trust authorization/actor/timeline, canonical UUID resolution and legacy-author import isolation; this is source-candidate correction, not live repair.
 - Remaining accepted requirements: 0/123 independently accepted.
 - Live fixes verified: 0.
+
+### Paired File03 exact integration — further update
+The File03 seven-module disposable WordPress/MariaDB integration passed against File00 exact SHA edfb91abdcbf6870d3981bba4e223084d6c43c13 (Plugin 1.2.47), including age claim adult/minor/unknown/unsupported consumer/erasure paths and the File00/File02/File03/File09/File07/File08/File26 boundaries. The separate File03 fresh activation/repair WordPress/MariaDB workflow was found to retain an old File00 1.2.46 pin; it was corrected in File03 commit b23e95920fd170e9366370b4c925ae1de0a0b643. Fresh CI for that corrected pin remains pending.
