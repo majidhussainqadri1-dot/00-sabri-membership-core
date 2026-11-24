@@ -13,6 +13,9 @@ function current_user_can($v) { return in_array($v,array('allowed','smc_manage_m
 define('DAY_IN_SECONDS',86400);
 define('YEAR_IN_SECONDS',31536000);
 define('ARRAY_A','ARRAY_A');
+define('SMC_DB_VERSION','1.4.5');
+$GLOBALS['smc_v12_options'] = [];
+function get_option($key,$default=false) { return $GLOBALS['smc_v12_options'][$key] ?? $default; }
 function __($s,$domain='') { return $s; }
 function sanitize_key($v) { return strtolower(preg_replace('/[^a-z0-9_-]/','',(string)$v)); }
 function get_userdata($v) { return $v>0 ? (object)array('ID'=>$v) : false; }
@@ -38,9 +41,36 @@ class SMC_CF01_Contract { public static function ensure_subject_uuid($id){return
 class SMC_Security { public static function subject_hash($id){return hash('sha256','test-subject-'.$id);} }
 class SMC_V12_WPDB {
     public $prefix='wp_';
-    function prepare($sql,...$args) { return $sql; }
-    function get_var($sql) { return false; } // No approval evidence in this mock.
-    function get_results($sql,$mode=null) { if(!empty($GLOBALS['smc_v12_flip_principal_mid_query'])){$GLOBALS['smc_v12_actor']=2;} return array(array('id'=>1,'action'=>'contact_verified','created_at'=>'2026-11-01 00:00:00')); }
+    public $last_error='';
+    public $query_log=[];
+    public $approved_at='2026-11-20 00:00:00';
+    function prepare($sql,...$args) {
+        foreach($args as $arg){
+            $replacement=is_int($arg)?(string)$arg:"'".addslashes((string)$arg)."'";
+            $sql=preg_replace('/%[sd]/',$replacement,$sql,1);
+        }
+        return $sql;
+    }
+    function get_var($sql) {
+        $this->query_log[]=$sql;
+        if(strpos($sql,'SHOW TABLES LIKE')!==false){
+            if(strpos($sql,'smc_role_grants')!==false)return $this->prefix.'smc_role_grants';
+            if(strpos($sql,'smc_applications')!==false)return $this->prefix.'smc_applications';
+            return false;
+        }
+        if(strpos($sql,'SELECT approved_at')!==false||strpos($sql,'SELECT COALESCE')!==false)return $this->approved_at;
+        return false;
+    }
+    function get_results($sql,$mode=null) {
+        $this->query_log[]=$sql;
+        if(strpos($sql,'SHOW COLUMNS FROM')===0){
+            if(strpos($sql,'smc_role_grants')!==false)$names=array('user_id','status','approved_at');
+            else $names=array('user_id','status','decided_at','updated_at','created_at');
+            return array_map(static function($name){return array('Field'=>$name);},$names);
+        }
+        if(!empty($GLOBALS['smc_v12_flip_principal_mid_query'])){$GLOBALS['smc_v12_actor']=2;}
+        return array(array('id'=>1,'action'=>'contact_verified','created_at'=>'2026-11-01 00:00:00'));
+    }
 }
 $wpdb = new SMC_V12_WPDB();
 require dirname(__DIR__) . '/source/sabri-membership-core/includes/class-smc-advanced-trust-2026.php';
@@ -61,6 +91,20 @@ $check('correct signed-in principal accepted',true,1);
 $check('capability mismatch rejected',false,1,'missing');
 $check('proper active capability accepted',true,1,'allowed');
 $check('Founder session must be identity-bound',true,1,'',true);
+
+// Schema readiness is a prerequisite for reverification decisions. Before
+// the exact DB version is recorded, deny and do not issue queries against absent
+// membership tables. Once the version and required table shapes exist, the
+// baseline query may proceed.
+$before_queries=count($wpdb->query_log);
+$not_ready=SMC_Advanced_Trust_2026::reverification_status(99);
+$cases[]=array('missing DB version fails closed without querying absent tables',
+  !empty($not_ready['applicable']) && empty($not_ready['current'])
+  && 'schema_unavailable'===$not_ready['source'] && count($wpdb->query_log)===$before_queries);
+$GLOBALS['smc_v12_options']['smc_db_version']=SMC_DB_VERSION;
+$ready=SMC_Advanced_Trust_2026::reverification_status(98);
+$cases[]=array('exact DB version and required schema permit reverification baseline',
+  !empty($ready['applicable']) && !empty($ready['current']) && 'role_grant_approval'===$ready['source']);
 
 // F00-EXT-004 — ten-year policy filters and persisted due timestamps cannot
 // silently extend the canonical maximum one-year assurance interval.
