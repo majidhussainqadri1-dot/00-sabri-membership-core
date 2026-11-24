@@ -253,6 +253,20 @@ final class SMC_Advanced_Trust_2026 {
 		$state = get_user_meta( $user_id, self::REVERIFY_META, true );
 		$state = is_array( $state ) ? $state : array();
 		$interval = self::reverification_interval_seconds( $user_id );
+		if ( ! self::reverification_storage_ready() ) {
+			// During first activation, deferred migration, partial restore or a
+			// schema mismatch, never query absent membership tables and never
+			// treat missing verification evidence as a pass.
+			return array(
+				'applicable' => true,
+				'current' => false,
+				'verified_at' => 0,
+				'due_at' => 0,
+				'overdue' => true,
+				'interval_seconds' => $interval,
+				'source' => 'schema_unavailable',
+			);
+		}
 		$verified_at = absint( $state['verified_at'] ?? 0 );
 		$applicable = $verified_at > 0;
 		$source = sanitize_key( $state['source'] ?? '' );
@@ -281,6 +295,38 @@ final class SMC_Advanced_Trust_2026 {
 			'interval_seconds' => $interval,
 			'source' => $source,
 		);
+	}
+
+	private static function reverification_storage_ready() {
+		static $ready = false;
+		if ( $ready ) { return true; }
+		global $wpdb;
+		if ( ! defined( 'SMC_DB_VERSION' ) || ! function_exists( 'get_option' )
+			|| (string) get_option( 'smc_db_version', '' ) !== (string) SMC_DB_VERSION
+			|| ! isset( $wpdb ) || ! is_object( $wpdb ) || empty( $wpdb->prefix )
+			|| ! method_exists( $wpdb, 'prepare' ) || ! method_exists( $wpdb, 'get_var' )
+			|| ! method_exists( $wpdb, 'get_results' ) ) {
+			return false;
+		}
+		$requirements = array(
+			$wpdb->prefix . 'smc_role_grants' => array( 'user_id', 'status', 'approved_at' ),
+			$wpdb->prefix . 'smc_applications' => array( 'user_id', 'status', 'decided_at', 'updated_at', 'created_at' ),
+		);
+		foreach ( $requirements as $table => $required_columns ) {
+			$wpdb->last_error = '';
+			$found = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+			if ( $wpdb->last_error || $found !== $table ) { return false; }
+			$wpdb->last_error = '';
+			$rows = $wpdb->get_results( "SHOW COLUMNS FROM `{$table}`", ARRAY_A );
+			if ( $wpdb->last_error || ! is_array( $rows ) ) { return false; }
+			$columns = array();
+			foreach ( $rows as $row ) {
+				if ( isset( $row['Field'] ) ) { $columns[] = (string) $row['Field']; }
+			}
+			if ( array_diff( $required_columns, $columns ) ) { return false; }
+		}
+		$ready = true;
+		return true;
 	}
 
 	private static function initial_reverification_baseline( $user_id ) {
