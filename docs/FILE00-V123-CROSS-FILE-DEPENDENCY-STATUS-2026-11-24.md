@@ -35,3 +35,7 @@ No PR is merged or closed by this audit.
 - File08 exact source provider/consumer CI passed against File00 PR #66.
 - File09 read-only prerequisite/applicant-write owner boundary remains a separate File09 acceptance obligation.
 - File04 legacy-author sentinel must be tested with File04's canonical sentinel lifecycle; File00 guard alone is not full File04 acceptance.
+
+### File03 exact paired CI update
+- File03 seven-module WordPress/MariaDB integration **passed** against File00 exact SHA edfb91abdcbf6870d3981bba4e223084d6c43c13 (Plugin 1.2.47); its log verified the version, canonical File00 readiness, File03 schema, File09 scoped intake, and adult/minor/unknown/unsupported-consumer/erasure age claims.
+- File03's separate fresh-activation/repair WordPress/MariaDB workflow had still been pinned to old File00 1.2.46. That pin and version assertion have now been corrected to File00 1.2.47 in File03 commit b23e95920fd170e9366370b4c925ae1de0a0b643. Its new exact-head run is pending; the older 1.2.46 pass is not substituted for it.
