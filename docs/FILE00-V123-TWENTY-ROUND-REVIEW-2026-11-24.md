@@ -89,3 +89,40 @@ PR #61 head `f4204593d1a4e4ecd7ce12d0e1bc7174da33b246` has 9/9 successful workfl
 - Test-fixture defect corrected on PR #59 branch: 1 (awaiting fresh CI).
 - Old PR #59 exact-head CI failures: 4 workflows; common eligibility fixture failure corrected in source branch, package/release gates remain to be freshly rerun and independently diagnosed.
 - Runtime source, DB schema and migration changes on this audit branch: 0.
+
+## Superseding source review and exact-head validation (2026-11-24)
+### Correction to the initial PR #65 review
+The initial summary's statement that "no runtime source fixes were present" was incomplete: PR #59's changed-file set includes production changes in class-smc-contracts, class-smc-advanced-trust-2026, class-smc-cf01-contract and functions.php. These were reviewed as candidate changes, not deployed fixes. PR #59 also contained a QA fixture correction. The integrated successor is File00 PR #66, candidate 1.2.47; PR #59 and #61 remain unmerged historical candidates.
+
+### Integrated candidate PR #66
+- Exact SHA tested: edfb91abdcbf6870d3981bba4e223084d6c43c13.
+- Fresh File00 workflows: **10/10 successful** on this exact SHA.
+- PHP 7.4 and PHP 8.3 contract/package/forty-round suites: successful.
+- CF-01 and forty-round integrity: successful.
+- File02 1.3.3 exact consumer compatibility: successful.
+- File08 exact source provider/consumer integration: successful.
+- MFA retirement and migration WordPress/MariaDB gate: successful.
+- Submission recovery, live document transport recovery and all-button action gates: successful.
+- Real disposable WordPress 7.0.1 + MariaDB 11.4.13 integration: **45 PASS / 0 FAIL** in audit32; 20 File00 tables were InnoDB, critical indexes and audit chain checked, age claim tests covered adult/minor/unknown/unsupported consumer/erasure.
+- Historical row-16 transition and activation-without-key upgrade jobs: successful.
+- Deterministic package: 1.2.47 ZIP CRC failures 0; package SHA-256 **6b362e399dbfc3c053d37e05ae6178e8da43920be138e613e7704e641d860eb8**.
+- V12.3 inventory: 123 unique IDs; 493 source-pointer occurrences; R011–R090 implementation source mapping 80/80; exact source evidence 103/123 signals; **0/123 independent requirement acceptances**. The inventory is not acceptance.
+- F00-CEN-03 age/guardian runtime 8/8; File00 actor-boundary 15/15; T38 subject resolver fixtures 13/13.
+
+### File03 paired integration
+File03 PR #43 now pins File00 exact candidate SHA edfb91abdcbf6870d3981bba4e223084d6c43c13. A source-contract hardening change requires consumer=file03 and exact SPD_CONTRACT_VERSION in the claim. The first fresh File03 runs exposed stale isolated test fixtures that lacked these new audience fields; the fixtures were updated in File03 commit ff84ea91d355832ee5dbaea779cda54c791229dc. **Fresh File03 CI after that fixture correction remains pending**; earlier failures are not counted as resolved.
+
+### Final gates still blocked
+- WordPress authorization has not been completed; no Hostinger live connection/site is registered in WPVibe.
+- Staging package installation and parity audit: not performed.
+- Hostinger deployed version/checksum, live DB/schema, wp_options migration state and runtime logs: unverified.
+- Two post-coding independent reviews and 123 per-ID acceptance records: not completed.
+- No PR merged and no production deployment performed.
+
+### Updated accounting
+- PR #66 source candidate CI: 10/10 pass on SHA edfb91.
+- File00 real disposable WordPress/MariaDB: 45/45 pass in audit32.
+- Package SHA: 6b362e399dbfc3c053d37e05ae6178e8da43920be138e613e7704e641d860eb8.
+- Confirmed new production defects fixed in the integrated candidate: source changes address age/guardian revalidation, advanced-trust authorization/actor/timeline, canonical UUID resolution and legacy-author import isolation; this is source-candidate correction, not live repair.
+- Remaining accepted requirements: 0/123 independently accepted.
+- Live fixes verified: 0.
