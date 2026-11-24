@@ -27,3 +27,11 @@ File00 is the canonical owner of membership eligibility, identity assurance, gua
 - #58: already merged source contract only; does not prove File09 end-to-end acceptance.
 
 No PR is merged or closed by this audit.
+
+## Updated paired candidate evidence (2026-11-24)
+- File00 PR #66 is the integrated 1.2.47 candidate; exact source SHA edfb91abdcbf6870d3981bba4e223084d6c43c13 passed all 10 File00 workflows, including File02 1.3.3 and File08 exact provider/consumer gates.
+- File03 PR #43 workflow is pinned to that exact File00 SHA. Its claim contract now validates consumer=file03 and exact SPD_CONTRACT_VERSION. The first updated tests found stale fixture claims; File03 fixture correction was committed at ff84ea91d355832ee5dbaea779cda54c791229dc. Fresh CI after that correction remains pending.
+- File03 D-F00-03 source dependency is integrated at candidate level; staging acceptance remains blocked/not run.
+- File08 exact source provider/consumer CI passed against File00 PR #66.
+- File09 read-only prerequisite/applicant-write owner boundary remains a separate File09 acceptance obligation.
+- File04 legacy-author sentinel must be tested with File04's canonical sentinel lifecycle; File00 guard alone is not full File04 acceptance.
