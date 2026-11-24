@@ -3,7 +3,7 @@ Contributors: sabrihomeopathy
 Tags: membership, identity, guardian consent, privacy, governance
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 1.2.44
+Stable tag: 1.2.47
 License: GPL-2.0-or-later
 
 Canonical membership eligibility, identity assurance, guardian consent, security assertions, and verification governance for the Sabri Social Homeopathy Platform.
@@ -73,6 +73,11 @@ File 19 receives membership notices through its canonical sabri_notify integrati
 Local source and GitHub checks do not authorize production. Test fresh activation, legacy upgrade, DB/audit migration, legacy factor retirement, MySQL advisory locks, concurrent reviewers, authorization matrices, filesystem denial and rollback, scanner providers, email/mobile/guardian delivery, File 02 authentication integration, CF-01 provider/consumer contracts, all named cross-file integrations, advanced trust containment/revocation/selective-disclosure workflows, privacy erasure, restore, browser accessibility, and mobile layouts on Hostinger staging.
 
 == Changelog ==
+
+= 1.2.47 =
+* Adds a privacy-minimized, internal File 00 age/guardian assurance contract for File 03 without nested membership assertions. A missing, unknown or erasure-locked account is denied for public-adult eligibility.
+* Preserves DB schema 1.4.5 and existing public membership contract 1.2.3; no new clinical authority or raw age/DOB disclosure.
+* Unique source candidate release identity; Staging and Live acceptance remain unverified.
 
 = 1.2.44 =
 * Aligns the active `smc.authentication-account` 1.1.0 provider directly to File 00's canonical account taxonomy instead of a duplicated provider-only vocabulary.
