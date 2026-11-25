@@ -1,0 +1,49 @@
+name: File00 V12.3 File04 Exact Authorship Provider Consumer
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FILE04_REF: 0276d4b2ae0ba6146ed37a6a3212f593db364cb6
+
+jobs:
+  exact-file04-consumer:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact File00 candidate
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Checkout exact File04 consumer PR
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: majidhussainqadri1-dot/04-sabri-news-feed-and-publishing
+          ref: ${{ env.FILE04_REF }}
+          path: .external/file04
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Prove exact source identities
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = '${{ github.event.pull_request.head.sha || github.sha }}'
+          test "$(git -C .external/file04 rev-parse HEAD)" = "$FILE04_REF"
+      - name: Setup PHP and Node
+        uses: shivammathur/setup-php@2.37.2
+        with:
+          php-version: '8.3'
+          coverage: none
+          tools: none
+      - name: Verify File00 owner and File04 consumer contracts
+        run: |
+          set -euo pipefail
+          node qa/file04-authorship-contract.mjs
+          php qa/v123-file04-placeholder-runtime.php
+          php .external/file04/tests/run-unit.php

@@ -231,7 +231,7 @@ final class SMC_Advanced_Trust_2026 {
 	private static function trust_timeline_cross_subject_authorized( $actor_id, $subject_user_id ) {
 		$actor_id = absint( $actor_id ); $subject_user_id = absint( $subject_user_id );
 		if ( $actor_id <= 0 || $subject_user_id <= 0
-			|| ! self::actor_meets_step_up( $actor_id, 'default', 'smc_manage_membership' ) ) {
+			|| ! self::actor_meets_step_up( $actor_id, 'trust_timeline_read', 'smc_manage_membership' ) ) {
 			return false;
 		}
 		$claim = apply_filters( 'smc_trust_timeline_access_v1', null, $actor_id, $subject_user_id );
@@ -241,7 +241,7 @@ final class SMC_Advanced_Trust_2026 {
 		return 'file00' === sanitize_key( $claim['owner'] ?? '' )
 			&& '1.0.0' === (string) ( $claim['contract_version'] ?? '' )
 			&& true === ( $claim['authorized'] ?? false )
-			&& '' !== $purpose
+			&& 'trust_timeline_read' === $purpose
 			&& hash_equals( self::subject_reference( $actor_id ), (string) ( $claim['actor_subject'] ?? '' ) )
 			&& hash_equals( self::subject_reference( $subject_user_id ), (string) ( $claim['subject'] ?? '' ) )
 			&& $asserted_at > 0 && $asserted_at <= time() + 60 && $asserted_at >= time() - 60;

@@ -59,6 +59,9 @@ $GLOBALS['forced_matches']=null;
 $GLOBALS['meta'][88]['_smc_platform_uuid_v1']=$uuid;
 $check( smc_get_user_id_by_subject_uuid($uuid)===0,'duplicate canonical meta refuses ambiguous account' );
 $GLOBALS['meta'][88]['_smc_platform_uuid_v1']='00000000-0000-4000-8000-000000000088';
+$GLOBALS['meta'][77]['_smc_privacy_erasure_lock']=array('locked_at'=>'2026-11-23T00:00:00Z');
+$check( smc_get_user_id_by_subject_uuid($uuid)===0,'privacy erasure lock prevents new identity resolution' );
+unset($GLOBALS['meta'][77]['_smc_privacy_erasure_lock']);
 $check( $GLOBALS['mutation_count']===0,'lookup never created or mutated a subject' );
 echo 'File00 T38 subject resolver runtime fixtures PASS '.$count.'/'.$count.
     " (standalone PHP fixtures, not staging DB or installed consumer parity)\n";

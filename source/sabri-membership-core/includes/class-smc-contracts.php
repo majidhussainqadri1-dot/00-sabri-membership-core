@@ -37,6 +37,7 @@ final class SMC_Contracts {
 		// not an ordinary membership application. WordPress user_register
 		// fires even when wp_insert_user(role='') is used, and the generic
 		// importer would otherwise grant sabri_member_pending to it.
+		if ( '1' === (string) get_user_meta( $user_id, '_smc_legacy_author_placeholder_v1', true ) ) { return; }
 		$registration_user = get_userdata( absint( $user_id ) );
 		if ( $registration_user
 			&& 0 === strcasecmp( (string) ( $registration_user->user_login ?? '' ), 'sabri_legacy_author_placeholder' ) ) {

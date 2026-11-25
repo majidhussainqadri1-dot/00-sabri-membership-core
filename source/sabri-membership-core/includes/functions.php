@@ -467,3 +467,12 @@ if ( ! function_exists( 'smc_get_user_id_by_subject_uuid' ) ) {
 			? SMC_CF01_Contract::resolve_user_id_by_subject_uuid( $subject_uuid ) : 0;
 	}
 }
+
+
+/** File00-owned predicate for File04's non-login legacy-author placeholder. */
+if ( ! function_exists( 'smc_is_legacy_author_placeholder' ) ) {
+	function smc_is_legacy_author_placeholder( $user_id ) {
+		return class_exists( 'SMC_CF01_Contract' )
+			? SMC_CF01_Contract::is_legacy_author_placeholder( $user_id ) : false;
+	}
+}
