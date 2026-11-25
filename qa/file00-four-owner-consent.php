@@ -6,9 +6,16 @@
  * This file is NOT part of the installable plugin.
  */
 defined('ABSPATH') || exit;
-if (!defined('WP_CLI') || !WP_CLI || wp_get_environment_type()!=='staging' ||
-    get_option('siteurl')!=='http://file06-consent-ci.local' ||
-    getenv('SABRI_DISPOSABLE_CONSENT_QA')!=='1') { throw new RuntimeException('Refuse non-disposable test'); }
+$guard=[
+    'wp_cli'=>defined('WP_CLI') && (bool) WP_CLI,
+    'environment'=>wp_get_environment_type()==='staging',
+    'hostname'=>wp_parse_url((string)get_option('siteurl'),PHP_URL_HOST)==='file06-consent-ci.local',
+    'explicit_opt_in'=>getenv('SABRI_DISPOSABLE_CONSENT_QA')==='1',
+    'local_disposable_db'=>defined('DB_NAME') && DB_NAME==='wordpress' && defined('DB_HOST') && DB_HOST==='127.0.0.1:3306',
+    'disposable_root'=>realpath(ABSPATH)==='/tmp/wordpress',
+];
+if(in_array(false,$guard,true)){throw new RuntimeException('Refuse non-disposable test: '.wp_json_encode($guard));}
+echo 'PASS: all six disposable-environment guards'.PHP_EOL;
 global $wpdb;
 function four_check($ok,$label) {
     if (!$ok) { throw new RuntimeException('FAIL: '.$label); }
