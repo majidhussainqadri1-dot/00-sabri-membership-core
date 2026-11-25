@@ -147,6 +147,68 @@ jobs:
           ' --path=/tmp/wordpress
 
 
+      - name: Checkout exact File02 authentication owner
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: majidhussainqadri1-dot/02-sabri-authentication
+          ref: a714c23fea33ecdfe9110f69c0ee1f07c9f2bcbb
+          path: _pinned_file02
+          persist-credentials: false
+      - name: Checkout exact File24 security owner
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: majidhussainqadri1-dot/24-sabri-platform-security-privacy-compliance-and-resilience-center
+          ref: c8864c2052117051ae7877d678f1a98773df5298
+          path: _pinned_file24
+          persist-credentials: false
+      - name: Activate exact File02 and File24 alongside File00 and File06
+        run: |
+          set -euo pipefail
+          test "$(git -C _pinned_file02 rev-parse HEAD)" = a714c23fea33ecdfe9110f69c0ee1f07c9f2bcbb
+          test "$(git -C _pinned_file24 rev-parse HEAD)" = c8864c2052117051ae7877d678f1a98773df5298
+          php /tmp/wp-cli.phar config set SA_MASTER_KEY 'file02-disposable-ci-master-key-for-consent-2026' --type=constant --path=/tmp/wordpress
+          cp -R _pinned_file02 /tmp/wordpress/wp-content/plugins/02-sabri-authentication
+          rm -rf /tmp/wordpress/wp-content/plugins/02-sabri-authentication/.git
+          cp -R _pinned_file24/plugin/sabri-security-center /tmp/wordpress/wp-content/plugins/sabri-security-center
+          php /tmp/wp-cli.phar plugin activate 02-sabri-authentication sabri-security-center --path=/tmp/wordpress
+      - name: Four real plugins, native session receipt and actual research consent ledger
+        env:
+          SABRI_DISPOSABLE_CONSENT_QA: '1'
+        run: php /tmp/wp-cli.phar eval-file "$GITHUB_WORKSPACE/qa/file00-four-owner-consent.php" --path=/tmp/wordpress
+      - name: Isolated database and plugin files backup restore rehearsal
+        env:
+          SABRI_DISPOSABLE_CONSENT_QA: '1'
+        run: |
+          set -euo pipefail
+          test "$(php /tmp/wp-cli.phar option get siteurl --path=/tmp/wordpress)" = http://file06-consent-ci.local
+          if ! command -v mariadb-dump >/dev/null || ! command -v mariadb >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y mariadb-client
+          fi
+          php /tmp/wp-cli.phar option update smc_ci_restore_marker original-disposable-marker --path=/tmp/wordpress
+          umask 077
+          mkdir -p /tmp/sabri-ci-backup /tmp/sabri-ci-restore
+          mariadb-dump --single-transaction --skip-lock-tables -h 127.0.0.1 -uwordpress -pwordpress wordpress > /tmp/sabri-ci-backup/database.sql
+          tar -C /tmp/wordpress -czf /tmp/sabri-ci-backup/wordpress.tar.gz wp-content wp-config.php
+          (cd /tmp/sabri-ci-backup && sha256sum database.sql wordpress.tar.gz > SHA256SUMS && sha256sum -c SHA256SUMS)
+          php /tmp/wp-cli.phar option update smc_ci_restore_marker changed-after-backup --path=/tmp/wordpress
+          mariadb -h 127.0.0.1 -uroot -proot -e "CREATE DATABASE wordpress_restore; GRANT ALL PRIVILEGES ON wordpress_restore.* TO 'wordpress'@'%';"
+          mariadb -h 127.0.0.1 -uwordpress -pwordpress wordpress_restore < /tmp/sabri-ci-backup/database.sql
+          php /tmp/wp-cli.phar core download --version=7.0.1 --path=/tmp/sabri-ci-restore --quiet
+          tar -C /tmp/sabri-ci-restore -xzf /tmp/sabri-ci-backup/wordpress.tar.gz
+          php /tmp/wp-cli.phar config set DB_NAME wordpress_restore --path=/tmp/sabri-ci-restore
+          test "$(php /tmp/wp-cli.phar option get smc_ci_restore_marker --path=/tmp/sabri-ci-restore)" = original-disposable-marker
+          test "$(php /tmp/wp-cli.phar option get smc_ci_restore_marker --path=/tmp/wordpress)" = changed-after-backup
+          (cd /tmp/sabri-ci-restore/wp-content/plugins/sabri-membership-core && sha256sum -c MANIFEST.sha256)
+          php /tmp/wp-cli.phar eval '
+            if ((string)get_option("smc_db_version")!==SMC_DB_VERSION || SMC_Completion::safe_mode() || !class_exists("SAUTH_Passkey_Runtime") || !class_exists("HE_V12_Case_Consent_Owner") || !defined("SPCRC_VERSION")) { exit(1); }
+            $proof=get_option("smc_ci_revoked_case_proof");
+            if(!is_array($proof) || SMC_File06_Case_Consent::current_for_file06(false,$proof["verification_id"],$proof["evidence_ref"],$proof["uuid"],"patient-story-research")) { exit(2); }
+            echo "PASS isolated restore: exact File00 package, four owners, DB version and previously revoked receipt remain safe\n";
+          ' --path=/tmp/sabri-ci-restore
+          rm -rf /tmp/sabri-ci-backup /tmp/sabri-ci-restore
+
+
   consent-pinned-file06:
     name: Pinned File06 v12 producer compatibility blocker
     runs-on: ubuntu-24.04
