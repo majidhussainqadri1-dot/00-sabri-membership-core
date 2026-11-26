@@ -25,4 +25,21 @@ $GLOBALS['current']=1;$c=SMC_Authorization::file01_authorization_claim(null,req(
 $GLOBALS['current']=3;$c=SMC_Authorization::file01_authorization_claim(null,req(3,'view','view_sabri_foundation'));ok($c['allowed']===false&&$c['institutional_role']==='member','ordinary member denied');
 $GLOBALS['founder']=4;$GLOBALS['current']=4;$c=SMC_Authorization::file01_authorization_claim(null,req(4,'view','view_sabri_foundation'));ok($c['allowed']===false,'hard-blocked Founder denied');
 $GLOBALS['current']=2;ok(null===SMC_Authorization::file01_authorization_claim(null,req(2,'view','manage_sabri_foundation')),'capability mismatch rejected');ok(null===SMC_Authorization::file01_authorization_claim(null,req(2,'view','view_sabri_foundation',null,'9.9.9')),'contract mismatch rejected');ok(null===SMC_Authorization::file01_authorization_claim(null,req(2,'view','view_sabri_foundation',null,'2.0.0','bad')),'bad object hash rejected');$r=req(2,'view','view_sabri_foundation');$r['actor_id']=99;ok(null===SMC_Authorization::file01_authorization_claim(null,$r),'actor mismatch rejected');$r=req(2,'View','view_sabri_foundation');ok(null===SMC_Authorization::file01_authorization_claim(null,$r),'noncanonical action rejected');$r=req(2,'view','view_sabri_foundation');$r['current_time']=time()-121;ok(null===SMC_Authorization::file01_authorization_claim(null,$r),'stale request rejected');$existing=['allowed'=>false];ok(SMC_Authorization::file01_authorization_claim($existing,req(2,'view','view_sabri_foundation'))===$existing,'existing provider result preserved');
+
+$actions=['register_manifest','register_contract','acknowledge_contract','map_route','repair_owned_mapping','set_flag'];
+foreach($actions as $action){
+    $GLOBALS['founder']=1;$GLOBALS['current']=1;
+    $claim=SMC_Authorization::file01_authorization_claim(null,req(1,$action,'manage_sabri_foundation'));
+    ok(is_array($claim)&&$claim['allowed']===true&&$claim['institutional_role']==='founder',"eligible founder $action");
+    ok(null===SMC_Authorization::file01_authorization_claim(null,req(1,$action,'govern_sabri_foundation')),"wrong cap $action");
+    $GLOBALS['current']=2;$claim=SMC_Authorization::file01_authorization_claim(null,req(2,$action,'manage_sabri_foundation'));
+    ok(is_array($claim)&&$claim['allowed']===false,"administrator denied $action");
+    $GLOBALS['current']=3;$claim=SMC_Authorization::file01_authorization_claim(null,req(3,$action,'manage_sabri_foundation'));
+    ok(is_array($claim)&&$claim['allowed']===false,"member denied $action");
+    $GLOBALS['founder']=4;$GLOBALS['current']=4;$claim=SMC_Authorization::file01_authorization_claim(null,req(4,$action,'manage_sabri_foundation'));
+    ok(is_array($claim)&&$claim['allowed']===false,"blocked founder denied $action");
+}
+$GLOBALS['founder']=1;$GLOBALS['current']=1;
+ok(null===SMC_Authorization::file01_authorization_claim(null,req(1,'arbitrary_unregistered_action','manage_sabri_foundation')),'unregistered action stays fail closed');
+
 if($fail){foreach($fail as $f)fwrite(STDERR,"FAIL: $f\n");exit(1);}echo "file01 auth bridge runtime: $pass PASS / 0 FAIL\n";

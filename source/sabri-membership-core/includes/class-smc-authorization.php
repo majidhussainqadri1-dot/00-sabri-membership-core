@@ -283,6 +283,12 @@ final class SMC_Authorization {
 		if ( 'run_system_check' === $action ) {
 			return 'manage_sabri_foundation';
 		}
+		// File01 contract 2.0.0: explicit consumer mutation vocabulary.
+		// Existing eligibility and canonical Founder policy remains in force.
+		// Unknown actions never inherit the consumer's generic manage capability.
+		if ( in_array( $action, array( 'register_manifest', 'register_contract', 'acknowledge_contract', 'map_route', 'repair_owned_mapping', 'set_flag' ), true ) ) {
+			return 'manage_sabri_foundation';
+		}
 		if ( in_array( $action, array( 'record_release', 'transition_release', 'run_reconciliation', 'run_schema_upgrade' ), true ) ) {
 			return 'release_sabri_foundation';
 		}
