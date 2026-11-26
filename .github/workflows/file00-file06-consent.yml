@@ -180,7 +180,18 @@ jobs:
           SABRI_DISPOSABLE_CONSENT_QA: '1'
         run: |
           set -euo pipefail
-          test "$(php /tmp/wp-cli.phar option get siteurl --path=/tmp/wordpress)" = http://file06-consent-ci.local
+          php /tmp/wp-cli.phar eval '
+            $guard = array(
+              "wp_cli" => defined("WP_CLI") && WP_CLI,
+              "environment" => wp_get_environment_type()==="staging",
+              "hostname" => wp_parse_url((string)get_option("siteurl"),PHP_URL_HOST)==="file06-consent-ci.local",
+              "explicit_opt_in" => getenv("SABRI_DISPOSABLE_CONSENT_QA")==="1",
+              "local_db" => DB_NAME==="wordpress" && DB_HOST==="127.0.0.1:3306",
+              "local_root" => realpath(ABSPATH)==="/tmp/wordpress"
+            );
+            if(in_array(false,$guard,true)){fwrite(STDERR,"Restore guard failed: ".wp_json_encode($guard)."\n");exit(1);}
+            echo "PASS restore guard: ".wp_json_encode($guard)."\n";
+          ' --path=/tmp/wordpress
           if ! command -v mariadb-dump >/dev/null || ! command -v mariadb >/dev/null; then
             sudo apt-get update -qq
             sudo apt-get install -y mariadb-client
