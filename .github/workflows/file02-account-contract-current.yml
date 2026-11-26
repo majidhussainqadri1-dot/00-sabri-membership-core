@@ -51,6 +51,7 @@ jobs:
           find source/sabri-membership-core -name '*.php' -print0 | xargs -0 -n1 php -l
           node qa/file02-account-contract-v1243.mjs
           php qa/file02-account-contract-runtime-v1243.php
+          php qa/file02-existing-email-collision-owner.php
 
       - name: Checkout exact merged File 02 consumer
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5

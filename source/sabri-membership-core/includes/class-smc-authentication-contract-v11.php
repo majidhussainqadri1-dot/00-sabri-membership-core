@@ -25,6 +25,71 @@ final class SMC_Authentication_Contract_V11 {
 		add_action( 'smc_authentication_contract_manifest_v11', array( __CLASS__, 'manifest' ) );
 	}
 
+	/**
+	 * Narrow canonical decision for a human who already possesses the SAME
+	 * verified account. This is not lost-account recovery or account merging.
+	 * File02 owns the fingerprint-bound one-time case and invokes commit only
+	 * after its claim. No identity fields, roles or credentials are changed.
+	 */
+	public static function resolve_existing_email_collision_v1( array $payload, array $context, $commit = false ) {
+		$deny = array( 'result'=>'deny' );
+		if ( ! is_bool( $commit ) || ! defined( 'SMC_DB_VERSION' )
+			|| SMC_DB_VERSION !== (string) get_option( 'smc_db_version', '' )
+			|| SMC_Completion::safe_mode()
+			|| '1.0.0' !== ( $context['contract_version'] ?? null )
+			|| 'email_collision' !== ( $payload['reason'] ?? null )
+			|| ! is_string( $context['case'] ?? null )
+			|| ! preg_match( '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/D', $context['case'] )
+			|| ! is_string( $context['fingerprint'] ?? null )
+			|| ! preg_match( '/^[0-9a-f]{64}$/D', $context['fingerprint'] )
+			|| ! is_string( $payload['identifier'] ?? null )
+			|| ! is_email( $payload['identifier'] ) ) {
+			return $deny;
+		}
+		$user_id = get_current_user_id();
+		if ( ! is_int( $user_id ) || $user_id <= 0 || '' === (string) wp_get_session_token()
+			|| smc_privacy_erasure_lock( $user_id ) || SMC_Authorization::is_hard_blocked( $user_id ) ) {
+			return $deny;
+		}
+		$user = get_userdata( $user_id );
+		$owner = get_user_by( 'email', $payload['identifier'] );
+		if ( ! $user instanceof WP_User || ! $owner instanceof WP_User
+			|| (int) $owner->ID !== $user_id
+			|| ! hash_equals( strtolower( (string) $user->user_email ), strtolower( $payload['identifier'] ) )
+			|| ! SMC_Contracts::contact_verified( $user_id, 'email' ) ) {
+			return $deny;
+		}
+		$claims = SMC_Contracts::assertions( $user_id );
+		if ( ! is_array( $claims ) || ! empty( $claims['institutional_account'] )
+			|| true !== ( $claims['eligible'] ?? null ) || true !== ( $claims['approved'] ?? null )
+			|| false !== ( $claims['suspended'] ?? null )
+			|| true !== ( $claims['identity_documents_current'] ?? null )
+			|| true !== ( $claims['guardian_verified'] ?? null )
+			|| true !== ( $claims['phone_verified'] ?? null ) ) {
+			return $deny;
+		}
+		$auth = SMC_Advanced_Trust_2026::authentication_assurance( $user_id );
+		$step = SMC_Advanced_Trust_2026::step_up_requirement( $user_id, 'identity_change' );
+		$verified = $auth['verified_at'] ?? null;
+		if ( 'file02' !== ( $auth['owner'] ?? null ) || '1.0.0' !== ( $auth['contract_version'] ?? null )
+			|| 'webauthn_passkey' !== ( $auth['method'] ?? null ) || true !== ( $auth['passkey_asserted'] ?? null )
+			|| ! is_int( $auth['level'] ?? null ) || $auth['level'] < 2
+			|| ! is_int( $verified ) || $verified <= time() - 300 || $verified > time()
+			|| true !== ( $step['satisfied'] ?? null ) || ! empty( $step['risk_context']['high_risk'] ) ) {
+			return $deny;
+		}
+		if ( $commit ) {
+			// The native audit chain, not a caller assertion, must commit.
+			// No bearer proof, raw identifier or fingerprint is logged.
+			if ( true !== SMC_Security::audit( 'existing_email_collision_confirmed', $user_id, array( 'case_id'=>$context['case'], 'scope'=>'same_account_no_merge' ) ) ) {
+				return array( 'result'=>'unknown' );
+			}
+			// Recheck all canonical facts after audit, without a second write.
+			return self::resolve_existing_email_collision_v1( $payload, $context, false );
+		}
+		return array( 'result'=>'allow', 'user_id'=>$user_id, 'scope'=>'same_account_no_merge' );
+	}
+
 	public static function register_account( $payload, $context = array() ) {
 		$payload = is_array( $payload ) ? $payload : array();
 		$context = is_array( $context ) ? $context : array();
