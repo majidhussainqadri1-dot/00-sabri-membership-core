@@ -235,6 +235,23 @@ jobs:
           php /tmp/wp-cli.phar config set SMC_FOUNDER_USER_ID 1 --raw --type=constant --path=/tmp/wordpress
           cp -R _pinned_file01 /tmp/wordpress/wp-content/plugins/sabri-platform-foundation
           rm -rf /tmp/wordpress/wp-content/plugins/sabri-platform-foundation/.git
+          php /tmp/wp-cli.phar eval '
+            $fixture=get_user_by("login","founder");
+            $id=$fixture instanceof WP_User ? (int)$fixture->ID : 0;
+            $status=array(
+              "fixture_exists"=>$id>0,
+              "fixture_id_one"=>$id===1,
+              "canonical_founder"=>$id>0 && smc_is_founder($id),
+              "cli_actor_present"=>get_current_user_id()>0,
+              "cli_actor_matches_fixture"=>$id>0 && (int)get_current_user_id()===$id,
+              "fixture_admin_role"=>$id>0 && in_array("administrator",(array)$fixture->roles,true),
+              "fixture_activation_cap"=>$id>0 && user_can($fixture,"activate_plugins"),
+              "current_activation_cap"=>current_user_can("activate_plugins"),
+              "browser_session_token_present"=>wp_get_session_token()!=="",
+              "file02_session_projection_hook"=>has_action("init",array("SAUTH_Session_Manager","ensure_authenticated_projection"))!==false
+            );
+            echo "READ-ONLY founder preflight diagnostics: ".wp_json_encode($status)."\n";
+          ' --user=1 --path=/tmp/wordpress
           php /tmp/wp-cli.phar eval 'if(get_current_user_id()!==1 || !smc_is_founder(1) || !current_user_can("activate_plugins")) {fwrite(STDERR,"Disposable Founder activation authority not present\n");exit(1);}' --user=1 --path=/tmp/wordpress
           php /tmp/wp-cli.phar plugin activate sabri-platform-foundation --user=1 --path=/tmp/wordpress
       - name: Verify File00 actual claims through File01-B actual consumer
