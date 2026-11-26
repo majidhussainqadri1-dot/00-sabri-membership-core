@@ -235,7 +235,8 @@ jobs:
           php /tmp/wp-cli.phar config set SMC_FOUNDER_USER_ID 1 --raw --type=constant --path=/tmp/wordpress
           cp -R _pinned_file01 /tmp/wordpress/wp-content/plugins/sabri-platform-foundation
           rm -rf /tmp/wordpress/wp-content/plugins/sabri-platform-foundation/.git
-          php /tmp/wp-cli.phar plugin activate sabri-platform-foundation --path=/tmp/wordpress
+          php /tmp/wp-cli.phar eval 'if(get_current_user_id()!==1 || !smc_is_founder(1) || !current_user_can("activate_plugins")) {fwrite(STDERR,"Disposable Founder activation authority not present\n");exit(1);}' --user=1 --path=/tmp/wordpress
+          php /tmp/wp-cli.phar plugin activate sabri-platform-foundation --user=1 --path=/tmp/wordpress
       - name: Verify File00 actual claims through File01-B actual consumer
         env:
           SABRI_DISPOSABLE_CONSENT_QA: '1'
