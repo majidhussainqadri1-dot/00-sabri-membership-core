@@ -96,7 +96,10 @@ jobs:
           php /tmp/wp-cli.phar config set SMC_MASTER_KEY 'base64:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=' --type=constant --path=/tmp/wordpress
           php /tmp/wp-cli.phar config set SMC_MASTER_KEY_ID 'file06-consent-ci-key-v1' --type=constant --path=/tmp/wordpress
           php /tmp/wp-cli.phar config set WP_ENVIRONMENT_TYPE 'staging' --type=constant --path=/tmp/wordpress
-          php /tmp/wp-cli.phar core install --path=/tmp/wordpress --url=http://file06-consent-ci.local --title='File00 File06 Consent CI' --admin_user=founder --admin_password='CI-Ephemeral-Only-Password!9' --admin_email=founder@example.test --skip-email
+          pass="$(openssl rand -hex 24)"
+          echo "::add-mask::$pass"
+          printf 'CI_NATIVE_TEST_PASSWORD=%s\n' "$pass" >> "$GITHUB_ENV"
+          php /tmp/wp-cli.phar core install --path=/tmp/wordpress --url=http://file06-consent-ci.local --title='File00 File06 Consent CI' --admin_user=founder --admin_password="$pass" --admin_email=founder@example.test --skip-email
       - name: Activate File00 candidate and reconcile exact schema
         run: |
           set -euo pipefail
@@ -151,7 +154,7 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           repository: majidhussainqadri1-dot/02-sabri-authentication
-          ref: a714c23fea33ecdfe9110f69c0ee1f07c9f2bcbb
+          ref: 6c63ee68b1d93b10dd2f2a7728a43db5d3d9776e
           path: _pinned_file02
           persist-credentials: false
       - name: Checkout exact File24 security owner
@@ -164,7 +167,7 @@ jobs:
       - name: Activate exact File02 and File24 alongside File00 and File06
         run: |
           set -euo pipefail
-          test "$(git -C _pinned_file02 rev-parse HEAD)" = a714c23fea33ecdfe9110f69c0ee1f07c9f2bcbb
+          test "$(git -C _pinned_file02 rev-parse HEAD)" = 6c63ee68b1d93b10dd2f2a7728a43db5d3d9776e
           test "$(git -C _pinned_file24 rev-parse HEAD)" = c8864c2052117051ae7877d678f1a98773df5298
           php /tmp/wp-cli.phar config set SA_MASTER_KEY 'file02-disposable-ci-master-key-for-consent-2026' --type=constant --path=/tmp/wordpress
           cp -R _pinned_file02 /tmp/wordpress/wp-content/plugins/02-sabri-authentication
@@ -224,43 +227,56 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           repository: majidhussainqadri1-dot/01-sabri-platform-foundation
-          ref: 3ccf4be2a205527c8ff5c713aa1c1fcf14cd36b9
+          ref: 93e14e6e4062097e3c96386b76a43ad96885a575
           path: _pinned_file01
           persist-credentials: false
-      - name: Real File01-B activation beside existing four owners
+      - name: Native File02 browser login and actual File01-B activation beside four owners
+        env:
+          SAUTH_DISPOSABLE_THREE_OWNER_QA: '1'
+          SABRI_DISPOSABLE_CONSENT_QA: '1'
         run: |
           set -euo pipefail
-          test "$(git -C _pinned_file01 rev-parse HEAD)" = 3ccf4be2a205527c8ff5c713aa1c1fcf14cd36b9
+          test "$(git -C _pinned_file01 rev-parse HEAD)" = 93e14e6e4062097e3c96386b76a43ad96885a575
+          test "$(git -C _pinned_file02 rev-parse HEAD)" = 6c63ee68b1d93b10dd2f2a7728a43db5d3d9776e
           test -f _pinned_file01/sabri-platform-foundation.php
           php /tmp/wp-cli.phar config set SMC_FOUNDER_USER_ID 1 --raw --type=constant --path=/tmp/wordpress
           cp -R _pinned_file01 /tmp/wordpress/wp-content/plugins/sabri-platform-foundation
           rm -rf /tmp/wordpress/wp-content/plugins/sabri-platform-foundation/.git
+          # Preserve the original consent/restore environment until both pass.
+          # Then configure the local browser origin, not a production setting.
           php /tmp/wp-cli.phar eval '
-            $fixture=get_user_by("login","founder");
-            $id=$fixture instanceof WP_User ? (int)$fixture->ID : 0;
-            $status=array(
-              "fixture_exists"=>$id>0,
-              "fixture_id_one"=>$id===1,
-              "canonical_founder"=>$id>0 && smc_is_founder($id),
-              "cli_actor_present"=>get_current_user_id()>0,
-              "cli_actor_matches_fixture"=>$id>0 && (int)get_current_user_id()===$id,
-              "fixture_admin_role"=>$id>0 && in_array("administrator",(array)$fixture->roles,true),
-              "fixture_activation_cap"=>$id>0 && user_can($fixture,"activate_plugins"),
-              "current_activation_cap"=>current_user_can("activate_plugins"),
-              "browser_session_token_present"=>wp_get_session_token()!=="",
-              "file02_session_projection_hook"=>has_action("init",array("SAUTH_Session_Manager","ensure_authenticated_projection"))!==false
-            );
-            echo "READ-ONLY founder preflight diagnostics: ".wp_json_encode($status)."\n";
-          ' --user=1 --path=/tmp/wordpress
-          php /tmp/wp-cli.phar eval 'if(get_current_user_id()!==1 || !smc_is_founder(1) || !current_user_can("activate_plugins")) {fwrite(STDERR,"Disposable Founder activation authority not present\n");exit(1);}' --user=1 --path=/tmp/wordpress
-          php /tmp/wp-cli.phar plugin activate sabri-platform-foundation --user=1 --path=/tmp/wordpress
-      - name: Verify File00 actual claims through File01-B actual consumer
-        env:
-          SABRI_DISPOSABLE_CONSENT_QA: '1'
-        run: |
-          set -euo pipefail
-          php qa/file01-foundation-auth-bridge-runtime.php
-          php /tmp/wp-cli.phar eval-file "$GITHUB_WORKSPACE/qa/file00-file01-exact-consumer-wordpress.php" --path=/tmp/wordpress
+            if(!defined("WP_CLI") || !WP_CLI || wp_get_environment_type()!=="staging" || getenv("SABRI_DISPOSABLE_CONSENT_QA")!=="1" || DB_NAME!=="wordpress" || DB_HOST!=="127.0.0.1:3306" || realpath(ABSPATH)!=="/tmp/wordpress" || wp_parse_url((string)get_option("siteurl"),PHP_URL_HOST)!=="file06-consent-ci.local"){throw new RuntimeException("Non-disposable origin refused");}
+            global $wpdb;
+            foreach(array("home","siteurl") as $key){
+              $before=$wpdb->get_var($wpdb->prepare("SELECT option_value FROM {$wpdb->options} WHERE option_name=%s",$key));
+              if(wp_parse_url((string)$before,PHP_URL_HOST)!=="file06-consent-ci.local"){throw new RuntimeException("Unexpected original stored origin");}
+              update_option($key,"http://127.0.0.1:8765");
+              $after=$wpdb->get_var($wpdb->prepare("SELECT option_value FROM {$wpdb->options} WHERE option_name=%s",$key));
+              if($after!=="http://127.0.0.1:8765"){throw new RuntimeException("Exact disposable origin not established");}
+            }
+            if(!smc_is_founder(1)||!user_can(1,"activate_plugins")||SMC_Completion::safe_mode()||(string)get_option("smc_db_version")!==SMC_DB_VERSION){throw new RuntimeException("Existing native Founder prerequisites not established");}
+            echo "PASS guarded loopback origin and existing Founder capability\n";
+          ' --path=/tmp/wordpress
+          login_page="$(php /tmp/wp-cli.phar eval 'echo absint(get_option("sauth_page_map",array())["login"]??0);' --path=/tmp/wordpress)"
+          test "$login_page" -gt 0
+          export CI_NATIVE_LOGIN_PAGE="$login_page"
+          cp _pinned_file02/tests/integration/three-owner-native-claims.php /tmp/wordpress/sauth-native-claims-ci.php
+          php -S 127.0.0.1:8765 -t /tmp/wordpress > "$RUNNER_TEMP/native-five-owner.log" 2>&1 &
+          server=$!
+          trap 'kill "$server" 2>/dev/null || true; rm -f /tmp/wordpress/sauth-native-claims-ci.php' EXIT
+          for i in $(seq 1 25); do
+            if curl -fsS --max-time 3 http://127.0.0.1:8765/ >/dev/null; then break; fi
+            sleep 1
+          done
+          python3 _pinned_file02/tests/integration/three-owner-native-http.py activate
+          php /tmp/wp-cli.phar eval '
+            if(!is_plugin_active("sabri-platform-foundation/sabri-platform-foundation.php") || !defined("SPF_VERSION") || SPF_VERSION!=="2.0.2" || (string)get_option("spf_schema_version")!==SPF_SCHEMA_VERSION || !defined("SMC_VERSION") || !defined("SAUTH_VERSION") || !defined("SPCRC_VERSION") || !class_exists("HE_V12_Case_Consent_Owner") || !SAUTH_Activator::storage_ready()){throw new RuntimeException("Five-owner runtime/schema not verified");}
+            $proof=get_option("smc_ci_revoked_case_proof");
+            if(!is_array($proof) || SMC_File06_Case_Consent::current_for_file06(false,$proof["verification_id"],$proof["evidence_ref"],$proof["uuid"],"patient-story-research")){throw new RuntimeException("Revoked consent unexpectedly accepted");}
+            echo "PASS five actual owners active; revoked case remains denied after native activation\n";
+          ' --path=/tmp/wordpress
+      - name: Additional isolated authorization bridge unit coverage
+        run: php qa/file01-foundation-auth-bridge-runtime.php
 
 
   consent-pinned-file06:
