@@ -116,3 +116,55 @@ File02 QA head a51d5d53067e882e8b0137231049530ae73c8110: all 15/15 workflows suc
 - Lockdown `sauth_lockdown_recovery_authorize_v1`: still absent; generation/storage fencing implemented and tested. Protected independent lost-account claimant evidence, reviewer decision bound to generation, one-time receipt and native positive authorization remain open. Legacy locked state requires supervised reissuance, not broad bypass.
 
 **Full owner contracts accepted 0/3; bounded source path implemented 1; new security boundary corrected 1; 2 repositories changed.** No placeholder registration, artificial permission grant, fabricated evidence or external provider enabled. Remaining 20 plan gates and 48 independent production acceptances unverified. Last prior live snapshot: File00/02 absent, File01-B active 2.0.1/schema1.2.0/contract2.0.0; not freshly checked in this source-only session, deployed version/DB/migration unverified here. No merge/deploy/live re-test. Exact deployed code ابھی unverified ہے؛ repository-based diagnosis provisional ہے۔
+
+
+# 26 November 2026 — Four-workstream recovery and five-owner integration checkpoint
+
+**Authority / scope:** Sabri-Website-Master-Plan-V12.3.docx p.131 lines 6285–6293: F02-X24-009 protected lockdown recovery; F02-X24-011 canonical-owner-mediated 1h–7d cooling-off; F02-X24-012 one-time fingerprint-bound collision resolution, silent merge prohibited. Initial File00 PR66 99fcbe893773c2b6ebd1fc7cc1c3989ea2880541 (12/13 workflows), File02 PR28 6c63ee68b1d93b10dd2f2a7728a43db5d3d9776e (15/15 workflows); repository drafts, not production. File00 remains identity/eligibility/contact evidence owner; File02 remains authentication/session/credential-effect owner. Do not equate a registered filter, prior bearer proof, generic administrator role, existing contact proof, or reviewer approval alone with independently proven lost-account claimant identity.
+
+## Actual File02 source fixes (two defect families)
+
+Exact code 21a44294cd2726816255bd77be718ea00bb5d8a6 corrected (a) missing nonempty typed recovery proof boundary in collision/apply/cancel, including failure of decryption (native decrypt returns empty string), and (b) uncaught owner exceptions. Recovery/collision preserve already claimed processing state and return supervised-reconciliation errors, never auto-replay; lockdown owner exception keeps containment. Exact UUID and subject validation is preserved; no positive authorization registered, no real credentials or account changes. New R358 isolated synthetic regression 17/17 passed, run 45848379762/job 140007906696. Review-only run 45848380064 jobs 140007907831 and 140007908331 PHP7.4/8.3 both passed. All 15/15 exact-head workflows SUCCESS. Release run 45848379926, artifact 15132890286, container digest sha256:ce5e03daf29b4587b775f83715632ad63c65344cadaaa9e7b34783ccf3e3b69d (not individual plugin ZIP digest). No claim of fail-first observed RED in this session; source-derived defects plus successful targeted regression.
+
+## Actual five-owner QA correction and acceptance (bounded)
+
+Prior four-owner consent and isolated backup restore passed, but File01-B activation failed because File02 correctly rejected a cookie-less WP-CLI actor. Replaced the inappropriate test-mode activation with the existing verified native File02 form-login and WordPress authorized activation sequence in File00 workflow .github/workflows/file00-file06-consent.yml; preserved the four-owner consent/revocation tests, isolated backup and restore, exact plugin checksums, legacy File06 negative control and authorization bridge unit tests. Initial corrected QA head bcec4dd8d4ebfaac3365bda64517b672dfedea80 all 13/13 workflows SUCCESS, run 45848140361/job 140007077512. Real five-owner active/schema and revoked-consent readback succeeded. No product permission change, fabricated session for activation, role elevation, hook removal, or CLI exemption. Origin change limited to guarded disposable DB after backup restore, test-only claims endpoint removed on teardown.
+
+File06 PR21 65d7542e7b14410b73d3c20d52650a84f6a92c15 and PR22 d419a8def42c312feddb4588eec7bbf14e2df8b9 diverged (25 ahead/33 behind as reported by compare); three exact blobs match across both: consent owner 383cd26c9c43bfe3a4696cc6f8dfcde5405b8415, completion consumer 8bf298e9f34e4f07fdc2a30387aeafe866cb6779, entrypoint be29880fe7d432741eceda7ad2cdff013160d24d. Same three blobs are not full build parity. Instead of assuming equivalence, matrix QA head faf0801fab1112d4bf18532ba3de94dff1327db6 tests both distinct candidates independently with latest File02 21a44294cd2726816255bd77be718ea00bb5d8a6, exact File01-B 93e14e6e4062097e3c96386b76a43ad96885a575, File24 c8864c2052117051ae7877d678f1a98773df5298 and File00 actual checked-out HEAD. All 13/13 workflows SUCCESS. Run 45848724465: PR21 job 140009127361 and PR22 job 140009127735 each SUCCESS; explicit logs for isolated DB/files restore, 7 allowed Founder actions + unknown denied, 8 guest denied, five actual owners active and revoked case remains denied after native activation. 32 native read-only authorization decisions over two environments, not 32 distinct actions or executions. The previous synthetic post-ceremony consent fixture remains explicitly labeled synthetic; it is not real human consent or hardware ceremony. Older CLI-only synthetic role test was not promoted to native acceptance; ordinary administrator/member/blocked Founder browser cases and full business mutations remain open, along with independent full five-owner feature acceptance.
+
+## Twenty focused review observations (not twenty whole-repository exhaustive passes)
+
+| # | Scope and actual evidence | Disposition |
+|---|---|---|
+| 01 | Master Plan p.131 exact X24-009/011/012 | Scope unchanged |
+| 02 | File00 initial exact HEAD/13 workflows | Prior one failing workflow established |
+| 03 | File02 initial exact HEAD/15 workflows | All green before fixes |
+| 04 | SA_Security::decrypt and generic apply boundary | Empty proof rejected |
+| 05 | Collision proof and UUID input boundary | Nonempty exact typed input required |
+| 06 | Cancellation proof and subject boundary | Invalid inputs rejected |
+| 07 | Generic owner invocation after atomic claim | Exception -> reconciliation, no replay |
+| 08 | Collision canonical owner commit after claim | Exception -> reconciliation |
+| 09 | Lockdown generation-bound owner invocation | Exception keeps containment |
+| 10 | File00 V11 same verified email account method | Narrow no-merge path only; no actual lost-account proof |
+| 11 | File00 contact_verified and native current-target OTP | Existing target verification cannot authorize new contact |
+| 12 | SMC_Admin verification review/assignment/conflict/transition | Current independent review exists but not bound to recovery operation |
+| 13 | SMC_Advanced_Trust_2026 critical identity change | Revalidation/revocation workflow exists; not new-contact proof |
+| 14 | File00 merge propose/approve workflow | Separate two-party governed process; not auto-merge or recovery authorization |
+| 15 | File00 break-glass workflow and step-up | High-assurance dual control is not claimant proof |
+| 16 | Old five-owner workflow and actor preflight | Test sequencing corrected, no live defect inference |
+| 17 | Actual isolated backup restore logs | Passed both matrix candidates |
+| 18 | Actual File02 browser login + WP activation/schema | Passed both matrix candidates |
+| 19 | Fixed Founder and fresh guest native read-only claims | 16/16 each environment |
+| 20 | File06 divergent PRs, identical consent interface blobs, full native matrix | Both candidates tested; still distinct release branches |
+
+## Remaining owner implementation (explicitly not completed)
+
+1. General recovery change sauth_apply_recovery_change_v1: no full positive owner callback. Needs operation-bound independent new-contact/claimant verification, durable request/approval/evidence lifecycle, correct owner's committed effect (File00 contact/identity vs File02 credential), atomic/idempotent effect readback, retention and supervised reconciliation. Existing OTP checks only the currently stored target. Native reviewer actions and current-target OTP must not be reused as automatic proof of the new target.
+2. General collision sauth_resolve_collision_case_v1: no full positive owner callback. Previous same-account email decision remains limited; independent other-account/guest/identity/phone/provider conflict review and actual proof ceremony outstanding. No silent merge, no email-only identity, no authorization from a case token alone.
+3. Lockdown sauth_lockdown_recovery_authorize_v1: no full positive owner callback. Generation and state fencing, exception containment and fail-closed defaults in place; independent lost-claimant evidence and durable single-use generation-bound approved recovery receipt remain outstanding. A generic break-glass approval cannot substitute for proving the claimant.
+4. Five-owner native activation/schema/selected decision/consent/restore matrix achieved; complete feature, every role, mutation, real device, actual provider and production acceptance remain outstanding.
+
+Additional review risk observed but not counted as fixed: authentication_blocked() reads one user-meta value, whereas generation release explicitly rejects ambiguous duplicate records. Review actual metadata states and native regression before changing login classification. Do not label this a proven production failure.
+
+## Production truth and hold
+Fresh WPVibe plugin list: File00/02/06/24 not found, File01-B 2.0.1 active (not candidate 2.0.2). Selected DB markers only spf_version=2.0.1, spf_schema_version=1.2.0, spf_contract_version=2.0.0; smc/sauth markers not found; spf migration aggregate zero rows, not proof of complete/failed migration. Main source refs File00 1fad051c86d530d558be3eb1890d3c6e67bce6e8, File02 224c39bcb8c28f77504c7348dbad41226753c7e8 are not live. Deployed bytes/checksums and real Hostinger staging/backup/restore remain unverified. Live verification inventory and selected DB only, no write/deploy/merge. Exact deployed code ابھی unverified ہے؛ repository-based diagnosis provisional ہے۔ Historical 48 requirement acceptances and 20 partial/acceptance gates unchanged; full positive general owner contracts 0/3. 2 source defect families corrected and scoped regression verified; 1 prior five-owner QA blocker resolved for both matrix candidates; 0 live defects resolved. Reports and subsequent doc-only HEADs are distinct from tested source/QA SHAs.
