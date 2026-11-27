@@ -21,9 +21,9 @@ class SMC_Contracts {
 class SMC_Advanced_Trust_2026 {
  static $auth=[],$step=['satisfied'=>true,'risk_context'=>['high_risk'=>false]];
  static function authentication_assurance($u){return self::$auth;}
- static function step_up_requirement($u,$a){return self::$step;}
+ static function step_up_requirement($u,$a){if(isset($GLOBALS['step_hook'])){($GLOBALS['step_hook'])();}return self::$step;}
 }
-class SMC_Security {static function audit($a,$u,$d){++$GLOBALS['audits'];$GLOBALS['audit_fields']=$d;return $GLOBALS['audit'];}}
+class SMC_Security {static function audit($a,$u,$d){++$GLOBALS['audits'];$GLOBALS['audit_fields']=$d;if(isset($GLOBALS['audit_hook'])){($GLOBALS['audit_hook'])();}return $GLOBALS['audit'];}}
 require __DIR__.'/../source/sabri-membership-core/includes/class-smc-authentication-contract-v11.php';
 $auth=['owner'=>'file02','contract_version'=>'1.0.0','method'=>'webauthn_passkey','passkey_asserted'=>true,'level'=>2,'verified_at'=>time()-5];
 SMC_Advanced_Trust_2026::$auth=$auth;
@@ -46,4 +46,15 @@ SMC_Completion::$safe=true;need(resolve($p,$c)['result']==='deny','safe mode den
 $GLOBALS['audit']=false;need(resolve($p,$c,true)['result']==='unknown','audit failure denied');
 $GLOBALS['audit']=true;need(resolve($p,$c,true)['result']==='allow','verified synthetic commit');
 need($GLOBALS['audit_fields']===['case_id'=>$c['case'],'scope'=>'same_account_no_merge'],'audit contains no identifier or fingerprint');
+foreach(['actor'=>18,'session'=>'rotated'] as $field=>$new){
+ $before=$GLOBALS[$field];$audits=$GLOBALS['audits'];
+ $GLOBALS['step_hook']=static function()use($field,$new){$GLOBALS[$field]=$new;};
+ need(resolve($p,$c,true)['result']==='deny','pre-audit '.$field.' drift denied');
+ need($GLOBALS['audits']===$audits,'pre-audit '.$field.' drift not written');
+ unset($GLOBALS['step_hook']);$GLOBALS[$field]=$before;
+ $GLOBALS['audit_hook']=static function()use($field,$new){$GLOBALS[$field]=$new;};
+ need(resolve($p,$c,true)['result']==='deny','post-audit '.$field.' drift denied');
+ unset($GLOBALS['audit_hook']);$GLOBALS[$field]=$before;
+}
+need(resolve($p,$c,true)['result']==='allow','unchanged principal remains allowed');
 echo "PASS ".$n." same-account owner decision assertions (mock only)".PHP_EOL;

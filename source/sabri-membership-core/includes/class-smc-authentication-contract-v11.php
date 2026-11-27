@@ -47,14 +47,15 @@ final class SMC_Authentication_Contract_V11 {
 			return $deny;
 		}
 		$user_id = get_current_user_id();
-		if ( ! is_int( $user_id ) || $user_id <= 0 || '' === (string) wp_get_session_token()
+		$session_token = (string) wp_get_session_token();
+		if ( ! is_int( $user_id ) || $user_id <= 0 || '' === $session_token
 			|| smc_privacy_erasure_lock( $user_id ) || SMC_Authorization::is_hard_blocked( $user_id ) ) {
 			return $deny;
 		}
 		$user = get_userdata( $user_id );
 		$owner = get_user_by( 'email', $payload['identifier'] );
 		if ( ! $user instanceof WP_User || ! $owner instanceof WP_User
-			|| (int) $owner->ID !== $user_id
+			|| (int) $user->ID !== $user_id || (int) $owner->ID !== $user_id
 			|| ! hash_equals( strtolower( (string) $user->user_email ), strtolower( $payload['identifier'] ) )
 			|| ! SMC_Contracts::contact_verified( $user_id, 'email' ) ) {
 			return $deny;
@@ -78,6 +79,11 @@ final class SMC_Authentication_Contract_V11 {
 			|| true !== ( $step['satisfied'] ?? null ) || ! empty( $step['risk_context']['high_risk'] ) ) {
 			return $deny;
 		}
+		// Owner callbacks may change the execution principal or rotate its session.
+		// A decision must remain bound to the original authenticated session.
+		if ( ! self::same_collision_principal( $user_id, $session_token ) ) {
+			return $deny;
+		}
 		if ( $commit ) {
 			// The native audit chain, not a caller assertion, must commit.
 			// No bearer proof, raw identifier or fingerprint is logged.
@@ -85,9 +91,19 @@ final class SMC_Authentication_Contract_V11 {
 				return array( 'result'=>'unknown' );
 			}
 			// Recheck all canonical facts after audit, without a second write.
-			return self::resolve_existing_email_collision_v1( $payload, $context, false );
+			if ( ! self::same_collision_principal( $user_id, $session_token ) ) {
+				return $deny;
+			}
+			$result = self::resolve_existing_email_collision_v1( $payload, $context, false );
+			return self::same_collision_principal( $user_id, $session_token ) && ( $result['user_id'] ?? null ) === $user_id ? $result : $deny;
 		}
 		return array( 'result'=>'allow', 'user_id'=>$user_id, 'scope'=>'same_account_no_merge' );
+	}
+
+	private static function same_collision_principal( $user_id, $session_token ) {
+		return get_current_user_id() === $user_id
+			&& '' !== $session_token
+			&& hash_equals( $session_token, (string) wp_get_session_token() );
 	}
 
 	public static function register_account( $payload, $context = array() ) {
