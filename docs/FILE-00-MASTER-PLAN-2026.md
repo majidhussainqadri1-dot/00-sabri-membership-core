@@ -10,7 +10,7 @@
 
 ## Current implementation identity
 
-- Runtime implementation release: `1.2.44`
+- Runtime implementation release: `1.2.47`
 - Public membership contract: `1.2.3`
 - Database schema: `1.4.5`
 - File 02 account-orchestration provider: `smc.authentication-account` `1.1.0`
@@ -152,3 +152,11 @@ Historical 1.2.11 three-plan evidence remains immutable in `qa/requirements-trac
 ## Truthful boundary
 
 The source may be a repository-complete candidate only after exact-head automated QA and the required fresh review/fix rounds. Staging-Accepted, Live-Deployed and Operational remain separate states requiring real environment evidence and Founder approval.
+
+## V12.3 File03 age/guardian owner contract — 1.2.47
+
+Source-only release identity 1.2.47 adds the read-only `smc_profile_age_guardian_claim_v1` nonrecursive contract for File03 public profile eligibility; current owner encryption and `age_context()` remain canonical, no raw DOB or exact age is disclosed. The earlier 1.2.44 account-taxonomy compatibility correction remains historical provenance. There is no schema migration: DB remains `1.4.5` and published SMC contract `1.2.3`. Stage/live installation, rollback and verified release remain distinct from repository CI.
+
+
+## V12.3 integrated candidate 1.2.47
+The integrated candidate combines live DOB/minimum-age and guardian-consent rechecks with the nonrecursive File03 age-assurance provider, plus advanced-trust and canonical UUID owner contracts. The age projection is limited to a short-lived adult/minor/unknown band, guardian flags, owner/purpose and the exact File03 consumer contract; no DOB or exact age is disclosed. The 123-ID inventory remains an index of requirements, not 123 accepted tests. Staging and live acceptance remain separate mandatory gates.

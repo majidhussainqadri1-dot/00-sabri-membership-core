@@ -1,0 +1,132 @@
+name: File00 V12.3 File04 Exact Authorship Provider Consumer
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FILE04_REF: 94c2e7a8f3e171326c3d1b092c6c908a91ccfe65
+
+jobs:
+  exact-file04-consumer:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_DATABASE: wordpress
+          MARIADB_USER: wordpress
+          MARIADB_PASSWORD: wordpress
+          MARIADB_ROOT_PASSWORD: root
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - name: Checkout exact File00 candidate
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Checkout exact File04 consumer PR
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: majidhussainqadri1-dot/04-sabri-news-feed-and-publishing
+          ref: ${{ env.FILE04_REF }}
+          path: .external/file04
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Prove exact source identities
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = '${{ github.event.pull_request.head.sha || github.sha }}'
+          test "$(git -C .external/file04 rev-parse HEAD)" = "$FILE04_REF"
+      - name: Setup PHP and Node
+        uses: shivammathur/setup-php@2.37.2
+        with:
+          php-version: '8.3'
+          coverage: none
+          extensions: mysqli,openssl,mbstring,json
+          tools: none
+      - name: Verify File00 owner and File04 consumer contracts
+        run: |
+          set -euo pipefail
+          node qa/file04-authorship-contract.mjs
+          php qa/v123-file04-placeholder-runtime.php
+          php .external/file04/tests/run-unit.php
+      - name: Bootstrap disposable real WordPress and File00
+        run: |
+          set -euo pipefail
+          curl -fsSL https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar -o /tmp/wp
+          chmod +x /tmp/wp
+          /tmp/wp core download --version=7.0.1 --path=/tmp/wordpress --quiet
+          /tmp/wp config create --path=/tmp/wordpress --dbname=wordpress --dbuser=wordpress --dbpass=wordpress --dbhost=127.0.0.1:3306 --skip-check --quiet
+          /tmp/wp config set SMC_MASTER_KEY 'file00-file04-disposable-ci-master-key-2026' --type=constant --path=/tmp/wordpress
+          /tmp/wp config set SMC_MASTER_KEY_ID 'file00-file04-ci-key-v1' --type=constant --path=/tmp/wordpress
+          /tmp/wp config set WP_ENVIRONMENT_TYPE 'staging' --type=constant --path=/tmp/wordpress
+          /tmp/wp core install --path=/tmp/wordpress --url=http://authorship-contract.local --title='Disposable authorship CI' --admin_user=founder --admin_password='CI-Only-Password!9' --admin_email=founder@example.test --skip-email --quiet
+          cp -R source/sabri-membership-core /tmp/wordpress/wp-content/plugins/sabri-membership-core
+          /tmp/wp plugin activate sabri-membership-core --path=/tmp/wordpress
+          /tmp/wp eval 'wp_set_current_user(1); do_action("admin_init"); if((string)get_option("smc_db_version","")!==SMC_DB_VERSION || SMC_Completion::safe_mode()){fwrite(STDERR,"FAIL File00 readiness\n");exit(1);}' --path=/tmp/wordpress
+      - name: Real database and exact consumer authorship boundary
+        # Load exact File04 consumer classes without activating its migration lifecycle.
+        # Full File04 activation requires canonical File21 and is a separate gate.
+        run: |
+          set -euo pipefail
+          export FILE04_TEST_ROOT="$PWD/.external/file04"
+          cat > /tmp/file04-real-authorship.php <<'PHP'
+          <?php
+          require_once getenv('FILE04_TEST_ROOT').'/includes/class-snfla-checksum.php';
+          require_once getenv('FILE04_TEST_ROOT').'/includes/class-snfla-plan-completion.php';
+          function assert_authorship($condition, $label) {
+              if (!$condition) { throw new RuntimeException('FAIL: '.$label); }
+              echo 'PASS: '.$label.PHP_EOL;
+          }
+          wp_set_current_user(1);
+          assert_authorship(current_user_can('manage_options'), 'authenticated administrator');
+          assert_authorship(has_filter('sabri_file00_legacy_author_placeholder_v1') && has_filter('sabri_file00_platform_uuid_v1'), 'real owner hooks registered');
+          $author=wp_insert_user(array('user_login'=>'ci_legacy_author','user_pass'=>wp_generate_password(32),'role'=>'subscriber'));
+          assert_authorship(is_int($author) && $author>0, 'fixture author exists');
+          $post=wp_insert_post(array('post_title'=>'CI normal','post_author'=>$author,'post_status'=>'draft'),true);
+          $orphan=wp_insert_post(array('post_title'=>'CI orphan','post_author'=>1,'post_status'=>'draft'),true);
+          assert_authorship(is_int($post) && $post>0 && is_int($orphan) && $orphan>0, 'fixture posts stored');
+          global $wpdb;
+          $missing=987654321;
+          assert_authorship(!get_userdata($missing), 'orphan author absent');
+          assert_authorship(1===$wpdb->update($wpdb->posts,array('post_author'=>$missing),array('ID'=>$orphan),array('%d'),array('%d')), 'orphan stored in disposable database');
+          clean_post_cache($orphan);
+          $normal=SNFLA_Plan_Completion::authorship_preflight($post);
+          assert_authorship(is_array($normal) && empty($normal['placeholder']) && (int)$normal['user_id']===$author && smc_get_user_id_by_subject_uuid($normal['platform_uuid'])===$author, 'normal immutable identity round trip');
+          wp_set_current_user($author);
+          assert_authorship(is_wp_error(SNFLA_Plan_Completion::authorship_preflight($orphan)), 'unprivileged placeholder creation denied');
+          wp_set_current_user(1);
+          $claim=SNFLA_Plan_Completion::authorship_preflight($orphan);
+          assert_authorship(is_array($claim) && !empty($claim['placeholder']), 'real orphan attribution accepted');
+          $id=(int)$claim['user_id']; $sentinel=get_userdata($id);
+          assert_authorship($sentinel && $sentinel->user_login==='sabri_legacy_author_placeholder' && empty($sentinel->roles), 'reserved sentinel has no roles');
+          assert_authorship(smc_is_legacy_author_placeholder($id) && smc_get_user_id_by_subject_uuid($claim['platform_uuid'])===$id, 'sentinel owner and UUID verified');
+          $repeat=SNFLA_Plan_Completion::authorship_preflight($orphan);
+          assert_authorship(is_array($repeat) && (int)$repeat['user_id']===$id && $repeat['platform_uuid']===$claim['platform_uuid'], 'idempotent sentinel reuse');
+          $spoof=static function($value) use ($claim,$author) { return array('verified'=>true,'provider_id'=>'file00_legacy_author_placeholder_v1','attribution_class'=>'unknown_or_deleted_legacy_author','legacy_id'=>$value['legacy_id']??0,'legacy_author_id'=>$value['legacy_author_id']??0,'request_digest'=>$value['request_digest']??'','user_id'=>$author,'platform_uuid'=>SMC_CF01_Contract::ensure_subject_uuid($author)); };
+          add_filter('sabri_file00_legacy_author_placeholder_v1',$spoof,PHP_INT_MAX);
+          assert_authorship(is_wp_error(SNFLA_Plan_Completion::authorship_preflight($orphan)), 'ordinary account cannot impersonate sentinel even with matching UUID');
+          remove_filter('sabri_file00_legacy_author_placeholder_v1',$spoof,PHP_INT_MAX);
+          $sentinel->set_role('subscriber');
+          assert_authorship(is_wp_error(SNFLA_Plan_Completion::authorship_preflight($orphan)), 'role-bearing sentinel denied');
+          $sentinel->set_role('');
+          $pw=wp_generate_password(32);
+          wp_set_password($pw,$id);
+          assert_authorship(is_wp_error(wp_authenticate($sentinel->user_login,$pw)), 'actual WordPress password authentication denied');
+          update_user_meta($id,'_smc_privacy_erasure_lock',array('locked_at'=>gmdate('c')));
+          assert_authorship(smc_get_user_id_by_subject_uuid($claim['platform_uuid'])===0 && is_wp_error(SNFLA_Plan_Completion::authorship_preflight($orphan)), 'erasure-locked sentinel denied and not reverse resolved');
+          update_user_meta($author,'_smc_privacy_erasure_lock',array('locked_at'=>gmdate('c')));
+          assert_authorship(is_wp_error(SNFLA_Plan_Completion::authorship_preflight($post)), 'erasure-locked normal author denied');
+          echo 'PASS real WordPress/MariaDB File00/File04 authorship boundary (not File04 activation or production migration)'.PHP_EOL;
+          PHP
+          /tmp/wp eval-file /tmp/file04-real-authorship.php --path=/tmp/wordpress

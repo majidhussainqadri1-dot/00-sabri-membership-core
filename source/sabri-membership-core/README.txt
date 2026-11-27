@@ -3,7 +3,7 @@ Contributors: sabrihomeopathy
 Tags: membership, identity, guardian consent, privacy, governance
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 1.2.44
+Stable tag: 1.2.47
 License: GPL-2.0-or-later
 
 Canonical membership eligibility, identity assurance, guardian consent, security assertions, and verification governance for the Sabri Social Homeopathy Platform.
@@ -73,6 +73,11 @@ File 19 receives membership notices through its canonical sabri_notify integrati
 Local source and GitHub checks do not authorize production. Test fresh activation, legacy upgrade, DB/audit migration, legacy factor retirement, MySQL advisory locks, concurrent reviewers, authorization matrices, filesystem denial and rollback, scanner providers, email/mobile/guardian delivery, File 02 authentication integration, CF-01 provider/consumer contracts, all named cross-file integrations, advanced trust containment/revocation/selective-disclosure workflows, privacy erasure, restore, browser accessibility, and mobile layouts on Hostinger staging.
 
 == Changelog ==
+
+= 1.2.47 =
+* Adds a privacy-minimized, internal File 00 age/guardian assurance contract for File 03 without nested membership assertions. A missing, unknown or erasure-locked account is denied for public-adult eligibility.
+* Preserves DB schema 1.4.5 and existing public membership contract 1.2.3; no new clinical authority or raw age/DOB disclosure.
+* Unique source candidate release identity; Staging and Live acceptance remain unverified.
 
 = 1.2.44 =
 * Aligns the active `smc.authentication-account` 1.1.0 provider directly to File 00's canonical account taxonomy instead of a duplicated provider-only vocabulary.
@@ -182,3 +187,12 @@ Local source and GitHub checks do not authorize production. Test fresh activatio
 
 = 1.2.25 =
 * Authenticated admin-post CSRF compatibility hotfix: a valid WordPress session nonce became the authoritative gate for logged-in File 00 actions. Optional Origin/Referer mismatch remained audit-visible while public guardian verification kept a strict origin check after nonce validation.
+
+
+= 1.2.47 =
+* Integrated current DOB, sex-specific and jurisdictional minimum-age, and current guardian-consent revalidation.
+* Added nonrecursive, short-lived File03 age assurance with exact consumer-contract validation and no DOB/exact-age disclosure.
+* Hardened advanced-trust reverification ceiling, system authorization, cross-subject trust timeline and current-actor checks.
+* Added read-only canonical UUID-to-user resolution and reserved legacy-author sentinel isolation.
+* No database schema or migration change; DB target remains 1.4.5 and membership contract remains 1.2.3.
+* Source candidate only; no staging or live acceptance implied.

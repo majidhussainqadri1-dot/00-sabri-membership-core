@@ -97,6 +97,24 @@ final class SMC_MFA_Retirement {
 	}
 
 	private static function assertions_without_mfa( $user_id ) {
+		// The activation entrypoint deliberately defers protected schema work
+		// to the next administrator request. Never query membership tables
+		// until the exact target DB version has been committed.
+		if ( ! defined( 'SMC_DB_VERSION' ) || SMC_DB_VERSION !== (string) get_option( 'smc_db_version', '' ) ) {
+			return array(
+				'application_exists' => false,
+				'status' => 'schema_unavailable',
+				'approved' => false,
+				'suspended' => false,
+				'eligible' => false,
+				'identity_documents_current' => false,
+				'phone_verified' => false,
+				'email_verified' => false,
+				'guardian_verified' => false,
+				'professional_verified' => false,
+				'public_profile_allowed' => false,
+			);
+		}
 		$a = class_exists( 'SMC_Contracts' ) ? SMC_Contracts::assertions( absint( $user_id ) ) : array();
 		$a = is_array( $a ) ? $a : array();
 		$a['mfa_required'] = false;
@@ -169,6 +187,10 @@ final class SMC_MFA_Retirement {
 		if ( ! empty( $a['suspended'] ) || empty( $a['approved'] ) || empty( $a['eligible'] ) ) { wp_safe_redirect( smc_page_url( 'status', '/membership-status/' ) ); exit; }
 	}
 	public static function enforce_admin_state() {
+		// Do not redirect/exit before the deferred administrator bootstrap has
+		// completed the migration; doing so would prevent the schema from ever
+		// becoming current. Restricted membership capabilities remain denied.
+		if ( ! defined( 'SMC_DB_VERSION' ) || SMC_DB_VERSION !== (string) get_option( 'smc_db_version', '' ) ) { return; }
 		if ( ! is_user_logged_in() || self::request_is_membership_surface() ) { return; }
 		$user_id = get_current_user_id(); $a = self::assertions_without_mfa( $user_id );
 		if ( ! empty( $a['suspended'] ) || empty( $a['eligible'] ) ) { wp_safe_redirect( smc_page_url( 'status', '/membership-status/' ) ); exit; }
